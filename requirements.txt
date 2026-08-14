@@ -1,0 +1,11 @@
+# Core (required)
+numpy
+opencv-python-headless
+pandas
+matplotlib
+streamlit
+tifffile
+
+# Optional — enables the deep-learning cell counter (adds torch, ~1-2GB).
+# Leave commented out unless you specifically want Cellpose.
+# cellpose
