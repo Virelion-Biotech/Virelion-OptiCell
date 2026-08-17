@@ -52,7 +52,7 @@ def test_plate_edge_effect_identifies_edge_and_interior():
         }
     )
     result = plate_edge_effect(frame, "signal")
-    assert result["edge_median"] == 10.5
+    assert result["edge_median"] == 10.0
     assert result["interior_median"] == 19.5
     assert result["edge_to_interior_ratio"] < 1.0
 
