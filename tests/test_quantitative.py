@@ -25,7 +25,7 @@ def test_spatial_features_and_summary():
     assert enriched["nearest_neighbor_distance_px"].iloc[0] > 0
     summary = summarize_spatial_features(features, (100, 100))
     assert summary["object_count"] == 3.0
-    assert summary["density_per_100k_px"] == 300.0
+    assert np.isclose(summary["density_per_100k_px"], 30.0)
 
 
 def test_channel_summary_and_object_intensity():
