@@ -9,6 +9,7 @@ from .exports import dataframe_to_long_form, write_dataframe
 from .experiment_qc import normalize_to_controls, plate_edge_effect, plate_qc_summary, robust_zscore
 from .experiment_stats import bootstrap_ci, replicate_effect_summary, summarize_experiment
 from .lineage import build_lineage_table, summarize_lineages
+from .lineage_events import division_consistency, lineage_event_summary
 from .lineage_quality import lineage_quality_summary
 from .ome_io import OMEImageInfo, load_ome_series, read_ome_info
 from .power import two_group_sample_size
@@ -17,7 +18,9 @@ from .profiling import ProfileRecord, profile_call, profile_records, summarize_p
 from .reporting import RuntimeStats, build_report, dataframe_summary, runtime_stats, write_report
 from .runtime import RuntimeCapabilities, capabilities, capabilities_dict, measure, preferred_accelerator
 from .screening import percent_control, z_prime_factor
+from .screening_qc import AssayQCDecision, assay_qc_decision, classify_z_prime
 from .segmentation import BaseSegmenter, CellposeBackend, ThresholdSegmenter, available_backends, compare_backends, get_backend, register_backend
+from .sensitivity import threshold_sensitivity
 from .statistics import benjamini_hochberg, compare_two_groups, summarize_by_replicate
 from .stream_io import iter_array_chunks, iter_tiff_frames, memmap_tiff
 from .tracking3d import Tracking3DConfig, link_frames_3d, summarize_tracks_3d
@@ -26,18 +29,18 @@ from .volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_
 from .volumetric_segmentation import VolumetricSegmentationResult, segment_threshold_3d
 
 __all__ = [
-    "BaseSegmenter", "BatchConfig", "CellposeBackend", "OMEImageInfo", "ProfileRecord", "QCThresholds", "RuntimeCapabilities", "RuntimeStats",
+    "AssayQCDecision", "BaseSegmenter", "BatchConfig", "CellposeBackend", "OMEImageInfo", "ProfileRecord", "QCThresholds", "RuntimeCapabilities", "RuntimeStats",
     "ThresholdSegmenter", "Tracking3DConfig", "VolumetricSegmentationResult", "add_spatial_features", "aggregate_backend_benchmarks",
-    "analyze_folder", "analyze_image", "analyze_paths", "analyze_paths_parallel", "available_backends", "benchmark_backends",
+    "analyze_folder", "analyze_image", "analyze_paths", "analyze_paths_parallel", "assay_qc_decision", "available_backends", "benchmark_backends",
     "benchmark_segmentation", "benjamini_hochberg", "bootstrap_ci", "build_lineage_table", "build_manifest", "build_report",
-    "capabilities", "capabilities_dict", "classify_divisions", "collect_input_manifest", "compare_backends", "compare_two_groups",
-    "dataframe_summary", "dataframe_to_long_form", "detect_time_series_events", "detect_transition_events", "extract_object_features",
-    "file_sha256", "get_backend", "iter_array_chunks", "iter_tiff_frames", "lineage_quality_summary", "link_frames_3d", "load_ome_series",
+    "capabilities", "capabilities_dict", "classify_divisions", "classify_z_prime", "collect_input_manifest", "compare_backends", "compare_two_groups",
+    "dataframe_summary", "dataframe_to_long_form", "detect_time_series_events", "detect_transition_events", "division_consistency", "extract_object_features",
+    "file_sha256", "get_backend", "iter_array_chunks", "iter_tiff_frames", "lineage_event_summary", "lineage_quality_summary", "link_frames_3d", "load_ome_series",
     "measure", "memmap_tiff", "nearest_neighbor_distances_3d", "normalize_to_controls", "object_channel_intensity", "paired_segmentation_metrics",
     "percent_control", "plate_edge_effect", "plate_qc_summary", "preferred_accelerator", "profile_call", "profile_records", "read_ome_info",
     "register_backend", "replicate_effect_summary", "robust_zscore", "runtime_stats", "segment_threshold_3d", "summarize_by_replicate",
-    "summarize_experiment", "summarize_lineages", "summarize_profile", "summarize_spatial_features", "summarize_tracks_3d",
-    "summarize_volume", "two_group_sample_size", "volume_features", "write_dataframe", "write_manifest", "write_report", "z_prime_factor",
+    "summarize_experiment", "summarize_lineages", "summarize_profile", "summarize_spatial_features", "summarize_tracks_3d", "summarize_volume",
+    "threshold_sensitivity", "two_group_sample_size", "volume_features", "write_dataframe", "write_manifest", "write_report", "z_prime_factor",
 ]
 
-__version__ = "2.12.0"
+__version__ = "2.13.0"
