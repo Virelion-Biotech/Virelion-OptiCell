@@ -5,6 +5,7 @@ from typing import Sequence
 
 import numpy as np
 from scipy import ndimage
+from scipy.spatial import cKDTree
 
 
 def _validate_labels(labels: np.ndarray) -> np.ndarray:
@@ -16,13 +17,34 @@ def _validate_labels(labels: np.ndarray) -> np.ndarray:
     return arr
 
 
+def _surface_area(arr: np.ndarray, label_id: int, spacing: tuple[float, float, float]) -> float:
+    """Compute exposed voxel-face area with anisotropic voxel spacing."""
+    mask = arr == label_id
+    vz, vy, vx = spacing
+    area = 0.0
+    area += np.count_nonzero(mask[0, :, :]) * vy * vx
+    area += np.count_nonzero(mask[-1, :, :]) * vy * vx
+    area += np.count_nonzero(mask[:, 0, :]) * vz * vx
+    area += np.count_nonzero(mask[:, -1, :]) * vz * vx
+    area += np.count_nonzero(mask[:, :, 0]) * vz * vy
+    area += np.count_nonzero(mask[:, :, -1]) * vz * vy
+
+    area += np.count_nonzero(mask[1:, :, :] & ~mask[:-1, :, :]) * vy * vx
+    area += np.count_nonzero(mask[:-1, :, :] & ~mask[1:, :, :]) * vy * vx
+    area += np.count_nonzero(mask[:, 1:, :] & ~mask[:, :-1, :]) * vz * vx
+    area += np.count_nonzero(mask[:, :-1, :] & ~mask[:, 1:, :]) * vz * vx
+    area += np.count_nonzero(mask[:, :, 1:] & ~mask[:, :, :-1]) * vz * vy
+    area += np.count_nonzero(mask[:, :, :-1] & ~mask[:, :, 1:]) * vz * vy
+    return float(area)
+
+
 def volume_features(labels: np.ndarray, voxel_size: Sequence[float] = (1.0, 1.0, 1.0)) -> list[dict[str, float]]:
-    """Return per-object volume, centroid, bounding box, and surface-area approximation."""
+    """Return per-object volume, centroid, bounding box, and surface area."""
     arr = _validate_labels(labels)
-    vz, vy, vx = (float(x) for x in voxel_size)
-    if min(vz, vy, vx) <= 0:
-        raise ValueError("voxel_size values must be positive")
-    spacing = np.array([vz, vy, vx], dtype=float)
+    spacing = tuple(float(x) for x in voxel_size)
+    if len(spacing) != 3 or min(spacing) <= 0:
+        raise ValueError("voxel_size must contain three positive values")
+    vz, vy, vx = spacing
     rows: list[dict[str, float]] = []
     for label_id in np.unique(arr):
         if label_id <= 0:
@@ -31,13 +53,9 @@ def volume_features(labels: np.ndarray, voxel_size: Sequence[float] = (1.0, 1.0,
         if coords.size == 0:
             continue
         centroid_vox = coords.mean(axis=0)
-        scaled = coords * spacing
         volume = float(len(coords) * vz * vy * vx)
         mins = coords.min(axis=0)
         maxs = coords.max(axis=0)
-        eroded = ndimage.binary_erosion(arr == label_id, structure=np.ones((3, 3, 3)), border_value=0)
-        surface_voxels = int(np.logical_and(arr == label_id, ~eroded).sum())
-        surface_area_approx = float(surface_voxels * min(vz * vy, vz * vx, vy * vx))
         rows.append(
             {
                 "label": int(label_id),
@@ -51,39 +69,33 @@ def volume_features(labels: np.ndarray, voxel_size: Sequence[float] = (1.0, 1.0,
                 "bbox_z": int(maxs[0] - mins[0] + 1),
                 "bbox_y": int(maxs[1] - mins[1] + 1),
                 "bbox_x": int(maxs[2] - mins[2] + 1),
-                "surface_area_approx": surface_area_approx,
+                "surface_area_approx": _surface_area(arr, int(label_id), spacing),
             }
         )
     return rows
 
 
 def nearest_neighbor_distances_3d(features: list[dict[str, float]]) -> np.ndarray:
-    """Return nearest-neighbour centroid distances using physical coordinates."""
+    """Return nearest-neighbour centroid distances using a KD-tree."""
     if not features:
         return np.array([], dtype=float)
     points = np.asarray([[x["centroid_z_um"], x["centroid_y_um"], x["centroid_x_um"]] for x in features], dtype=float)
     if len(points) < 2:
         return np.full(len(points), np.nan, dtype=float)
-    nearest = np.full(len(points), np.inf, dtype=float)
-    for start in range(0, len(points), 512):
-        stop = min(start + 512, len(points))
-        block = points[start:stop]
-        d2 = ((block[:, None, :] - points[None, :, :]) ** 2).sum(axis=2)
-        local = np.arange(start, stop)
-        d2[np.arange(stop - start), local] = np.inf
-        nearest[start:stop] = np.sqrt(d2.min(axis=1))
-    return nearest
+    tree = cKDTree(points)
+    distances, _ = tree.query(points, k=2)
+    return distances[:, 1].astype(float)
 
 
 def summarize_volume(labels: np.ndarray, voxel_size: Sequence[float] = (1.0, 1.0, 1.0)) -> dict[str, float]:
     """Return object count, volume statistics, and physical density for a labelled volume."""
     arr = _validate_labels(labels)
-    vz, vy, vx = (float(x) for x in voxel_size)
-    if min(vz, vy, vx) <= 0:
-        raise ValueError("voxel_size values must be positive")
-    features = volume_features(arr, voxel_size)
+    spacing = tuple(float(x) for x in voxel_size)
+    if len(spacing) != 3 or min(spacing) <= 0:
+        raise ValueError("voxel_size must contain three positive values")
+    features = volume_features(arr, spacing)
     values = np.asarray([row["volume"] for row in features], dtype=float)
-    physical_volume = float(np.prod(arr.shape) * vz * vy * vx)
+    physical_volume = float(np.prod(arr.shape) * np.prod(spacing))
     return {
         "object_count": float(len(features)),
         "total_object_volume": float(values.sum()) if values.size else 0.0,
