@@ -1,13 +1,14 @@
 # Virelion-OptiCell
 
-**OptiCell 2.5** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
+**OptiCell 2.6** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
 
 There is **no Streamlit and no GUI dependency**. The stable public API is under `opticell`; legacy top-level analysis modules remain available where compatibility is useful.
 
 ## Core capabilities
 
 - Acquisition QC: focus, brightness, contrast, saturation, dimensions, dtype, channel count, hashing, adaptive MAD outliers.
-- Segmentation: threshold/adaptive threshold, optional persistent Cellpose, ensemble disagreement diagnostics.
+- Segmentation: threshold/adaptive threshold, persistent Cellpose, model-agnostic backend interface, and ensemble disagreement diagnostics.
+- 3-D segmentation baseline: deterministic volumetric threshold segmentation with explicit instance labels and QC summaries.
 - Cell phenotyping: morphology, intensity, spatial density, nearest-neighbour distance, texture, multi-channel measurements.
 - Compartments: nucleus segmentation/assignment, nucleus-to-cell ratio, cytoplasm, nuclear/cytoplasmic intensity.
 - Time-lapse: deterministic 2-D tracking with configurable displacement/gaps and track summaries.
@@ -16,7 +17,7 @@ There is **no Streamlit and no GUI dependency**. The stable public API is under 
 - Validation: pixel IoU/Dice/precision/recall, instance matching/F1, count error and benchmark aggregation.
 - Native TIFF I/O: explicit C/Z/T axis handling and projections.
 - Preprocessing: background, illumination and artifact utilities.
-- **3-D volumetric analysis:** physical-unit object volume, centroids, bounding boxes, approximate surface area, volume fraction, density, and 3-D nearest-neighbour distances.
+- 3-D volumetric analysis: physical-unit object volume, centroids, bounding boxes, approximate surface area, volume fraction, density, and 3-D nearest-neighbour distances.
 
 ## Stable package API
 
@@ -25,19 +26,21 @@ from opticell import analyze_folder, extract_object_features, summarize_volume
 from opticell.statistics import summarize_by_replicate, compare_two_groups
 from opticell.features import add_spatial_features, object_texture_features
 from opticell.io import load_tiff_stack, canonicalize_axes
-from opticell.segmentation import segment_threshold, threshold_ensemble
+from opticell.segmentation import segment_threshold, ThresholdSegmenter, CellposeBackend, compare_backends
 from opticell.tracking import link_frames
 from opticell.experiment import parse_metadata
 from opticell.volumetric import volume_features
+from opticell.volumetric_segmentation import segment_threshold_3d
 ```
 
-For a labelled 3-D mask:
+Example 3-D baseline:
 
 ```python
-from opticell.volumetric import volume_features, summarize_volume
+from opticell.volumetric_segmentation import segment_threshold_3d
+from opticell.volumetric import summarize_volume
 
-features = volume_features(labels, voxel_size=(2.0, 1.0, 0.5))
-summary = summarize_volume(labels, voxel_size=(2.0, 1.0, 0.5))
+seg = segment_threshold_3d(volume, voxel_size=(2.0, 1.0, 0.5), min_volume_voxels=30)
+summary = summarize_volume(seg.labels, voxel_size=(2.0, 1.0, 0.5))
 ```
 
 ## Installation
@@ -75,7 +78,7 @@ opticell /path/to/images --no-adaptive-qc -o qc_summary.csv
 
 ```bash
 pytest
-python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py texture.py preprocessing.py volumetric.py opticell
+python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py texture.py preprocessing.py volumetric.py volumetric_segmentation.py opticell
 python qc_pipeline.py --help
 ```
 
@@ -87,6 +90,6 @@ OptiCell is **not a validated clinical measurement system**. Segmentation and tr
 
 Statistics should be performed at the correct experimental unit. OptiCell provides replicate-aware aggregation specifically to reduce cell-level pseudoreplication, but users must define biological and technical replicates correctly.
 
-The current 3-D layer quantifies labelled volumes but does not yet provide a validated 3-D segmentation model or full 3-D time-lapse tracker.
+The 3-D segmentation layer is a deterministic baseline, not a claim of universal volumetric segmentation accuracy. It should be benchmarked against representative 3-D ground truth before use as a primary endpoint.
 
 Before using OptiCell outputs as experimental endpoints, benchmark segmentation/tracking against representative ground truth, document acquisition and analysis settings, and preserve provenance.
