@@ -7,9 +7,10 @@ stable public namespace lives under ``opticell``.
 from qc_pipeline import QCThresholds, analyze_folder, analyze_image, analyze_paths, extract_object_features
 from quantitative import add_spatial_features, object_channel_intensity, summarize_spatial_features
 from validation import benchmark_segmentation
+from .batch import BatchConfig, analyze_paths_parallel
 from .statistics import benjamini_hochberg, compare_two_groups, summarize_by_replicate
 from .volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_features
-from .segmentation import BaseSegmenter, CellposeBackend, ThresholdSegmenter, compare_backends, get_backend
+from .segmentation import BaseSegmenter, CellposeBackend, ThresholdSegmenter, available_backends, compare_backends, get_backend, register_backend
 from .volumetric_segmentation import VolumetricSegmentationResult, segment_threshold_3d
 
 __all__ = [
@@ -22,6 +23,8 @@ __all__ = [
     "object_channel_intensity",
     "summarize_spatial_features",
     "benchmark_segmentation",
+    "BatchConfig",
+    "analyze_paths_parallel",
     "summarize_by_replicate",
     "compare_two_groups",
     "benjamini_hochberg",
@@ -31,10 +34,12 @@ __all__ = [
     "BaseSegmenter",
     "ThresholdSegmenter",
     "CellposeBackend",
+    "register_backend",
+    "available_backends",
     "get_backend",
     "compare_backends",
     "VolumetricSegmentationResult",
     "segment_threshold_3d",
 ]
 
-__version__ = "2.6.0"
+__version__ = "2.7.0"
