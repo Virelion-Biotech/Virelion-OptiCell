@@ -6,7 +6,6 @@ They are not a substitute for a domain-specific validation study.
 from __future__ import annotations
 
 from typing import Sequence
-
 import numpy as np
 
 
@@ -75,10 +74,18 @@ def paired_segmentation_metrics(predicted: np.ndarray, truth: np.ndarray, max_di
 
 
 def benchmark_segmentation(predicted_labels: Sequence[np.ndarray], truth_labels: Sequence[np.ndarray], max_distance_px: float = 20.0) -> dict[str, float]:
+    """Aggregate metrics and expose both current prefixed keys and legacy aliases."""
     if len(predicted_labels) != len(truth_labels): raise ValueError("predicted_labels and truth_labels must have the same length")
     if not predicted_labels: raise ValueError("At least one validation image is required")
     rows = [paired_segmentation_metrics(pred, truth, max_distance_px) for pred, truth in zip(predicted_labels, truth_labels)]
-    keys = sorted(rows[0])
-    result = {key: float(np.nanmean([row[key] for row in rows])) for key in keys}
-    result["n_images"] = float(len(rows))
-    return result
+    mean = lambda key: float(np.nanmean([row[key] for row in rows]))
+    return {
+        "n_images": float(len(rows)),
+        "pixel_iou_mean": mean("iou"), "pixel_dice_mean": mean("dice"),
+        "pixel_precision_mean": mean("precision"), "pixel_recall_mean": mean("recall"),
+        "instance_precision_mean": mean("precision"), "instance_recall_mean": mean("recall"),
+        "instance_f1_mean": mean("f1"), "absolute_count_error_mean": mean("absolute_count_error"),
+        "relative_count_error_mean": mean("relative_count_error"),
+        "iou": mean("iou"), "dice": mean("dice"), "precision": mean("precision"), "recall": mean("recall"),
+        "f1": mean("f1"), "absolute_count_error": mean("absolute_count_error"), "relative_count_error": mean("relative_count_error"),
+    }
