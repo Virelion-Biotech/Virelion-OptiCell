@@ -1,8 +1,8 @@
 # Virelion-OptiCell
 
-**OptiCell 2.3** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
+**OptiCell 2.4** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
 
-There is **no Streamlit and no GUI dependency**. OptiCell is designed as a reusable Python API plus CLI for local analysis, notebooks, servers, CI, and larger bioinformatics pipelines.
+There is **no Streamlit and no GUI dependency**. OptiCell is a reusable Python package plus CLI for local analysis, notebooks, servers, CI, and larger bioinformatics pipelines. Legacy top-level modules remain available for compatibility, while the stable `opticell.*` namespace is now the preferred API.
 
 ## Major capabilities
 
@@ -11,76 +11,65 @@ There is **no Streamlit and no GUI dependency**. OptiCell is designed as a reusa
 - Absolute QC flags plus dataset-relative robust MAD outlier scoring.
 - Threshold and adaptive threshold segmentation.
 - Optional persistent Cellpose backend.
-- Segmentation-quality diagnostics: foreground fraction, area statistics, border/tiny/merged-object rates, and quality score.
+- Segmentation-quality diagnostics and disagreement-aware ensemble analysis.
 
 ### Quantitative cell phenotyping
 - Per-cell morphology and intensity features.
 - Spatial statistics: nearest-neighbour distances, density, normalized position.
 - Multi-channel per-cell intensity and integrated intensity.
-- Background correction and channel colocalization.
+- Texture and heterogeneity descriptors.
+- Explicit background, denoising, flat-field, and artifact preprocessing utilities.
 
 ### Nucleus/cell compartments
-`compartments.py` adds explicit nucleus-aware measurements:
+`compartments.py` adds:
 - nucleus-to-cell area ratio
 - cytoplasm area
 - nucleus/cytoplasm intensity ratio
 - nucleus assignment to parent cells
 - multiple-nucleus detection per cell
 
-This provides a foundation for nuclear translocation, differentiation, toxicity, and subcellular localization analyses.
-
 ### Auditable phenotype classification
-`phenotype.py` provides rule-based phenotype scoring. Every classification records the contributing rules, score, and score fraction rather than hiding decisions inside a black box.
-
-```python
-from phenotype import Rule, score_cells
-rules = [
-    Rule("mean_intensity", 80, label="marker_positive"),
-    Rule("circularity", 0.7, label="round_cell"),
-]
-scored = score_cells(features, rules)
-```
+`phenotype.py` provides rule-based phenotype scoring where every classification records contributing rules, score, and score fraction rather than hiding decisions inside a black box.
 
 ### Time-lapse tracking
-`tracking.py` provides deterministic centroid-based tracking for 2-D time series:
-- one-to-one nearest-neighbour linking
-- configurable maximum displacement
-- optional short-gap handling
-- per-track path length
-- net displacement
-- mean and net speed
-
-It is deliberately lightweight; domain-specific tracking should still be validated against annotated tracks.
+`tracking.py` provides deterministic 2-D centroid tracking with configurable displacement and short-gap handling plus trajectory summaries.
 
 ### Segmentation ensembles
-`ensemble.py` runs multiple threshold strategies or combines precomputed segmentations and exposes model disagreement instead of hiding it.
-
-```python
-from ensemble import threshold_ensemble
-result = threshold_ensemble(gray_image)
-print(result.member_counts)
-print(result.agreement_fraction)
-print(result.warning)
-```
-
-Large disagreement is surfaced as `SEGMENTATION_DISAGREEMENT`, making uncertain images obvious.
+`ensemble.py` can compare threshold strategies or precomputed model outputs and surfaces disagreement rather than hiding uncertainty.
 
 ### Plate / experiment metadata
-`experiment.py` adds:
-- plate extraction
-- well extraction
-- timepoint parsing
-- explicit user metadata injection
-- group summaries
-- 8×12-style plate heatmap matrices
+`experiment.py` supports plate/well/timepoint extraction, explicit metadata injection, and experiment summaries.
 
-OptiCell does not infer biological condition labels from arbitrary filenames; conditions should be supplied explicitly.
+### Replicate-aware statistics
+`statistics.py` is designed around the **experimental unit**, not individual cells. It provides:
+- aggregation to biological/technical replicate level
+- replicate-level group summaries
+- Cohen's d
+- permutation-based two-group testing
+- Benjamini-Hochberg FDR adjustment
+
+This is intentionally separate from cell-level feature extraction so users are less likely to commit pseudoreplication errors.
 
 ### Native C/Z/T microscopy I/O
 `image_io.py` preserves TIFF dimensions and provides explicit C/Z/T selection and projection rather than silently flattening microscopy data.
 
 ### Objective validation
 `validation.py` provides pixel IoU/Dice, precision/recall, instance matching, F1, cell-count error, and multi-image benchmark aggregation against ground truth masks.
+
+## Package layout
+
+```text
+opticell/
+├── __init__.py
+├── analysis.py
+├── features.py
+├── io.py
+├── segmentation.py
+├── statistics.py
+└── tracking.py
+```
+
+The legacy modules (`qc_pipeline.py`, `quantitative.py`, `image_io.py`, etc.) remain importable to avoid breaking existing scripts.
 
 ## Installation
 
@@ -103,6 +92,26 @@ Development tools:
 pip install -e ".[dev]"
 ```
 
+## Preferred Python API
+
+```python
+import opticell
+from opticell.features import extract_object_features, add_spatial_features, object_texture_features
+from opticell.segmentation import segment_threshold, CellposeSegmenter
+from opticell.analysis import segment_nuclei, compartment_features, Rule, score_cells
+from opticell.io import load_tiff_stack, canonicalize_axes, project_z
+from opticell.statistics import summarize_by_replicate, compare_two_groups
+
+qc = opticell.analyze_folder("./images", adaptive_qc=True)
+result, segmentation = opticell.analyze_image("./images/sample.tif", return_segmentation=True)
+features = extract_object_features(gray_image, segmentation.labels)
+features = add_spatial_features(features, gray_image.shape)
+features = features.join(object_texture_features(gray_image, segmentation.labels).set_index("label"), on="label", rsuffix="_texture")
+
+stack = canonicalize_axes(load_tiff_stack("experiment.tif"))
+projection = project_z(stack, "max")
+```
+
 ## CLI
 
 ```bash
@@ -113,67 +122,18 @@ opticell /path/to/images --adaptive-threshold -o qc_summary.csv
 opticell /path/to/images --no-adaptive-qc -o qc_summary.csv
 ```
 
-## Python API
-
-```python
-from qc_pipeline import analyze_folder, analyze_image, extract_object_features
-from quantitative import add_spatial_features
-from compartments import segment_nuclei, compartment_features
-from phenotype import Rule, score_cells
-from tracking import link_frames, summarize_tracks
-from experiment import annotate_results
-
-qc = analyze_folder("./images", adaptive_qc=True)
-result, segmentation = analyze_image("./images/sample.tif", return_segmentation=True)
-features = extract_object_features(gray_image, segmentation.labels)
-features = add_spatial_features(features, gray_image.shape)
-
-nuclei = segment_nuclei(dapi_image)
-compartments = compartment_features(marker_image, segmentation.labels, nuclei)
-scored = score_cells(features, [Rule("mean_intensity", 80, label="marker_positive")])
-
-tracks = link_frames(timepoint_labels)
-motion = summarize_tracks(tracks)
-experiment = annotate_results(qc)
-```
-
 ## Testing
 
 ```bash
 pytest
-python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py
+python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py statistics.py texture.py preprocessing.py opticell
 python qc_pipeline.py --help
 ```
 
-CI tests Python 3.10, 3.11, and 3.12.
-
-## Project structure
-
-```text
-Virelion-OptiCell/
-├── qc_pipeline.py
-├── quantitative.py
-├── image_io.py
-├── validation.py
-├── compartments.py
-├── phenotype.py
-├── tracking.py
-├── ensemble.py
-├── experiment.py
-├── make_test_images.py
-├── tests/
-│   ├── test_qc_pipeline.py
-│   ├── test_quantitative.py
-│   ├── test_validation.py
-│   └── test_advanced.py
-├── .github/workflows/ci.yml
-├── pyproject.toml
-├── requirements.txt
-└── LICENSE
-```
+CI tests Python 3.10, 3.11, and 3.12 and imports the public `opticell` package.
 
 ## Scientific limitations
 
-OptiCell is **not a validated clinical measurement system**. Segmentation and tracking performance depends on cell type, staining, modality, magnification, acquisition quality, and experimental context. Rule-based phenotyping is intentionally transparent but is not a substitute for a trained classifier when a validated model is required.
+OptiCell is **not a validated clinical measurement system**. Segmentation and tracking performance depends on cell type, staining, modality, magnification, acquisition quality, and experimental context. Rule-based phenotyping is transparent but is not a substitute for a validated trained classifier when one is required.
 
-Before using OptiCell outputs as experimental endpoints, benchmark segmentation/tracking against representative ground truth, define the experimental unit and replicates correctly, document acquisition and analysis settings, and preserve the generated provenance.
+Most importantly, cell-level sample size is not automatically biological sample size. Use the replicate-aware statistics layer and define the true experimental unit before inferential testing. Benchmark segmentation/tracking against representative ground truth and preserve the analysis provenance with the experiment.
