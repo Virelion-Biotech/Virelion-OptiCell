@@ -1,6 +1,6 @@
 # Virelion-OptiCell
 
-**OptiCell 2.11** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
+**OptiCell 2.12** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
 
 There is **no Streamlit and no GUI dependency**. The stable public API is under `opticell`; legacy top-level analysis modules remain available where compatibility is useful.
 
@@ -11,16 +11,17 @@ There is **no Streamlit and no GUI dependency**. The stable public API is under 
 - Segmentation benchmarking: ground-truth comparisons with runtime, pixel/voxel metrics, instance metrics, count error, and failure accounting.
 - High-throughput batch analysis: parallel workers, deterministic output ordering, progress callbacks, and failure isolation.
 - 2-D/3-D tracking: one-to-one assignment, short gaps, velocity prediction, physical-unit 3-D matching, confidence, trajectory speed, path length, and straightness.
-- Lineage analysis: auditable parent/child relationships derived from tracking and split events.
+- Lineage analysis: auditable parent/child relationships plus track-continuity and fragmentation diagnostics.
 - 3-D segmentation baseline: deterministic volumetric threshold segmentation with explicit instance labels and QC summaries.
 - Cell phenotyping: morphology, intensity, spatial density, nearest-neighbour distance, texture, and multi-channel measurements.
 - Compartments: nucleus segmentation/assignment, nucleus-to-cell ratio, cytoplasm, and nuclear/cytoplasmic intensity.
 - Time-lapse event analysis: split, merge, appearance, disappearance, and division-event tables.
-- Experiment metadata/QC: plate/well/timepoint parsing, explicit group annotation, control normalization, plate edge-effect analysis, and screening statistics including Z′.
+- Experiment metadata/QC: plate/well/timepoint parsing, explicit group annotation, control normalization, plate edge-effect analysis, Z′, and prospective two-group sample-size planning.
 - Statistics: replicate-aware summaries, bootstrap confidence intervals, Cohen's d, permutation testing, and Benjamini-Hochberg FDR.
 - Validation: pixel/voxel IoU/Dice/precision/recall, 2-D/3-D instance matching/F1, count error, and benchmark aggregation.
-- Native TIFF I/O: explicit C/Z/T axis handling and projections.
+- Native TIFF/OME-TIFF I/O: explicit C/Z/T axis handling, physical scales, units, channel metadata, projections, and series selection.
 - Streaming I/O: memory mapping where supported and frame/chunk iteration for large TIFF datasets.
+- Export interoperability: deterministic long-form feature tables plus CSV/Parquet output when a Parquet engine is installed.
 - Preprocessing: background, illumination, and artifact utilities.
 - 3-D volumetric analysis: physical-unit object volume, centroids, bounding boxes, anisotropic surface area, volume fraction, density, and KD-tree nearest-neighbour distances.
 - Reproducibility: input SHA-256 hashes, runtime/platform metadata, parameter manifests, and JSON reports.
@@ -36,16 +37,30 @@ from opticell import (
     normalize_to_controls,
     plate_edge_effect,
     z_prime_factor,
+    two_group_sample_size,
     build_lineage_table,
+    lineage_quality_summary,
+    read_ome_info,
+    dataframe_to_long_form,
     memmap_tiff,
     profile_call,
 )
 ```
 
-### Screening normalization
+### OME-TIFF metadata
 
 ```python
-from opticell import normalize_to_controls, z_prime_factor
+from opticell import read_ome_info
+
+info = read_ome_info("sample.ome.tif")
+print(info.axes, info.shape, info.channel_names)
+print(info.physical_size_x, info.physical_size_y, info.physical_size_z)
+```
+
+### Screening and prospective planning
+
+```python
+from opticell import normalize_to_controls, z_prime_factor, two_group_sample_size
 
 normalized = normalize_to_controls(
     results,
@@ -55,38 +70,18 @@ normalized = normalize_to_controls(
 )
 
 zprime = z_prime_factor(negative_controls, positive_controls)
+plan = two_group_sample_size(effect_size=0.8, alpha=0.05, power=0.8)
 ```
 
-### 3-D segmentation + tracking
+The power helper is a normal-approximation planning tool; clustered designs, blocking, repeated measures, and other complex experiments require design-specific power analysis.
+
+### Lineage quality
 
 ```python
-from opticell.volumetric_segmentation import segment_threshold_3d
-from opticell.tracking3d import Tracking3DConfig, link_frames_3d
+from opticell import lineage_quality_summary
 
-segments = [
-    segment_threshold_3d(volume, voxel_size=(2.0, 1.0, 0.5), min_volume_voxels=30).labels
-    for volume in time_volumes
-]
-tracks = link_frames_3d(
-    segments,
-    voxel_size=(2.0, 1.0, 0.5),
-    frame_interval=5.0,
-    config=Tracking3DConfig(max_distance_um=20, max_gap=1),
-)
-```
-
-### Provenance
-
-```python
-from opticell import build_manifest, write_manifest
-
-manifest = build_manifest(
-    opticell_version="2.11.0",
-    inputs=image_paths,
-    parameters={"cell_method": "cellpose", "workers": 4},
-    operation="batch_qc",
-)
-write_manifest(manifest, "results/provenance.json")
+quality = lineage_quality_summary(tracks)
+print(quality["track_completeness"], quality["fragmented_tracks"])
 ```
 
 ## Installation
@@ -141,5 +136,9 @@ Statistics should be performed at the correct experimental unit. OptiCell provid
 The 3-D segmentation/tracking and lineage layers are transparent baselines, not claims of universal volumetric or lineage accuracy. They should be benchmarked against representative ground truth before use as primary endpoints.
 
 Control-normalized plate metrics assume the specified control group is an appropriate reference. Z′ and edge-effect metrics are screening/QC statistics, not proof of biological mechanism or acquisition failure.
+
+The prospective power calculation is an approximation and should not be used as a substitute for design-specific power analysis when clustering, blocking, repeated measures, non-Gaussian outcomes, or multiple endpoints matter.
+
+OME-TIFF metadata are parsed conservatively from the first TIFF series. Unsupported microscopy container features should not be assumed to be preserved unless explicitly represented by the returned metadata or axes.
 
 Before using OptiCell outputs as experimental endpoints, benchmark segmentation/tracking against representative ground truth, document acquisition and analysis settings, define the experimental unit, and preserve provenance.
