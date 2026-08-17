@@ -1,6 +1,6 @@
 # Virelion-OptiCell
 
-**OptiCell 2.9** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
+**OptiCell 2.10** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
 
 There is **no Streamlit and no GUI dependency**. The stable public API is under `opticell`; legacy top-level analysis modules remain available where compatibility is useful.
 
@@ -8,36 +8,43 @@ There is **no Streamlit and no GUI dependency**. The stable public API is under 
 
 - Acquisition QC: focus, brightness, contrast, saturation, dimensions, dtype, channel count, hashing, adaptive MAD outliers.
 - Segmentation: threshold/adaptive threshold, persistent Cellpose, automatic CPU/GPU selection when supported, model-agnostic backend interface, custom backend registry, and ensemble disagreement diagnostics.
-- Segmentation benchmarking: reproducible backend comparisons against representative ground-truth masks with runtime, pixel/voxel metrics, instance metrics, count error, and failure accounting.
+- Segmentation benchmarking: reproducible backend comparisons against representative ground-truth masks with runtime, pixel/voxel metrics, instance metrics, count error, user metadata, and failure accounting.
 - High-throughput batch analysis: parallel workers, deterministic output ordering, progress callbacks, and failure isolation.
+- 2-D tracking: one-to-one assignment, optional short-gap handling, velocity prediction, match confidence, trajectory speed, path length, straightness, and gap summaries.
+- 3-D tracking: physical-unit one-to-one assignment with anisotropic voxel spacing, velocity prediction, match confidence, and trajectory summaries.
 - 3-D segmentation baseline: deterministic volumetric threshold segmentation with explicit instance labels and QC summaries.
 - Cell phenotyping: morphology, intensity, spatial density, nearest-neighbour distance, texture, multi-channel measurements.
 - Compartments: nucleus segmentation/assignment, nucleus-to-cell ratio, cytoplasm, nuclear/cytoplasmic intensity.
-- Time-lapse: deterministic 2-D tracking plus physical-unit 3-D tracking with short-gap handling, velocity prediction, confidence scores, trajectory summaries, and explicit split/merge/appearance/disappearance/division event analysis.
+- Time-lapse event analysis: split, merge, appearance, disappearance, and auditable division-event tables.
 - Experiment metadata: plate/well/timepoint parsing and explicit group annotation.
+- Experiment QC: robust control normalization, plate-level summaries, and edge-effect detection.
 - Statistics: replicate-aware summaries, bootstrap confidence intervals, Cohen's d, permutation testing, Benjamini-Hochberg FDR.
 - Validation: pixel/voxel IoU/Dice/precision/recall, 2-D and 3-D instance matching/F1, count error and benchmark aggregation.
 - Native TIFF I/O: explicit C/Z/T axis handling and projections.
 - Preprocessing: background, illumination and artifact utilities.
 - 3-D volumetric analysis: physical-unit object volume, centroids, bounding boxes, anisotropic surface area, volume fraction, density, and KD-tree nearest-neighbour distances.
 - Reproducibility: input SHA-256 hashes, runtime/platform metadata, parameter manifests, and portable JSON reports.
-- Runtime/performance: CPU/GPU capability detection, elapsed time, throughput, result-table summaries, and validation summaries.
+- Performance profiling: structured per-operation timing, throughput, and machine-readable profiling tables.
 
 ## Stable package API
 
 ```python
-from opticell import analyze_folder, extract_object_features, summarize_volume
+from opticell import (
+    analyze_folder,
+    extract_object_features,
+    summarize_volume,
+    normalize_to_controls,
+    plate_edge_effect,
+    benchmark_backends,
+    profile_call,
+)
 from opticell.statistics import summarize_by_replicate, compare_two_groups
 from opticell.features import add_spatial_features, object_texture_features
 from opticell.io import load_tiff_stack, canonicalize_axes
 from opticell.segmentation import ThresholdSegmenter, CellposeBackend, compare_backends, get_backend
-from opticell.benchmarking import benchmark_backends, aggregate_backend_benchmarks
 from opticell.tracking3d import Tracking3DConfig, link_frames_3d, summarize_tracks_3d
-from opticell.tracking_events import detect_time_series_events, classify_divisions
 from opticell.volumetric import volume_features
 from opticell.volumetric_segmentation import segment_threshold_3d
-from opticell.experiment_stats import bootstrap_ci, replicate_effect_summary, summarize_experiment
-from opticell import build_manifest, write_manifest, build_report, write_report
 ```
 
 Example 3-D segmentation + tracking:
@@ -58,19 +65,26 @@ tracks = link_frames_3d(
 )
 ```
 
-Example replicate-level statistics:
+Example control normalization:
 
 ```python
-from opticell.experiment_stats import replicate_effect_summary
+from opticell import normalize_to_controls
 
-result = replicate_effect_summary(
-    features,
-    value_column="cell_area",
+normalized = normalize_to_controls(
+    results,
+    metric="cell_count",
     group_column="condition",
-    group_a="control",
-    group_b="MI",
-    replicate_column="replicate",
+    control_value="control",
 )
+```
+
+Example profiling:
+
+```python
+from opticell import profile_call
+
+result, timing = profile_call("segmentation", segmenter.segment, image, items=1)
+print(timing.items_per_second)
 ```
 
 Example provenance:
@@ -79,7 +93,7 @@ Example provenance:
 from opticell import build_manifest, write_manifest
 
 manifest = build_manifest(
-    opticell_version="2.9.0",
+    opticell_version="2.10.0",
     inputs=image_paths,
     parameters={"cell_method": "cellpose", "workers": 4},
     operation="batch_qc",
@@ -122,13 +136,13 @@ opticell /path/to/images --no-adaptive-qc -o qc_summary.csv
 
 ```bash
 pytest
-ruff check .
-python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py texture.py preprocessing.py volumetric.py volumetric_segmentation.py tracking3d.py provenance.py reporting.py benchmarking.py runtime.py tracking_events.py experiment_stats.py opticell
+ruff check . --select E4,E7,E9,F
+python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py texture.py preprocessing.py volumetric.py volumetric_segmentation.py tracking3d.py provenance.py reporting.py benchmarking.py runtime.py tracking_events.py experiment_stats.py experiment_qc.py profiling.py opticell
 python qc_pipeline.py --help
 python -m build
 ```
 
-CI tests Python 3.10, 3.11, and 3.12, runs the test suite and linting, validates the stable package namespace, checks standard-library import behavior, and builds the distributable package.
+CI tests Python 3.10, 3.11, and 3.12, runs tests and correctness-focused linting, validates the stable package namespace, checks standard-library import behavior, and builds the distributable package.
 
 ## Scientific limitations
 
@@ -138,4 +152,6 @@ Statistics should be performed at the correct experimental unit. OptiCell provid
 
 The 3-D segmentation and tracking layers are transparent baselines, not claims of universal volumetric or lineage-tracking accuracy. They should be benchmarked against representative ground truth before use as primary endpoints.
 
-Before using OptiCell outputs as experimental endpoints, benchmark segmentation/tracking against representative ground truth, document acquisition and analysis settings, and preserve provenance.
+Control-normalized plate metrics assume the specified control group is an appropriate reference. Edge-effect detection is descriptive and should not be treated as proof of an acquisition artifact without experimental review.
+
+Before using OptiCell outputs as experimental endpoints, benchmark segmentation/tracking against representative ground truth, document acquisition and analysis settings, define the experimental unit, and preserve provenance.
