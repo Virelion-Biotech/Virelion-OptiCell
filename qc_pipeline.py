@@ -1,121 +1,197 @@
-"""
-qc_pipeline.py
-================
-Core analysis engine for the microscopy QC tool.
+"""OptiCell microscopy analysis engine.
 
-Responsibilities
------------------
-- Load microscopy images (.png, .jpg/.jpeg, .tif/.tiff, incl. multi-page/16-bit TIFFs)
-- Compute per-image QC metrics:
-    * Focus / sharpness score  (variance of Laplacian)
-    * Brightness score         (mean intensity, 0-255 scale)
-    * Estimated cell count     (Otsu threshold + connected components,
-                                 with an optional Cellpose backend)
-- Flag images that fall outside expected ranges (blurry, too dark/bright,
-  suspiciously low/high cell counts)
-- Batch-process a whole folder into a pandas DataFrame
-- Export a summary CSV
+This module intentionally has no GUI dependencies. It provides a reusable
+Python API and CLI for microscopy dataset QC and quantitative cell analysis.
 
-This module has no GUI dependencies — it can be used standalone from a
-script/notebook, from the CLI, or imported by app.py (the Streamlit GUI).
+Key capabilities
+----------------
+* Robust loading of common image formats, including multi-page TIFFs.
+* Exposure, saturation, contrast and focus metrics.
+* Classical segmentation with explicit diagnostics.
+* Optional persistent Cellpose backend when installed.
+* Per-object morphology features.
+* Dataset-level adaptive QC using robust MAD-based scores.
+* Deterministic, provenance-friendly CSV/JSON export.
+* Recursive batch processing with progress callbacks.
+
+The public API is designed so additional segmentation backends and richer
+feature extraction can be added without changing the batch interface.
 """
 
 from __future__ import annotations
 
-import os
-import glob
+import argparse
 import dataclasses
-from dataclasses import dataclass, field
-from typing import Optional, Callable
+import glob
+import hashlib
+import json
+import os
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+from typing import Any, Callable, Optional, Sequence
 
-import numpy as np
 import cv2
+import numpy as np
 import pandas as pd
 
 try:
     import tifffile
     _HAS_TIFFFILE = True
-except ImportError:
+except ImportError:  # pragma: no cover - exercised through runtime fallback
+    tifffile = None
     _HAS_TIFFFILE = False
 
-# Cellpose is a heavy optional dependency (torch-based). The tool works
-# perfectly well without it, using classical thresholding instead.
 try:
     from cellpose import models as _cellpose_models
     _HAS_CELLPOSE = True
-except ImportError:
+except ImportError:  # pragma: no cover - environment dependent
+    _cellpose_models = None
     _HAS_CELLPOSE = False
 
 
 SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp")
+PIPELINE_VERSION = "2.0.0"
 
 
-# --------------------------------------------------------------------------
-# Config
-# --------------------------------------------------------------------------
+@dataclass(frozen=True)
+class QCThresholds:
+    """Configurable QC limits.
+
+    Absolute limits remain available for reproducibility; adaptive dataset
+    scoring can be enabled separately so the same engine works across
+    microscopes and acquisitions.
+    """
+
+    focus_min: float = 100.0
+    brightness_min: float = 25.0
+    brightness_max: float = 230.0
+    saturation_max_fraction: float = 0.02
+    min_cell_area: int = 15
+    max_cell_area_frac: float = 0.25
+    cell_count_low: int = 1
+    cell_count_high: Optional[int] = None
+
+    def validate(self) -> None:
+        if self.focus_min < 0:
+            raise ValueError("focus_min must be >= 0")
+        if not 0 <= self.brightness_min <= 255:
+            raise ValueError("brightness_min must be in [0, 255]")
+        if not 0 <= self.brightness_max <= 255 or self.brightness_max < self.brightness_min:
+            raise ValueError("brightness_max must be in [brightness_min, 255]")
+        if not 0 <= self.saturation_max_fraction <= 1:
+            raise ValueError("saturation_max_fraction must be in [0, 1]")
+        if self.min_cell_area < 1:
+            raise ValueError("min_cell_area must be >= 1")
+        if not 0 < self.max_cell_area_frac <= 1:
+            raise ValueError("max_cell_area_frac must be in (0, 1]")
+        if self.cell_count_low < 0:
+            raise ValueError("cell_count_low must be >= 0")
+        if self.cell_count_high is not None and self.cell_count_high < self.cell_count_low:
+            raise ValueError("cell_count_high must be >= cell_count_low")
+
 
 @dataclass
-class QCThresholds:
-    """Cutoffs used to flag suspicious images. Tune these to your dataset."""
-    focus_min: float = 100.0          # variance-of-Laplacian below this => blurry
-    brightness_min: float = 25.0      # mean intensity below this => too dark
-    brightness_max: float = 230.0     # mean intensity above this => too bright / saturated
-    min_cell_area: int = 15           # pixels; connected components smaller than this are noise
-    max_cell_area_frac: float = 0.25  # component larger than this fraction of image => merged blob, not a cell
-    cell_count_low: int = 1           # fewer cells than this => flag "few/no cells detected"
+class SegmentationResult:
+    """Standard result returned by every segmentation backend."""
+
+    count: int
+    labels: np.ndarray
+    method: str
+    foreground_fraction: float
+    median_area: float
+    area_cv: float
+    border_fraction: float
+    tiny_object_fraction: float
+    merged_object_fraction: float
+    quality_score: float
+    error: Optional[str] = None
 
 
 @dataclass
 class ImageResult:
-    """QC result for a single image."""
+    """QC + segmentation summary for one image."""
+
     filename: str
     path: str
     width: int
     height: int
     channels: int
     dtype: str
+    ndim: int
     file_size_kb: float
+    sha256: str
     focus_score: float
     brightness_mean: float
     brightness_std: float
+    saturation_fraction: float
+    contrast_std: float
     estimated_cells: int
     cell_method: str
-    flags: list = field(default_factory=list)
+    segmentation_quality: float
+    median_cell_area: float
+    cell_area_cv: float
+    border_object_fraction: float
+    flags: list[str] = field(default_factory=list)
+    adaptive_score: Optional[float] = None
     error: Optional[str] = None
 
-    def to_row(self) -> dict:
-        d = dataclasses.asdict(self)
-        d["flags"] = "; ".join(self.flags) if self.flags else ""
-        return d
+    def to_row(self) -> dict[str, Any]:
+        row = asdict(self)
+        row["flags"] = "; ".join(self.flags)
+        return row
 
 
-# --------------------------------------------------------------------------
-# Image loading
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# File and image loading
+# ---------------------------------------------------------------------------
+
+
+def sha256_file(path: str, chunk_size: int = 1024 * 1024) -> str:
+    """Return a stable content hash for provenance and duplicate detection."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        while chunk := handle.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _collapse_tiff_stack(arr: np.ndarray) -> np.ndarray:
+    """Collapse obvious Z/page axes while preserving RGB/RGBA images.
+
+    This is deliberately conservative. TIFF dimensional metadata is not
+    always preserved by simple readers, so ambiguous arrays are reduced with
+    a documented max projection rather than silently treating pages as RGB.
+    """
+    if arr.ndim <= 2:
+        return arr
+    if arr.ndim == 3:
+        if arr.shape[-1] in (3, 4):
+            return arr
+        # Common page-first or z-first stack.
+        return np.max(arr, axis=0)
+    # For higher-dimensional TIFFs, repeatedly collapse leading axes while
+    # retaining the last two spatial axes.
+    while arr.ndim > 3:
+        arr = np.max(arr, axis=0)
+    if arr.ndim == 3 and arr.shape[-1] not in (3, 4):
+        arr = np.max(arr, axis=0)
+    return arr
+
 
 def load_image(path: str) -> np.ndarray:
-    """
-    Load an image from disk as a numpy array, handling multi-page and
-    high-bit-depth TIFFs gracefully. Returns the array in its native
-    dtype/shape (H, W) or (H, W, C).
-    """
-    ext = os.path.splitext(path)[1].lower()
+    """Load a supported image as a native NumPy array in RGB order."""
+    path = os.fspath(path)
+    ext = Path(path).suffix.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise ValueError(f"Unsupported image extension: {ext}")
 
     if ext in (".tif", ".tiff") and _HAS_TIFFFILE:
         arr = tifffile.imread(path)
-        # Multi-page/Z-stack TIFF -> collapse to a single 2D image via max projection
-        if arr.ndim == 3 and arr.shape[0] < arr.shape[-1] and arr.shape[0] <= 64:
-            # heuristic: first axis is likely pages/z-slices, not a small channel count like RGB(3)/RGBA(4)
-            if arr.shape[0] not in (3, 4):
-                arr = arr.max(axis=0)
-        return arr
+        return _collapse_tiff_stack(np.asarray(arr))
 
-    # Fall back to OpenCV for everything else (also handles standard TIFFs
-    # if tifffile isn't installed)
     arr = cv2.imread(path, cv2.IMREAD_UNCHANGED)
     if arr is None:
         raise IOError(f"Could not read image: {path}")
-    # OpenCV loads color images as BGR -> convert to RGB for consistency
     if arr.ndim == 3 and arr.shape[2] == 3:
         arr = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
     elif arr.ndim == 3 and arr.shape[2] == 4:
@@ -123,277 +199,626 @@ def load_image(path: str) -> np.ndarray:
     return arr
 
 
-def to_grayscale_uint8(arr: np.ndarray) -> np.ndarray:
-    """Normalize any loaded image (any dtype/shape) to a 2D uint8 grayscale array."""
-    if arr.ndim == 3:
-        if arr.shape[2] >= 3:
-            gray = cv2.cvtColor(arr[:, :, :3].astype(np.uint8) if arr.dtype == np.uint8
-                                 else _rescale_to_uint8(arr[:, :, :3]), cv2.COLOR_RGB2GRAY)
-            return gray
-        else:
-            arr = arr[:, :, 0]
-
-    if arr.dtype == np.uint8:
-        return arr
-
-    return _rescale_to_uint8(arr)
-
-
 def _rescale_to_uint8(arr: np.ndarray) -> np.ndarray:
-    """Rescale arbitrary-range/dtype image data (e.g. 12/16-bit) to 0-255 uint8."""
-    arr = arr.astype(np.float64)
-    lo, hi = np.percentile(arr, [0.5, 99.5])
-    if hi <= lo:
-        lo, hi = arr.min(), arr.max()
-    if hi <= lo:
-        return np.zeros(arr.shape[:2] if arr.ndim == 3 else arr.shape, dtype=np.uint8)
-    arr = np.clip((arr - lo) / (hi - lo), 0, 1) * 255.0
-    if arr.ndim == 3:
-        arr = arr.mean(axis=2)
-    return arr.astype(np.uint8)
+    """Convert arbitrary numeric image data to uint8 without dtype assumptions."""
+    values = np.asarray(arr)
+    if not np.issubdtype(values.dtype, np.number):
+        raise TypeError("Image array must contain numeric values")
+
+    work = values.astype(np.float32, copy=False)
+    if work.size == 0:
+        return np.zeros(work.shape, dtype=np.uint8)
+
+    finite = np.isfinite(work)
+    if not finite.all():
+        work = np.nan_to_num(work, copy=False)
+
+    if work.ndim == 3:
+        flat = work.reshape(-1, work.shape[-1])
+    else:
+        flat = work.reshape(-1, 1)
+    sample = flat[:: max(1, len(flat) // 200000)]
+    lo = np.percentile(sample, 0.5, axis=0)
+    hi = np.percentile(sample, 99.5, axis=0)
+
+    if work.ndim == 3:
+        lo_b = lo.reshape(1, 1, -1)
+        hi_b = hi.reshape(1, 1, -1)
+        span = hi_b - lo_b
+        span = np.where(span > 0, span, 1.0)
+        scaled = np.clip((work - lo_b) / span, 0, 1) * 255.0
+    else:
+        lo_v, hi_v = float(lo[0]), float(hi[0])
+        if hi_v <= lo_v:
+            lo_v, hi_v = float(work.min()), float(work.max())
+        if hi_v <= lo_v:
+            return np.zeros(work.shape, dtype=np.uint8)
+        scaled = np.clip((work - lo_v) / (hi_v - lo_v), 0, 1) * 255.0
+
+    return scaled.astype(np.uint8)
 
 
-# --------------------------------------------------------------------------
+def to_grayscale_uint8(arr: np.ndarray) -> np.ndarray:
+    """Convert grayscale/RGB/RGBA/high-bit-depth input to 2-D uint8."""
+    values = np.asarray(arr)
+    if values.ndim == 2:
+        return values if values.dtype == np.uint8 else _rescale_to_uint8(values)
+    if values.ndim != 3:
+        raise ValueError(f"Expected 2-D or 3-D image, got shape {values.shape}")
+    if values.shape[2] == 1:
+        return to_grayscale_uint8(values[:, :, 0])
+    rgb8 = values[:, :, :3] if values.dtype == np.uint8 else _rescale_to_uint8(values[:, :, :3])
+    return cv2.cvtColor(rgb8, cv2.COLOR_RGB2GRAY)
+
+
+# ---------------------------------------------------------------------------
 # Metrics
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+
 
 def compute_focus_score(gray: np.ndarray) -> float:
-    """
-    Sharpness/focus metric: variance of the Laplacian.
-    Higher = sharper. Blurry images have low edge energy -> low variance.
-    """
+    """Variance of the Laplacian; higher generally means sharper."""
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
 def compute_brightness(gray: np.ndarray) -> tuple[float, float]:
-    """Returns (mean intensity, std intensity) on a 0-255 scale."""
+    """Return mean and standard deviation on the normalized 0-255 scale."""
     return float(gray.mean()), float(gray.std())
 
 
-def estimate_cell_count_threshold(
+def compute_saturation_fraction(gray: np.ndarray, low: int = 1, high: int = 254) -> float:
+    """Fraction of pixels close to either uint8 intensity endpoint."""
+    if gray.size == 0:
+        return 0.0
+    return float(((gray <= low) | (gray >= high)).mean())
+
+
+def _safe_cv(values: Sequence[float]) -> float:
+    arr = np.asarray(values, dtype=float)
+    if arr.size < 2:
+        return 0.0
+    mean = float(arr.mean())
+    if mean == 0:
+        return 0.0
+    return float(arr.std(ddof=1) / mean)
+
+
+# ---------------------------------------------------------------------------
+# Segmentation
+# ---------------------------------------------------------------------------
+
+
+def _segmentation_diagnostics(
+    labels: np.ndarray,
+    image_shape: tuple[int, int],
+    min_area: int,
+    max_area_frac: float,
+) -> tuple[float, float, float, float, float, float]:
+    """Calculate object-level diagnostics used for QC."""
+    num_labels, _, stats, _ = cv2.connectedComponentsWithStats(
+        (labels > 0).astype(np.uint8), connectivity=8
+    )
+    if num_labels <= 1:
+        return 0.0, 0.0, 0.0, 1.0, 0.0, 0.0
+
+    areas = stats[1:, cv2.CC_STAT_AREA].astype(float)
+    total_pixels = float(image_shape[0] * image_shape[1])
+    foreground_fraction = float(areas.sum() / total_pixels) if total_pixels else 0.0
+    median_area = float(np.median(areas))
+    area_cv = _safe_cv(areas)
+
+    border_count = 0
+    border_pixels = set()
+    for label_id in range(1, num_labels):
+        x = stats[label_id, cv2.CC_STAT_LEFT]
+        y = stats[label_id, cv2.CC_STAT_TOP]
+        w = stats[label_id, cv2.CC_STAT_WIDTH]
+        h = stats[label_id, cv2.CC_STAT_HEIGHT]
+        touches = x == 0 or y == 0 or x + w >= image_shape[1] or y + h >= image_shape[0]
+        if touches:
+            border_count += 1
+    object_count = max(1, num_labels - 1)
+    border_fraction = float(border_count / object_count)
+
+    tiny_fraction = float((areas < max(1, min_area * 2)).mean())
+    merged_threshold = total_pixels * max_area_frac
+    merged_fraction = float((areas > merged_threshold).mean()) if areas.size else 0.0
+
+    quality = 100.0
+    quality -= min(45.0, border_fraction * 30.0)
+    quality -= min(30.0, tiny_fraction * 30.0)
+    quality -= min(25.0, merged_fraction * 25.0)
+    quality = float(np.clip(quality, 0.0, 100.0))
+    return foreground_fraction, median_area, area_cv, border_fraction, tiny_fraction, merged_fraction, quality
+
+
+def _build_segmentation_result(
+    labels: np.ndarray,
+    gray: np.ndarray,
+    method: str,
+    min_area: int,
+    max_area_frac: float,
+    error: Optional[str] = None,
+) -> SegmentationResult:
+    """Construct a standardized backend result."""
+    count = int(labels.max()) if labels.size else 0
+    (
+        foreground_fraction,
+        median_area,
+        area_cv,
+        border_fraction,
+        tiny_fraction,
+        merged_fraction,
+        quality,
+    ) = _segmentation_diagnostics(labels, gray.shape, min_area, max_area_frac)
+    return SegmentationResult(
+        count=count,
+        labels=labels.astype(np.int32, copy=False),
+        method=method,
+        foreground_fraction=foreground_fraction,
+        median_area=median_area,
+        area_cv=area_cv,
+        border_fraction=border_fraction,
+        tiny_object_fraction=tiny_fraction,
+        merged_object_fraction=merged_fraction,
+        quality_score=quality,
+        error=error,
+    )
+
+
+def segment_threshold(
     gray: np.ndarray,
     min_area: int = 15,
     max_area_frac: float = 0.25,
-) -> tuple[int, np.ndarray]:
-    """
-    Classical cell-count estimate:
-      1. Denoise slightly (median blur)
-      2. Otsu threshold (auto picks foreground vs background — works whether
-         cells are bright-on-dark or dark-on-bright, we pick the smaller-area side)
-      3. Morphological opening to remove speckle noise
-      4. Connected-component labeling, filtered by plausible area
+    adaptive: bool = False,
+) -> SegmentationResult:
+    """Classical threshold + morphology + connected-component segmentation."""
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    if adaptive:
+        thresh = cv2.adaptiveThreshold(
+            blurred,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            31,
+            3,
+        )
+    else:
+        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    Returns (cell_count, labeled_image) where labeled_image is an int32
-    array useful for visualization/overlay.
-    """
-    blurred = cv2.medianBlur(gray, 3)
-    thresh_val, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Decide polarity: foreground (cells) is usually the minority class.
-    # If thresholded "foreground" covers >50% of the image, invert.
-    if (thresh > 0).mean() > 0.5:
+    if float((thresh > 0).mean()) > 0.5:
         thresh = cv2.bitwise_not(thresh)
 
-    # Guard against flat/empty fields: on pure sensor noise, Otsu still
-    # finds *a* split, but foreground and background pixel intensities are
-    # nearly identical. Require a real intensity gap before trusting it.
-    fg_vals = blurred[thresh > 0]
-    bg_vals = blurred[thresh == 0]
-    if fg_vals.size == 0 or bg_vals.size == 0 or (fg_vals.mean() - bg_vals.mean()) < 12:
-        empty_labels = np.zeros_like(blurred, dtype=np.int32)
-        return 0, empty_labels
+    fg = blurred[thresh > 0]
+    bg = blurred[thresh == 0]
+    if fg.size == 0 or bg.size == 0:
+        labels = np.zeros_like(gray, dtype=np.int32)
+        return _build_segmentation_result(labels, gray, "threshold", min_area, max_area_frac)
+
+    contrast_gap = abs(float(fg.mean()) - float(bg.mean()))
+    if contrast_gap < 8:
+        labels = np.zeros_like(gray, dtype=np.int32)
+        return _build_segmentation_result(labels, gray, "threshold", min_area, max_area_frac)
 
     kernel = np.ones((3, 3), np.uint8)
     cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
     cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(cleaned, connectivity=8)
-
-    total_pixels = gray.shape[0] * gray.shape[1]
-    max_area = total_pixels * max_area_frac
-
-    count = 0
-    keep_mask = np.zeros_like(labels, dtype=bool)
-    for label_id in range(1, num_labels):  # skip background label 0
-        area = stats[label_id, cv2.CC_STAT_AREA]
+    num_labels, raw_labels, stats, _ = cv2.connectedComponentsWithStats(cleaned, connectivity=8)
+    max_area = gray.shape[0] * gray.shape[1] * max_area_frac
+    keep = np.zeros_like(raw_labels, dtype=np.int32)
+    next_id = 1
+    for label_id in range(1, num_labels):
+        area = int(stats[label_id, cv2.CC_STAT_AREA])
         if min_area <= area <= max_area:
-            count += 1
-            keep_mask |= (labels == label_id)
-
-    filtered_labels = np.where(keep_mask, labels, 0)
-    return count, filtered_labels
+            keep[raw_labels == label_id] = next_id
+            next_id += 1
+    return _build_segmentation_result(keep, gray, "threshold", min_area, max_area_frac)
 
 
-def estimate_cell_count_cellpose(gray: np.ndarray, diameter: Optional[float] = None) -> tuple[int, np.ndarray]:
-    """
-    Optional higher-accuracy cell count using Cellpose ('cyto' model).
-    Only used if the `cellpose` package is installed; falls back to the
-    threshold method otherwise (see analyze_image).
-    """
-    if not _HAS_CELLPOSE:
-        raise RuntimeError("cellpose is not installed")
-    model = _cellpose_models.Cellpose(model_type="cyto")
-    masks, _, _, _ = model.eval(gray, diameter=diameter, channels=[0, 0])
-    count = int(masks.max())
-    return count, masks
+class CellposeSegmenter:
+    """Reusable Cellpose model wrapper. A model is loaded once per instance."""
+
+    def __init__(self, model_type: str = "cyto3") -> None:
+        if not _HAS_CELLPOSE:
+            raise RuntimeError("Cellpose is not installed. Install the optional cellpose dependency.")
+        self.model_type = model_type
+        self._model = None
+
+    @property
+    def model(self):
+        if self._model is None:
+            self._model = _cellpose_models.CellposeModel(model_type=self.model_type)
+        return self._model
+
+    def segment(
+        self,
+        gray: np.ndarray,
+        diameter: Optional[float] = None,
+        min_area: int = 15,
+        max_area_frac: float = 0.25,
+    ) -> SegmentationResult:
+        masks, _, _ = self.model.eval(gray, diameter=diameter, channels=[0, 0])
+        labels = np.asarray(masks, dtype=np.int32)
+        return _build_segmentation_result(labels, gray, f"cellpose:{self.model_type}", min_area, max_area_frac)
 
 
-# --------------------------------------------------------------------------
-# Single-image analysis
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Features and adaptive QC
+# ---------------------------------------------------------------------------
+
+
+def extract_object_features(gray: np.ndarray, labels: np.ndarray) -> pd.DataFrame:
+    """Return one row per segmented object with morphology and intensity."""
+    rows: list[dict[str, Any]] = []
+    labels = labels.astype(np.int32, copy=False)
+    num_labels, _, stats, centroids = cv2.connectedComponentsWithStats(
+        (labels > 0).astype(np.uint8), connectivity=8
+    )
+    for label_id in range(1, num_labels):
+        mask = labels == label_id
+        area = int(mask.sum())
+        if area <= 0:
+            continue
+        contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        perimeter = float(cv2.arcLength(contours[0], True)) if contours else 0.0
+        circularity = float((4 * np.pi * area) / (perimeter * perimeter)) if perimeter > 0 else 0.0
+        x = int(stats[label_id, cv2.CC_STAT_LEFT])
+        y = int(stats[label_id, cv2.CC_STAT_TOP])
+        w = int(stats[label_id, cv2.CC_STAT_WIDTH])
+        h = int(stats[label_id, cv2.CC_STAT_HEIGHT])
+        component_values = gray[mask]
+        rows.append(
+            {
+                "label": label_id,
+                "area_px": area,
+                "perimeter_px": perimeter,
+                "circularity": float(np.clip(circularity, 0, 1)),
+                "bbox_x": x,
+                "bbox_y": y,
+                "bbox_width": w,
+                "bbox_height": h,
+                "aspect_ratio": float(w / h) if h else 0.0,
+                "centroid_x": float(centroids[label_id][0]),
+                "centroid_y": float(centroids[label_id][1]),
+                "mean_intensity": float(component_values.mean()),
+                "std_intensity": float(component_values.std()),
+                "max_intensity": int(component_values.max()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def robust_zscore(series: pd.Series) -> pd.Series:
+    """Median/MAD standardized score, robust to biological outliers."""
+    values = pd.to_numeric(series, errors="coerce")
+    median = float(values.median())
+    mad = float((values - median).abs().median())
+    if not np.isfinite(mad) or mad == 0:
+        return pd.Series(np.zeros(len(values)), index=series.index, dtype=float)
+    return 0.6745 * (values - median) / mad
+
+
+def adaptive_dataset_qc(df: pd.DataFrame, z_limit: float = 3.5) -> pd.DataFrame:
+    """Add robust outlier scores/flags using the observed dataset distribution."""
+    if df.empty:
+        return df.copy()
+    result = df.copy()
+    metric_cols = [
+        "focus_score",
+        "brightness_mean",
+        "saturation_fraction",
+        "contrast_std",
+        "estimated_cells",
+    ]
+    z_columns = []
+    for col in metric_cols:
+        if col in result.columns:
+            zcol = f"{col}_robust_z"
+            result[zcol] = robust_zscore(result[col])
+            z_columns.append(zcol)
+    if z_columns:
+        result["adaptive_score"] = result[z_columns].abs().max(axis=1).fillna(0.0)
+        result.loc[result["adaptive_score"] >= z_limit, "flags"] = result.loc[
+            result["adaptive_score"] >= z_limit, "flags"
+        ].apply(lambda x: (str(x) + "; ADAPTIVE_OUTLIER").strip("; ") if "ADAPTIVE_OUTLIER" not in str(x) else x)
+    else:
+        result["adaptive_score"] = 0.0
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Analysis
+# ---------------------------------------------------------------------------
+
+
+def _empty_result(path: str, error: str, requested_method: str) -> ImageResult:
+    file_size = os.path.getsize(path) / 1024.0 if os.path.exists(path) else 0.0
+    digest = sha256_file(path) if os.path.exists(path) else ""
+    return ImageResult(
+        filename=os.path.basename(path),
+        path=os.path.abspath(path),
+        width=0,
+        height=0,
+        channels=0,
+        dtype="unknown",
+        ndim=0,
+        file_size_kb=round(file_size, 2),
+        sha256=digest,
+        focus_score=0.0,
+        brightness_mean=0.0,
+        brightness_std=0.0,
+        saturation_fraction=0.0,
+        contrast_std=0.0,
+        estimated_cells=0,
+        cell_method=requested_method,
+        segmentation_quality=0.0,
+        median_cell_area=0.0,
+        cell_area_cv=0.0,
+        border_object_fraction=0.0,
+        flags=["FAILED_TO_LOAD"],
+        error=error,
+    )
+
 
 def analyze_image(
     path: str,
-    thresholds: QCThresholds = QCThresholds(),
-    cell_method: str = "threshold",  # "threshold" or "cellpose"
-) -> ImageResult:
-    """Run the full QC pipeline on one image file and return an ImageResult."""
-    filename = os.path.basename(path)
-    file_size_kb = os.path.getsize(path) / 1024.0
+    thresholds: Optional[QCThresholds] = None,
+    cell_method: str = "threshold",
+    cellpose_segmenter: Optional[CellposeSegmenter] = None,
+    adaptive_threshold: bool = False,
+    return_segmentation: bool = False,
+) -> ImageResult | tuple[ImageResult, SegmentationResult]:
+    """Analyze one image with one persistent segmentation backend."""
+    thresholds = thresholds or QCThresholds()
+    thresholds.validate()
+    requested_method = cell_method.lower()
+    if requested_method not in {"threshold", "cellpose"}:
+        raise ValueError("cell_method must be 'threshold' or 'cellpose'")
 
     try:
         raw = load_image(path)
-    except Exception as e:
-        return ImageResult(
-            filename=filename, path=path, width=0, height=0, channels=0,
-            dtype="unknown", file_size_kb=round(file_size_kb, 1),
-            focus_score=0.0, brightness_mean=0.0, brightness_std=0.0,
-            estimated_cells=0, cell_method=cell_method,
-            flags=["FAILED_TO_LOAD"], error=str(e),
-        )
+        gray = to_grayscale_uint8(raw)
+    except Exception as exc:
+        result = _empty_result(path, str(exc), requested_method)
+        return (result, _build_segmentation_result(np.zeros((1, 1), np.int32), np.zeros((1, 1), np.uint8), requested_method, 1, 1.0, str(exc))) if return_segmentation else result
 
-    height, width = raw.shape[0], raw.shape[1]
+    height, width = raw.shape[:2]
     channels = raw.shape[2] if raw.ndim == 3 else 1
-    dtype = str(raw.dtype)
-
-    gray = to_grayscale_uint8(raw)
-
     focus = compute_focus_score(gray)
     brightness_mean, brightness_std = compute_brightness(gray)
+    saturation_fraction = compute_saturation_fraction(gray)
+    contrast_std = brightness_std
 
-    method_used = cell_method
-    try:
-        if cell_method == "cellpose" and _HAS_CELLPOSE:
-            n_cells, _ = estimate_cell_count_cellpose(gray)
-        else:
-            method_used = "threshold"
-            n_cells, _ = estimate_cell_count_threshold(
-                gray, min_area=thresholds.min_cell_area, max_area_frac=thresholds.max_cell_area_frac
-            )
-    except Exception:
-        method_used = "threshold"
-        n_cells, _ = estimate_cell_count_threshold(
-            gray, min_area=thresholds.min_cell_area, max_area_frac=thresholds.max_cell_area_frac
-        )
-
-    flags = []
+    flags: list[str] = []
     if focus < thresholds.focus_min:
         flags.append("BLURRY")
     if brightness_mean < thresholds.brightness_min:
         flags.append("TOO_DARK")
     if brightness_mean > thresholds.brightness_max:
         flags.append("TOO_BRIGHT")
-    if n_cells < thresholds.cell_count_low:
-        flags.append("FEW_OR_NO_CELLS")
+    if saturation_fraction > thresholds.saturation_max_fraction:
+        flags.append("SATURATED")
 
-    return ImageResult(
-        filename=filename, path=path, width=width, height=height, channels=channels,
-        dtype=dtype, file_size_kb=round(file_size_kb, 1),
-        focus_score=round(focus, 2), brightness_mean=round(brightness_mean, 2),
-        brightness_std=round(brightness_std, 2), estimated_cells=n_cells,
-        cell_method=method_used, flags=flags,
+    seg: SegmentationResult
+    if requested_method == "cellpose":
+        try:
+            backend = cellpose_segmenter or CellposeSegmenter()
+            seg = backend.segment(
+                gray,
+                min_area=thresholds.min_cell_area,
+                max_area_frac=thresholds.max_cell_area_frac,
+            )
+        except Exception as exc:
+            seg = segment_threshold(
+                gray,
+                min_area=thresholds.min_cell_area,
+                max_area_frac=thresholds.max_cell_area_frac,
+                adaptive=adaptive_threshold,
+            )
+            seg.error = f"Cellpose fallback to threshold: {exc}"
+            flags.append("SEGMENTATION_FALLBACK")
+    else:
+        seg = segment_threshold(
+            gray,
+            min_area=thresholds.min_cell_area,
+            max_area_frac=thresholds.max_cell_area_frac,
+            adaptive=adaptive_threshold,
+        )
+
+    if seg.count < thresholds.cell_count_low:
+        flags.append("FEW_OR_NO_CELLS")
+    if thresholds.cell_count_high is not None and seg.count > thresholds.cell_count_high:
+        flags.append("TOO_MANY_CELLS")
+    if seg.quality_score < 60:
+        flags.append("LOW_SEGMENTATION_QUALITY")
+
+    digest = sha256_file(path)
+    result = ImageResult(
+        filename=os.path.basename(path),
+        path=os.path.abspath(path),
+        width=int(width),
+        height=int(height),
+        channels=int(channels),
+        dtype=str(raw.dtype),
+        ndim=int(raw.ndim),
+        file_size_kb=round(os.path.getsize(path) / 1024.0, 2),
+        sha256=digest,
+        focus_score=round(focus, 4),
+        brightness_mean=round(brightness_mean, 4),
+        brightness_std=round(brightness_std, 4),
+        saturation_fraction=round(saturation_fraction, 6),
+        contrast_std=round(contrast_std, 4),
+        estimated_cells=int(seg.count),
+        cell_method=seg.method,
+        segmentation_quality=round(seg.quality_score, 3),
+        median_cell_area=round(seg.median_area, 3),
+        cell_area_cv=round(seg.area_cv, 5),
+        border_object_fraction=round(seg.border_fraction, 5),
+        flags=flags,
+    )
+    return (result, seg) if return_segmentation else result
+
+
+# ---------------------------------------------------------------------------
+# Batch processing and exports
+# ---------------------------------------------------------------------------
+
+
+def find_images(folder: str) -> list[str]:
+    """Recursively discover supported images without duplicate extension passes."""
+    root = Path(folder)
+    if not root.is_dir():
+        raise NotADirectoryError(f"Not a directory: {folder}")
+    return sorted(
+        str(path)
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
     )
 
 
-# --------------------------------------------------------------------------
-# Batch / folder processing
-# --------------------------------------------------------------------------
+def analyze_paths(
+    paths: Sequence[str],
+    thresholds: Optional[QCThresholds] = None,
+    cell_method: str = "threshold",
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    adaptive_qc: bool = True,
+) -> pd.DataFrame:
+    """Analyze explicit paths and optionally add dataset-level adaptive QC."""
+    thresholds = thresholds or QCThresholds()
+    thresholds.validate()
+    normalized = [os.fspath(p) for p in paths]
+    rows: list[dict[str, Any]] = []
 
-def find_images(folder: str) -> list:
-    """Recursively find all supported image files under a folder."""
-    paths = []
-    for ext in SUPPORTED_EXTENSIONS:
-        paths.extend(glob.glob(os.path.join(folder, "**", f"*{ext}"), recursive=True))
-        paths.extend(glob.glob(os.path.join(folder, "**", f"*{ext.upper()}"), recursive=True))
-    return sorted(set(paths))
+    segmenter = CellposeSegmenter() if cell_method == "cellpose" and _HAS_CELLPOSE else None
+    total = len(normalized)
+    for i, path in enumerate(normalized, start=1):
+        result = analyze_image(path, thresholds, cell_method, segmenter)
+        if isinstance(result, tuple):
+            result = result[0]
+        rows.append(result.to_row())
+        if progress_callback:
+            progress_callback(i, total, os.path.basename(path))
+
+    df = pd.DataFrame(rows)
+    if adaptive_qc and not df.empty:
+        df = adaptive_dataset_qc(df)
+    return df
 
 
 def analyze_folder(
     folder: str,
-    thresholds: QCThresholds = QCThresholds(),
+    thresholds: Optional[QCThresholds] = None,
     cell_method: str = "threshold",
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    adaptive_qc: bool = True,
 ) -> pd.DataFrame:
-    """
-    Analyze every supported image in `folder` (recursively) and return a
-    tidy pandas DataFrame, one row per image.
-
-    progress_callback(done, total, current_filename) is called after each
-    image if provided (used by the Streamlit progress bar).
-    """
-    paths = find_images(folder)
-    rows = []
-    for i, path in enumerate(paths, start=1):
-        result = analyze_image(path, thresholds=thresholds, cell_method=cell_method)
-        rows.append(result.to_row())
-        if progress_callback:
-            progress_callback(i, len(paths), os.path.basename(path))
-    return pd.DataFrame(rows)
-
-
-def analyze_paths(
-    paths: list,
-    thresholds: QCThresholds = QCThresholds(),
-    cell_method: str = "threshold",
-    progress_callback: Optional[Callable[[int, int, str], None]] = None,
-) -> pd.DataFrame:
-    """Same as analyze_folder but takes an explicit list of file paths (used
-    when images arrive via a file-uploader rather than a folder path)."""
-    rows = []
-    for i, path in enumerate(paths, start=1):
-        result = analyze_image(path, thresholds=thresholds, cell_method=cell_method)
-        rows.append(result.to_row())
-        if progress_callback:
-            progress_callback(i, len(paths), os.path.basename(path))
-    return pd.DataFrame(rows)
+    """Analyze every supported image in a folder recursively."""
+    return analyze_paths(
+        find_images(folder),
+        thresholds=thresholds,
+        cell_method=cell_method,
+        progress_callback=progress_callback,
+        adaptive_qc=adaptive_qc,
+    )
 
 
 def export_csv(df: pd.DataFrame, out_path: str) -> str:
+    """Write analysis results to CSV."""
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False)
     return out_path
 
 
-# --------------------------------------------------------------------------
-# CLI entry point
-# --------------------------------------------------------------------------
+def export_json(df: pd.DataFrame, out_path: str, metadata: Optional[dict[str, Any]] = None) -> str:
+    """Write results + provenance metadata to JSON."""
+    payload = {
+        "pipeline_version": PIPELINE_VERSION,
+        "metadata": metadata or {},
+        "records": df.replace({np.nan: None}).to_dict(orient="records"),
+    }
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_path).write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    return out_path
 
-def _main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Microscopy image QC pipeline")
-    parser.add_argument("folder", help="Folder of microscopy images to analyze")
-    parser.add_argument("-o", "--output", default="qc_summary.csv", help="Output CSV path")
-    parser.add_argument("--cell-method", default="threshold", choices=["threshold", "cellpose"])
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def _main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="opticell",
+        description="OptiCell quantitative microscopy QC and cell-analysis pipeline",
+    )
+    parser.add_argument("input", help="Image file or directory")
+    parser.add_argument("-o", "--output", default="qc_summary.csv", help="CSV output path")
+    parser.add_argument("--json", dest="json_output", help="Optional JSON/provenance output")
+    parser.add_argument("--cell-method", choices=["threshold", "cellpose"], default="threshold")
+    parser.add_argument("--adaptive-threshold", action="store_true", help="Use local adaptive thresholding")
+    parser.add_argument("--no-adaptive-qc", action="store_true", help="Disable dataset-level robust outlier scoring")
     parser.add_argument("--focus-min", type=float, default=100.0)
     parser.add_argument("--brightness-min", type=float, default=25.0)
     parser.add_argument("--brightness-max", type=float, default=230.0)
-    args = parser.parse_args()
+    parser.add_argument("--min-cell-area", type=int, default=15)
+    parser.add_argument("--max-cell-area-frac", type=float, default=0.25)
+    parser.add_argument("--cell-count-low", type=int, default=1)
+    parser.add_argument("--cell-count-high", type=int, default=None)
+    args = parser.parse_args(argv)
 
     thresholds = QCThresholds(
         focus_min=args.focus_min,
         brightness_min=args.brightness_min,
         brightness_max=args.brightness_max,
+        min_cell_area=args.min_cell_area,
+        max_cell_area_frac=args.max_cell_area_frac,
+        cell_count_low=args.cell_count_low,
+        cell_count_high=args.cell_count_high,
     )
 
-    def _progress(done, total, name):
+    input_path = Path(args.input)
+    if input_path.is_dir():
+        paths = find_images(str(input_path))
+    elif input_path.is_file():
+        paths = [str(input_path)]
+    else:
+        parser.error(f"Input path does not exist: {args.input}")
+        return 2
+
+    def progress(done: int, total: int, name: str) -> None:
         print(f"[{done}/{total}] {name}")
 
-    df = analyze_folder(args.folder, thresholds=thresholds, cell_method=args.cell_method,
-                         progress_callback=_progress)
+    df = analyze_paths(
+        paths,
+        thresholds=thresholds,
+        cell_method=args.cell_method,
+        progress_callback=progress,
+        adaptive_qc=not args.no_adaptive_qc,
+    )
     export_csv(df, args.output)
-    n_flagged = (df["flags"] != "").sum()
-    print(f"\nDone. {len(df)} images analyzed, {n_flagged} flagged for review.")
-    print(f"Summary written to {args.output}")
+    if args.json_output:
+        export_json(
+            df,
+            args.json_output,
+            metadata={
+                "pipeline_version": PIPELINE_VERSION,
+                "cell_method_requested": args.cell_method,
+                "adaptive_qc": not args.no_adaptive_qc,
+                "input": os.path.abspath(args.input),
+                "thresholds": asdict(thresholds),
+            },
+        )
+
+    flagged = int((df["flags"].fillna("") != "").sum()) if not df.empty else 0
+    failed = int((df["error"].notna()).sum()) if not df.empty else 0
+    print(f"\nOptiCell {PIPELINE_VERSION}: {len(df)} images analyzed")
+    print(f"Flagged: {flagged} | Failed: {failed}")
+    print(f"CSV: {args.output}")
+    if args.json_output:
+        print(f"JSON: {args.json_output}")
+    return 0
 
 
 if __name__ == "__main__":
-    _main()
+    raise SystemExit(_main())
