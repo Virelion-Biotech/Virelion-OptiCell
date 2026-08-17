@@ -14,10 +14,10 @@ There is **no Streamlit and no GUI dependency**. The stable public API is under 
 - Time-lapse: deterministic 2-D tracking with configurable displacement/gaps and track summaries.
 - Experiment metadata: plate/well/timepoint parsing and explicit group annotation.
 - Statistics: replicate-aware summaries, Cohen's d, permutation testing, Benjamini-Hochberg FDR.
-- Validation: pixel IoU/Dice/precision/recall, instance matching/F1, count error and benchmark aggregation.
+- Validation: pixel/voxel IoU/Dice/precision/recall, 2-D and 3-D instance matching/F1, count error and benchmark aggregation.
 - Native TIFF I/O: explicit C/Z/T axis handling and projections.
 - Preprocessing: background, illumination and artifact utilities.
-- 3-D volumetric analysis: physical-unit object volume, centroids, bounding boxes, approximate surface area, volume fraction, density, and 3-D nearest-neighbour distances.
+- 3-D volumetric analysis: physical-unit object volume, centroids, bounding boxes, anisotropic surface area, volume fraction, density, and KD-tree nearest-neighbour distances.
 
 ## Stable package API
 
@@ -41,6 +41,13 @@ from opticell.volumetric import summarize_volume
 
 seg = segment_threshold_3d(volume, voxel_size=(2.0, 1.0, 0.5), min_volume_voxels=30)
 summary = summarize_volume(seg.labels, voxel_size=(2.0, 1.0, 0.5))
+```
+
+Validation accepts either 2-D or 3-D masks:
+
+```python
+from opticell import benchmark_segmentation
+metrics = benchmark_segmentation([predicted_3d], [truth_3d], max_distance_px=3)
 ```
 
 ## Installation
