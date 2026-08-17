@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Sequence
 import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 
 def binary_iou(pred: np.ndarray, truth: np.ndarray) -> float:
@@ -36,26 +37,34 @@ def count_error(pred_count: int, truth_count: int) -> dict[str, float]:
     return {"absolute_count_error": float(absolute), "relative_count_error": float(relative)}
 
 
-def _centroids_from_labels(labels: np.ndarray) -> np.ndarray:
+def _label_ids(labels: np.ndarray) -> np.ndarray:
     arr = np.asarray(labels)
     if arr.ndim not in {2, 3}: raise ValueError("label arrays must be 2-D or 3-D")
-    ids = np.unique(arr); ids = ids[ids > 0]
-    return np.asarray([np.argwhere(arr == label).mean(axis=0) for label in ids if np.any(arr == label)], dtype=float)
+    return np.unique(arr[arr > 0])
+
+
+def _centroids_from_labels(labels: np.ndarray) -> np.ndarray:
+    arr = np.asarray(labels)
+    ids = _label_ids(arr)
+    return np.asarray([np.argwhere(arr == label).mean(axis=0) for label in ids], dtype=float)
+
+
+def _instance_count(labels: np.ndarray) -> int:
+    return int(_label_ids(np.asarray(labels)).size)
 
 
 def match_instance_centroids(predicted_labels: np.ndarray, truth_labels: np.ndarray, max_distance_px: float = 20.0) -> tuple[int, int, int]:
+    """Perform globally optimal one-to-one centroid matching within a distance gate."""
     if max_distance_px <= 0: raise ValueError("max_distance_px must be positive")
     pred = _centroids_from_labels(predicted_labels); truth = _centroids_from_labels(truth_labels)
     if pred.size == 0 and truth.size == 0: return 0, 0, 0
     if pred.size == 0: return 0, 0, len(truth)
     if truth.size == 0: return 0, len(pred), 0
     distances = np.sqrt(((pred[:, None, :] - truth[None, :, :]) ** 2).sum(axis=2))
-    candidates = np.argwhere(distances <= max_distance_px)
-    order = sorted(candidates.tolist(), key=lambda ij: distances[ij[0], ij[1]])
-    used_pred: set[int] = set(); used_truth: set[int] = set(); tp = 0
-    for p_idx, t_idx in order:
-        if p_idx in used_pred or t_idx in used_truth: continue
-        used_pred.add(p_idx); used_truth.add(t_idx); tp += 1
+    cost = distances.copy()
+    cost[cost > max_distance_px] = max_distance_px + 1.0
+    rows, cols = linear_sum_assignment(cost)
+    tp = int(sum(distances[r, c] <= max_distance_px for r, c in zip(rows, cols)))
     return tp, len(pred) - tp, len(truth) - tp
 
 
@@ -63,8 +72,7 @@ def instance_metrics(predicted_labels: np.ndarray, truth_labels: np.ndarray, max
     tp, fp, fn = match_instance_centroids(predicted_labels, truth_labels, max_distance_px)
     precision = tp / (tp + fp) if tp + fp else 1.0; recall = tp / (tp + fn) if tp + fn else 1.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    pred_count = int(np.max(predicted_labels)) if np.asarray(predicted_labels).size else 0
-    truth_count = int(np.max(truth_labels)) if np.asarray(truth_labels).size else 0
+    pred_count = _instance_count(predicted_labels); truth_count = _instance_count(truth_labels)
     return {"true_positives": float(tp), "false_positives": float(fp), "false_negatives": float(fn), "precision": float(precision), "recall": float(recall), "f1": float(f1), **count_error(pred_count, truth_count)}
 
 
