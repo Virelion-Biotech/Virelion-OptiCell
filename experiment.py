@@ -7,14 +7,22 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-# Require a non-letter boundary so the 'e2' in 'Plate2' cannot be mistaken for a well.
+# Require a non-letter boundary for wells so the 'e2' in 'Plate2' cannot be mistaken for a well.
 _WELL = re.compile(r"(?<![A-Za-z])([A-Ha-h])([0-9]{1,2})(?![0-9])")
-_TIME = re.compile(r"(?:^|[_-])(?:t|time|tp)([0-9]+)(?:[_-]|$)", re.I)
+# Accept common separators but also compact filename forms such as A07t3.
+_TIME = re.compile(r"(?:^|[_-])(?:t|time|tp)([0-9]+)(?=[_.-]|$)|(?<=[A-Za-z0-9])(?:t|time|tp)([0-9]+)(?=[_.-]|$)", re.I)
 _PLATE = re.compile(r"(?:^|[_-])(?:plate|p)([0-9]+)(?:[_-]|$)", re.I)
 
 
+def _timepoint(match: re.Match[str] | None) -> int | None:
+    if match is None:
+        return None
+    value = match.group(1) or match.group(2)
+    return int(value) if value is not None else None
+
+
 def parse_metadata(filename: str) -> dict[str, object]:
-    """Extract common plate/well/time metadata from a filename without guessing condition labels."""
+    """Extract common plate/well/time metadata without guessing biological labels."""
     name = str(filename)
     well = _WELL.search(name)
     time = _TIME.search(name)
@@ -26,7 +34,7 @@ def parse_metadata(filename: str) -> dict[str, object]:
         "well": f"{row}{col:02d}" if row and col else None,
         "well_row": row,
         "well_col": col,
-        "timepoint": int(time.group(1)) if time else None,
+        "timepoint": _timepoint(time),
     }
 
 
@@ -35,7 +43,7 @@ def annotate_results(
     filename_column: str = "filename",
     metadata_columns: Optional[dict[str, object]] = None,
 ) -> pd.DataFrame:
-    """Add parsed plate/well/time columns, plus explicit user metadata when supplied."""
+    """Add parsed plate/well/time columns and explicit user metadata."""
     if filename_column not in df.columns:
         raise ValueError(f"missing {filename_column!r}")
     result = df.copy()
