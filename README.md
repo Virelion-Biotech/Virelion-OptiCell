@@ -1,100 +1,239 @@
 # Virelion-OptiCell
 
-A small application by Virelion Biotech for batch quality-control of microscopy image datasets.
-Drop in a folder of images and get automatic checks for **focus (blur)**,
-**brightness**, and **estimated cell counts**, plus dataset-wide histograms
-and a downloadable summary CSV.
+**OptiCell 2.0** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis engine from Virelion Biotech.
 
-## What it does
+The project no longer depends on Streamlit or any GUI framework. It is built around a reusable Python API plus a reproducible command-line interface, so it can run locally, in notebooks, on servers, in CI, and inside larger bioinformatics pipelines.
 
-For every image in a folder (`.png`, `.jpg`/`.jpeg`, `.tif`/`.tiff`, `.bmp`):
+## What changed in 2.0
 
-| Check | Method |
+- Removed Streamlit completely.
+- Replaced the prototype QC-only flow with a reusable analysis engine.
+- Added robust image hashing for provenance and duplicate detection.
+- Added saturation and contrast metrics.
+- Added segmentation-quality diagnostics rather than trusting cell counts blindly.
+- Added adaptive dataset QC using median/MAD robust scores.
+- Added a reusable Cellpose backend so the model is initialized once per batch instead of once per image.
+- Added per-object morphology and intensity features.
+- Added JSON export with analysis metadata.
+- Added package metadata and the `opticell` CLI.
+- Added automated tests and GitHub Actions CI.
+
+## Core capabilities
+
+### Acquisition QC
+
+For every image, OptiCell can calculate:
+
+| Metric | Purpose |
 |---|---|
-| **Focus / sharpness** | Variance of the Laplacian — low variance = blurry |
-| **Brightness** | Mean pixel intensity, rescaled to 0–255 for any bit depth |
-| **Estimated cell count** | Otsu auto-thresholding → morphological cleanup → connected-component labeling. Optional [Cellpose](https://www.cellpose.org/) backend if installed, for a real deep-learning segmentation count |
-| **File / image stats** | Width, height, channels, dtype, file size |
+| Focus score | Variance of Laplacian; low values indicate blur |
+| Mean brightness | Detects under/over-exposure |
+| Brightness variability | Measures image contrast |
+| Saturation fraction | Detects clipped pixels |
+| Dimensions/channels/dtype | Captures acquisition structure |
+| SHA-256 | Reproducibility and file identity |
 
-Images are flagged automatically (`BLURRY`, `TOO_DARK`, `TOO_BRIGHT`,
-`FEW_OR_NO_CELLS`, `FAILED_TO_LOAD`) using thresholds you can tune in the
-sidebar, so you can scan hundreds of images and jump straight to the
-suspicious ones instead of opening every file by hand.
+Absolute QC flags include `BLURRY`, `TOO_DARK`, `TOO_BRIGHT`, `SATURATED`, `FEW_OR_NO_CELLS`, `TOO_MANY_CELLS`, `LOW_SEGMENTATION_QUALITY`, `SEGMENTATION_FALLBACK`, and `FAILED_TO_LOAD`.
 
-## Project layout
+### Segmentation
 
-```
-microscopy_qc/
-├── qc_pipeline.py     # Core analysis engine (no GUI deps — usable standalone/CLI)
-├── app.py             # Streamlit drag-and-drop GUI
-├── make_test_images.py# Generates a few synthetic test images (sharp/blurry/dark/bright/empty)
-└── requirements.txt
-```
+OptiCell currently exposes two interchangeable backends:
 
-## Setup
+- `threshold`: fast classical segmentation using Otsu or local adaptive thresholding, morphology, and connected components.
+- `cellpose`: optional deep-learning segmentation backend with a persistent model instance for batch processing.
+
+Every backend returns a common `SegmentationResult`, making additional models easier to add later.
+
+### Segmentation diagnostics
+
+A cell count alone is not enough. OptiCell also measures:
+
+- foreground fraction
+- median object area
+- coefficient of variation of object area
+- border-object fraction
+- tiny-object fraction
+- merged-object fraction
+- segmentation quality score
+
+This helps identify images where a segmentation algorithm technically returned masks but the masks are not trustworthy.
+
+### Quantitative cell features
+
+`extract_object_features()` produces one row per object with:
+
+- area
+- perimeter
+- circularity
+- bounding box
+- aspect ratio
+- centroid
+- mean intensity
+- intensity standard deviation
+- maximum intensity
+
+This is the foundation for later phenotype, spatial, and multi-channel analyses.
+
+### Adaptive dataset QC
+
+Absolute thresholds are useful but microscope-dependent. OptiCell can therefore calculate robust dataset-relative scores using median/MAD statistics. Images that are strong outliers can be marked with `ADAPTIVE_OUTLIER` without deleting their original QC flags.
+
+## Installation
+
+### Standard installation
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\\Scripts\\activate
+python -m pip install --upgrade pip
+pip install -e .
 ```
 
-## Run the GUI
+### With Cellpose
 
 ```bash
-streamlit run app.py
+pip install -e ".[cellpose]"
 ```
 
-This opens a browser tab where you can:
-1. **Drag & drop** a batch of image files (or point at a **local folder path**
-   for large datasets — the folder-path option only works when running
-   Streamlit on your own machine, since a browser can't see local paths).
-2. Adjust QC thresholds in the sidebar.
-3. Click **Run QC analysis**.
-4. Browse the results table (flagged rows highlighted), dataset-wide
-   histograms, and a per-image preview with detected-cell overlay.
-5. Download the summary CSV.
-
-## Run from the command line (no GUI)
+### Development installation
 
 ```bash
-python3 qc_pipeline.py /path/to/images -o qc_summary.csv
+pip install -e ".[dev]"
 ```
 
-Optional flags: `--focus-min`, `--brightness-min`, `--brightness-max`,
-`--cell-method {threshold,cellpose}`.
+## Command line
 
-## Try it with synthetic test data
+Analyze a directory recursively:
 
 ```bash
-python3 make_test_images.py          # writes test_images/ (sharp, blurry, dark, bright, empty, 16-bit)
-python3 qc_pipeline.py test_images -o qc_summary_test.csv
+opticell /path/to/images -o qc_summary.csv
 ```
 
-## Output CSV columns
+Generate CSV plus provenance JSON:
 
-| Column | Description |
-|---|---|
-| `filename`, `path` | File identity |
-| `width`, `height`, `channels`, `dtype` | Image dimensions/format |
-| `file_size_kb` | File size on disk |
-| `focus_score` | Variance of Laplacian (higher = sharper) |
-| `brightness_mean`, `brightness_std` | Intensity stats, 0–255 scale |
-| `estimated_cells` | Connected-component (or Cellpose) count |
-| `cell_method` | Which method produced the count |
-| `flags` | Semicolon-separated QC flags, empty if none |
-| `error` | Populated only if the image failed to load |
+```bash
+opticell /path/to/images \
+  -o qc_summary.csv \
+  --json qc_summary.json
+```
 
-## Notes & limitations
+Use Cellpose:
 
-- The default cell counter is **classical image processing**, not a trained
-  segmentation model — it works well for reasonably distinct, non-overlapping
-  cells/nuclei on a roughly uniform background, but will under-count dense,
-  touching clusters and can be thrown off by very unusual staining. For
-  publication-grade counts, install `cellpose` (see `requirements.txt`) and
-  switch the method in the sidebar.
-- Multi-page/Z-stack TIFFs are collapsed to a single image via max-intensity
-  projection before analysis.
-- Flag thresholds (`focus_min`, `brightness_min/max`, etc.) are dataset- and
-  microscope-dependent starting points — run once on a known-good batch of
-  images and adjust the sidebar values to match your normal range.
+```bash
+opticell /path/to/images \
+  --cell-method cellpose \
+  -o qc_summary.csv
+```
+
+Use local adaptive thresholding and dataset-level adaptive QC:
+
+```bash
+opticell /path/to/images \
+  --adaptive-threshold \
+  -o qc_summary.csv
+```
+
+Disable dataset-relative outlier scoring when strict absolute-threshold reproducibility is required:
+
+```bash
+opticell /path/to/images --no-adaptive-qc -o qc_summary.csv
+```
+
+The source checkout also supports:
+
+```bash
+python qc_pipeline.py /path/to/images -o qc_summary.csv
+```
+
+## Python API
+
+```python
+from qc_pipeline import (
+    QCThresholds,
+    analyze_folder,
+    analyze_image,
+    extract_object_features,
+)
+
+thresholds = QCThresholds(
+    focus_min=100,
+    brightness_min=25,
+    brightness_max=230,
+)
+
+df = analyze_folder(
+    "./experiment_images",
+    thresholds=thresholds,
+    cell_method="threshold",
+    adaptive_qc=True,
+)
+
+result, segmentation = analyze_image(
+    "./experiment_images/sample_01.tif",
+    thresholds=thresholds,
+    return_segmentation=True,
+)
+
+features = extract_object_features(
+    # supply the same grayscale image used for segmentation
+    gray_image,
+    segmentation.labels,
+)
+```
+
+## Output
+
+The main CSV contains fields such as:
+
+- `filename`, `path`, `sha256`
+- `width`, `height`, `channels`, `dtype`, `ndim`
+- `focus_score`
+- `brightness_mean`, `brightness_std`, `contrast_std`
+- `saturation_fraction`
+- `estimated_cells`, `cell_method`
+- `segmentation_quality`
+- `median_cell_area`, `cell_area_cv`, `border_object_fraction`
+- `adaptive_score`
+- robust-z columns for adaptive QC
+- `flags`
+- `error`
+
+JSON export additionally stores pipeline version, requested segmentation method, thresholds, input path, and the analysis records.
+
+## Testing
+
+Run the regression suite:
+
+```bash
+pytest
+```
+
+Compile-check the engine:
+
+```bash
+python -m compileall -q qc_pipeline.py
+```
+
+CI runs tests against Python 3.10, 3.11, and 3.12.
+
+## Project structure
+
+```text
+Virelion-OptiCell/
+├── qc_pipeline.py             # Core engine + CLI
+├── make_test_images.py        # Synthetic microscopy fixtures
+├── tests/
+│   └── test_qc_pipeline.py    # Regression tests
+├── .github/workflows/ci.yml   # Automated CI
+├── pyproject.toml             # Packaging + CLI metadata
+├── requirements.txt           # Runtime dependencies
+└── LICENSE
+```
+
+## Important limitations
+
+OptiCell is not yet a validated clinical or publication-grade measurement system. Classical segmentation can fail on crowded, low-contrast, highly variable, or unusually stained images. Cellpose is optional and should also be benchmarked on the specific cell type and imaging modality being analyzed.
+
+Multi-dimensional TIFF input is currently reduced conservatively to a 2-D representation; full native C/Z/T analysis is a planned extension rather than something the current loader should pretend to support perfectly.
+
+For scientific use, inspect segmentation quality and validate object-level measurements against an appropriate ground-truth subset before using results as experimental endpoints.
