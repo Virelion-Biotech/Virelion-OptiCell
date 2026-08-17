@@ -26,6 +26,9 @@ dev = [
 [project.scripts]
 opticell = "qc_pipeline:_main"
 
+[tool.setuptools]
+py-modules = ["qc_pipeline"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
