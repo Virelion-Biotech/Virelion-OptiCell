@@ -7,7 +7,6 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 from scipy.optimize import linear_sum_assignment
-from scipy.spatial import cKDTree
 
 
 @dataclass(frozen=True)
@@ -33,10 +32,7 @@ def _centroids_3d(labels: np.ndarray, voxel_size: Sequence[float]) -> dict[int, 
     spacing = np.asarray(tuple(float(value) for value in voxel_size), dtype=float)
     if spacing.shape != (3,) or np.any(spacing <= 0):
         raise ValueError("voxel_size must contain three positive values")
-    return {
-        int(label): np.argwhere(arr == label).mean(axis=0) * spacing
-        for label in np.unique(arr) if label > 0
-    }
+    return {int(label): np.argwhere(arr == label).mean(axis=0) * spacing for label in np.unique(arr) if label > 0}
 
 
 def link_frames_3d(labels_by_time: Sequence[np.ndarray], *, voxel_size: Sequence[float] = (1.0, 1.0, 1.0), frame_interval: float = 1.0, config: Tracking3DConfig | None = None) -> pd.DataFrame:
