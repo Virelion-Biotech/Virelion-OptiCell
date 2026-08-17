@@ -32,9 +32,9 @@ def test_reproducibility_fingerprint_and_manifest_diff():
 
 def test_tracking_quality_diagnostics():
     tracks = pd.DataFrame({
-        "track_id": [1, 1, 1, 2, 2],
-        "object_id": [10, 10, 11, 20, 20],
-        "frame": [0, 1, 3, 0, 2],
+        "track_id": [1, 1, 2, 2, 2],
+        "object_id": [10, 10, 10, 20, 20],
+        "frame": [0, 1, 2, 0, 2],
     })
     fragmentation = track_fragmentation(tracks)
     assert fragmentation["fragmented_objects"] == 1.0
