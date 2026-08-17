@@ -12,6 +12,9 @@ from .statistics import benjamini_hochberg, compare_two_groups, summarize_by_rep
 from .volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_features
 from .segmentation import BaseSegmenter, CellposeBackend, ThresholdSegmenter, available_backends, compare_backends, get_backend, register_backend
 from .volumetric_segmentation import VolumetricSegmentationResult, segment_threshold_3d
+from .tracking3d import Tracking3DConfig, link_frames_3d, summarize_tracks_3d
+from provenance import build_manifest, collect_input_manifest, file_sha256, write_manifest
+from reporting import RuntimeStats, build_report, dataframe_summary, runtime_stats, write_report
 
 __all__ = [
     "QCThresholds",
@@ -40,6 +43,18 @@ __all__ = [
     "compare_backends",
     "VolumetricSegmentationResult",
     "segment_threshold_3d",
+    "Tracking3DConfig",
+    "link_frames_3d",
+    "summarize_tracks_3d",
+    "file_sha256",
+    "collect_input_manifest",
+    "build_manifest",
+    "write_manifest",
+    "RuntimeStats",
+    "runtime_stats",
+    "dataframe_summary",
+    "build_report",
+    "write_report",
 ]
 
-__version__ = "2.7.0"
+__version__ = "2.8.0"
