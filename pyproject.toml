@@ -26,12 +26,8 @@ dev = [
 [project.scripts]
 opticell = "qc_pipeline:_main"
 
-[tool.setuptools.packages.find]
-include = ["opticell*"]
-
-[tool.setuptools.py-modules]
-# Legacy modules remain top-level for backward compatibility.
-modules = [
+[tool.setuptools]
+py-modules = [
   "qc_pipeline",
   "quantitative",
   "image_io",
@@ -45,6 +41,9 @@ modules = [
   "texture",
   "preprocessing",
 ]
+
+[tool.setuptools.packages.find]
+include = ["opticell*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
