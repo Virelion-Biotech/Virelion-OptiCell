@@ -21,6 +21,6 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
       - run: pytest
-      - run: python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py
+      - run: python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py statistics.py texture.py preprocessing.py opticell
       - run: python qc_pipeline.py --help
-      - run: python -c "import compartments, ensemble, experiment, image_io, phenotype, quantitative, qc_pipeline, tracking, validation; print('OptiCell imports OK')"
+      - run: python -c "import opticell; import opticell.analysis, opticell.features, opticell.io, opticell.segmentation, opticell.statistics, opticell.tracking; print('OptiCell package imports OK')"
