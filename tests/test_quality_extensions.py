@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from reproducibility import analysis_fingerprint, compare_manifests
+from reproducibility import analysis_fingerprint, compare_manifests, environment_fingerprint
 from screening_advanced import b_score, plate_uniformity, ssmd
 from tracking_validation import track_fragmentation, track_gap_rate, track_purity
 
@@ -23,6 +23,8 @@ def test_reproducibility_fingerprint_and_manifest_diff():
     first = analysis_fingerprint({"threshold": 0.5}, input_hashes={"a": "abc"})
     second = analysis_fingerprint({"threshold": 0.5}, input_hashes={"a": "abc"})
     assert first == second
+    environment = environment_fingerprint()
+    assert environment["python"] and environment["numpy"]
     diff = compare_manifests(
         {"inputs": {"a": {"sha256": "abc"}}, "parameters": {"threshold": 0.5}},
         {"inputs": {"a": {"sha256": "def"}}, "parameters": {"threshold": 0.6}},
