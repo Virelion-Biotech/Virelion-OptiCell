@@ -17,6 +17,7 @@ from .ome_io import OMEImageInfo, load_ome_series, read_ome_info
 from .power import two_group_sample_size
 from .provenance import build_manifest, collect_input_manifest, file_sha256, write_manifest
 from .profiling import ProfileRecord, profile_call, profile_records, summarize_profile
+from .quality_gate import ExperimentQualityGate, experiment_quality_gate
 from .reporting import RuntimeStats, build_report, dataframe_summary, runtime_stats, write_report
 from .robustness import stable_parameter_subset, summarize_sensitivity
 from .runtime import RuntimeCapabilities, capabilities, capabilities_dict, measure, preferred_accelerator
@@ -32,12 +33,12 @@ from .volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_
 from .volumetric_segmentation import VolumetricSegmentationResult, segment_threshold_3d
 
 __all__ = [
-    "AssayQCDecision", "BaseSegmenter", "BatchConfig", "CellposeBackend", "OMEImageInfo", "ProfileRecord", "QCThresholds", "RuntimeCapabilities", "RuntimeStats", "SegmentationAcceptance",
+    "AssayQCDecision", "BaseSegmenter", "BatchConfig", "CellposeBackend", "ExperimentQualityGate", "OMEImageInfo", "ProfileRecord", "QCThresholds", "RuntimeCapabilities", "RuntimeStats", "SegmentationAcceptance",
     "ThresholdSegmenter", "Tracking3DConfig", "VolumetricSegmentationResult", "acquisition_artifact_metrics", "add_spatial_features", "aggregate_backend_benchmarks", "analyze_folder",
     "analyze_image", "analyze_paths", "analyze_paths_parallel", "artifact_burden_score", "assay_qc_decision", "available_backends", "benchmark_backends", "benchmark_segmentation",
     "benjamini_hochberg", "bootstrap_ci", "build_lineage_table", "build_manifest", "build_report", "capabilities", "capabilities_dict", "classify_divisions", "classify_z_prime",
     "collect_input_manifest", "compare_backends", "compare_two_groups", "dataframe_summary", "dataframe_to_long_form", "detect_time_series_events", "detect_transition_events",
-    "division_consistency", "extract_object_features", "file_sha256", "get_backend", "iter_array_chunks", "iter_tiff_frames", "lineage_event_summary", "lineage_quality_summary",
+    "division_consistency", "experiment_quality_gate", "extract_object_features", "file_sha256", "get_backend", "iter_array_chunks", "iter_tiff_frames", "lineage_event_summary", "lineage_quality_summary",
     "link_frames_3d", "load_ome_series", "measure", "memmap_tiff", "nearest_neighbor_distances_3d", "normalize_to_controls", "object_channel_intensity", "paired_segmentation_metrics",
     "percent_control", "plate_edge_effect", "plate_qc_summary", "preferred_accelerator", "profile_call", "profile_records", "read_ome_info", "register_backend",
     "replicate_effect_summary", "robust_zscore", "runtime_stats", "segment_threshold_3d", "segmentation_acceptance", "stable_parameter_subset", "summarize_by_replicate",
