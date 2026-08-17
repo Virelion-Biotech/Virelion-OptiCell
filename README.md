@@ -1,6 +1,6 @@
 # Virelion-OptiCell
 
-**OptiCell 2.1** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
+**OptiCell 2.2** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
 
 There is **no Streamlit and no GUI dependency**. OptiCell is built as a reusable Python API plus CLI for local analysis, notebooks, servers, CI, and larger bioinformatics pipelines.
 
@@ -18,108 +18,68 @@ There is **no Streamlit and no GUI dependency**. OptiCell is built as a reusable
 - Added package metadata, CLI, tests, and GitHub Actions CI.
 
 ### 2.1 — quantitative microscopy layer
-- Added **native dimension-aware TIFF I/O** with explicit C/Z/T axis handling.
+- Added native dimension-aware TIFF I/O with explicit C/Z/T axis handling.
 - Added max/mean/median Z projections without silently destroying other axes.
 - Added explicit timepoint and channel selection.
-- Added **spatial phenotype features**: nearest-neighbour distance, normalized coordinates, and cell density.
-- Added **multi-channel per-object intensity analysis**.
+- Added spatial phenotype features: nearest-neighbour distance, normalized coordinates, and cell density.
+- Added multi-channel per-object intensity analysis.
 - Added channel-level intensity/saturation summaries.
 - Added basic channel colocalization utilities.
-- Added morphological background correction.
-- Added dedicated regression tests for quantitative and dimension-aware analysis.
+- Added morphology-based background correction.
+
+### 2.2 — objective validation layer
+- Added binary IoU, Dice, precision, and recall metrics.
+- Added instance-level centroid matching with configurable distance tolerance.
+- Added object-level F1 and cell-count error metrics.
+- Added multi-image benchmark aggregation.
+- Added dedicated regression tests for validation logic.
 
 ## Core capabilities
 
 ### Acquisition QC
 
-Each analyzed image can report:
-
-| Metric | Purpose |
-|---|---|
-| Focus score | Variance of Laplacian; low values can indicate blur |
-| Mean brightness | Detects under/over-exposure |
-| Brightness variability | Image contrast / texture proxy |
-| Saturation fraction | Detects clipped pixels |
-| Dimensions/channels/dtype | Captures acquisition structure |
-| SHA-256 | Reproducibility and file identity |
-
-Absolute flags include `BLURRY`, `TOO_DARK`, `TOO_BRIGHT`, `SATURATED`, `FEW_OR_NO_CELLS`, `TOO_MANY_CELLS`, `LOW_SEGMENTATION_QUALITY`, `SEGMENTATION_FALLBACK`, `SEGMENTATION_WARNING`, and `FAILED_TO_LOAD`.
+Each analyzed image can report focus, brightness, contrast, saturation, dimensions, dtype, channel count, and SHA-256 identity. Absolute flags include `BLURRY`, `TOO_DARK`, `TOO_BRIGHT`, `SATURATED`, `FEW_OR_NO_CELLS`, `TOO_MANY_CELLS`, `LOW_SEGMENTATION_QUALITY`, `SEGMENTATION_FALLBACK`, `SEGMENTATION_WARNING`, and `FAILED_TO_LOAD`.
 
 ### Segmentation
 
-OptiCell currently exposes:
+OptiCell exposes two interchangeable backends:
 
 - `threshold`: Otsu or local adaptive thresholding + morphology + connected components.
 - `cellpose`: optional deep-learning backend with a persistent model object per batch.
 
 Every backend returns a common segmentation result containing masks plus diagnostics.
 
-### Segmentation diagnostics
+### Quantitative cell phenotyping
 
-OptiCell measures:
-
-- foreground fraction
-- median object area
-- coefficient of variation of object area
-- border-object fraction
-- tiny-object fraction
-- merged-object fraction
-- segmentation quality score
-
-This catches images where an algorithm returns masks that are technically valid but biologically implausible.
-
-### Cell-level morphology
-
-`extract_object_features()` reports per-object:
-
-- area and perimeter
-- circularity
-- bounding box
-- aspect ratio
-- centroid
-- mean/std/max intensity
-
-### Spatial phenotyping
-
-`quantitative.py` adds:
-
-- nearest-neighbour distances
-- cell density per area
-- normalized x/y position
-- summary spatial statistics
-
-These are useful for clustering, dispersion, migration, and tissue-architecture analyses.
-
-### Multi-channel quantification
-
-For H×W×C arrays, OptiCell can calculate:
-
-- channel-wise mean/std/min/max
-- percentile ranges
-- clipping fractions
-- per-cell intensity by channel
-- integrated intensity
-- Pearson-style channel colocalization
-
-### Background correction
-
-A morphology-based rolling background subtraction helper is available for 2-D uint8 images. It is intentionally explicit rather than automatically altering the source image.
+`extract_object_features()` reports area, perimeter, circularity, bounding box, aspect ratio, centroid, and intensity statistics. `quantitative.py` adds nearest-neighbour distance, cell density, normalized position, channel-wise intensity, integrated intensity, background correction, and basic channel colocalization.
 
 ### Native C/Z/T microscopy data
 
-`image_io.py` preserves TIFF series axes when the microscope writes them into metadata.
+`image_io.py` preserves TIFF series axes when the microscope writes them into metadata and provides explicit selection/projection operations rather than silently flattening dimensions.
 
 ```python
 from image_io import load_tiff_stack, canonicalize_axes, project_z, select_channel, select_time
 
-stack = load_tiff_stack("experiment.tif")
-stack = canonicalize_axes(stack)
+stack = canonicalize_axes(load_tiff_stack("experiment.tif"))
 channel = select_channel(stack, 0)
 frame = select_time(stack, 3)
 projection = project_z(frame, "max")
 ```
 
-OptiCell no longer needs to pretend every TIFF is a single 2-D image. Ambiguous or unsupported axes are rejected rather than silently reassigned.
+### Ground-truth validation
+
+`validation.py` provides objective segmentation metrics for manually annotated or synthetic masks:
+
+```python
+from validation import benchmark_segmentation
+
+metrics = benchmark_segmentation(predicted_masks, ground_truth_masks)
+print(metrics["pixel_dice_mean"])
+print(metrics["instance_f1_mean"])
+print(metrics["relative_count_error_mean"])
+```
+
+This allows OptiCell to compare classical thresholding, Cellpose, future models, or ensemble methods on the same validation set instead of relying on qualitative screenshots.
 
 ## Installation
 
@@ -181,7 +141,6 @@ from qc_pipeline import QCThresholds, analyze_folder, analyze_image, extract_obj
 from quantitative import add_spatial_features, summarize_spatial_features
 
 thresholds = QCThresholds(focus_min=100, brightness_min=25, brightness_max=230)
-
 df = analyze_folder("./experiment_images", thresholds=thresholds, adaptive_qc=True)
 
 result, segmentation = analyze_image(
@@ -195,26 +154,11 @@ features = add_spatial_features(features, gray_image.shape)
 summary = summarize_spatial_features(features, gray_image.shape)
 ```
 
-## Output
-
-The primary QC CSV contains fields such as:
-
-- filename/path/hash
-- width/height/channels/dtype/ndim
-- focus, brightness, contrast, saturation
-- estimated cell count + method
-- segmentation quality metrics
-- cell area statistics
-- adaptive QC score and robust-z columns
-- flags/errors
-
-JSON export also records pipeline version, requested method, input path, and thresholds.
-
 ## Testing
 
 ```bash
 pytest
-python -m compileall -q qc_pipeline.py quantitative.py image_io.py
+python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py
 python qc_pipeline.py --help
 ```
 
@@ -225,15 +169,17 @@ CI tests Python 3.10, 3.11, and 3.12.
 ```text
 Virelion-OptiCell/
 ├── qc_pipeline.py                 # Core QC/segmentation engine + CLI
-├── quantitative.py                # Spatial + multi-channel quantitative layer
-├── image_io.py                    # Dimension-aware TIFF I/O (C/Z/T)
+├── quantitative.py                # Spatial + multi-channel analysis
+├── image_io.py                    # Dimension-aware TIFF I/O
+├── validation.py                  # Objective segmentation benchmarking
 ├── make_test_images.py            # Synthetic microscopy fixtures
 ├── tests/
 │   ├── test_qc_pipeline.py
-│   └── test_quantitative.py
-├── .github/workflows/ci.yml       # Automated CI
-├── pyproject.toml                 # Packaging + CLI metadata
-├── requirements.txt               # Runtime dependencies
+│   ├── test_quantitative.py
+│   └── test_validation.py
+├── .github/workflows/ci.yml
+├── pyproject.toml
+├── requirements.txt
 └── LICENSE
 ```
 
@@ -243,6 +189,6 @@ OptiCell is **not a validated clinical measurement system** and should not be pr
 
 Segmentation accuracy depends strongly on cell type, staining, modality, magnification, and image quality. Classical thresholding can fail on crowded or heterogeneous fields; Cellpose should be benchmarked on the actual imaging domain.
 
-The dimension-aware I/O layer preserves native stack structure, but the main QC pipeline still operates on a 2-D analysis view unless the caller explicitly selects/projections dimensions first.
+The main QC pipeline still operates on a 2-D analysis view unless the caller explicitly selects/projections dimensions first. The dimension-aware layer preserves native C/Z/T structure but does not automatically solve 3-D segmentation or tracking.
 
-Before using OptiCell outputs as experimental endpoints, validate them against a representative ground-truth subset and keep the analysis parameters/provenance with the experiment.
+Validation metrics quantify agreement with a chosen ground truth; they do not establish biological validity. Before using OptiCell outputs as experimental endpoints, validate against a representative annotation set, document acquisition/segmentation settings, and preserve provenance with the experiment.
