@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from statistics import benjamini_hochberg, compare_two_groups, permutation_pvalue, summarize_by_replicate
+from opticell.statistics import benjamini_hochberg, compare_two_groups, permutation_pvalue, summarize_by_replicate
 from texture import basic_texture_features, object_texture_features
 
 
