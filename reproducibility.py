@@ -4,9 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
-import sys
 from collections.abc import Mapping
 from typing import Any
+
+import numpy as np
 
 
 def canonical_json(value: Any) -> str:
@@ -27,7 +28,7 @@ def environment_fingerprint() -> dict[str, str]:
         "implementation": platform.python_implementation(),
         "platform": platform.platform(),
         "machine": platform.machine(),
-        "numpy_abi": sys.version.split()[0],
+        "numpy": np.__version__,
     }
 
 
