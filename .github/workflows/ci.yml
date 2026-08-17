@@ -21,6 +21,6 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
       - run: pytest
-      - run: python -m compileall -q qc_pipeline.py quantitative.py image_io.py
+      - run: python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py
       - run: python qc_pipeline.py --help
-      - run: python -c "import image_io, quantitative, qc_pipeline; print('OptiCell imports OK')"
+      - run: python -c "import image_io, quantitative, validation, qc_pipeline; print('OptiCell imports OK')"
