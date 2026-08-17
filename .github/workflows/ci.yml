@@ -21,6 +21,6 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
       - run: pytest
-      - run: python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py texture.py preprocessing.py volumetric.py volumetric_segmentation.py opticell
+      - run: python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py texture.py preprocessing.py volumetric.py volumetric_segmentation.py tracking3d.py provenance.py reporting.py opticell
       - run: python qc_pipeline.py --help
-      - run: python -c "import statistics; assert hasattr(statistics, 'mean'); import opticell; import opticell.analysis, opticell.features, opticell.io, opticell.segmentation, opticell.statistics, opticell.tracking, opticell.experiment, opticell.volumetric, opticell.volumetric_segmentation; print('OptiCell package imports OK', opticell.__version__)"
+      - run: python -c "import statistics; assert hasattr(statistics, 'mean'); import opticell; import opticell.analysis, opticell.features, opticell.io, opticell.segmentation, opticell.statistics, opticell.tracking, opticell.experiment, opticell.volumetric, opticell.volumetric_segmentation; from opticell import Tracking3DConfig, build_manifest, build_report; print('OptiCell package imports OK', opticell.__version__)"
