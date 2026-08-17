@@ -42,6 +42,8 @@ def test_tracking_and_motion_summary():
 def test_experiment_metadata_and_plate_matrix():
     meta = parse_metadata("Plate2_MI_A07_t3.png")
     assert meta["plate"] == 2 and meta["well"] == "A07" and meta["timepoint"] == 3
+    compact = parse_metadata("Plate2_MI_A07t3.png")
+    assert compact["plate"] == 2 and compact["well"] == "A07" and compact["timepoint"] == 3
     df = pd.DataFrame({"filename": ["Plate2_A07_t0.png", "Plate2_B12_t0.png"], "cells": [10, 20], "condition": ["control", "MI"]})
     annotated = annotate_results(df)
     assert set(["plate", "well", "timepoint"]).issubset(annotated.columns)
