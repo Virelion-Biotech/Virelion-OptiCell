@@ -6,6 +6,7 @@ from ensemble import threshold_ensemble, ensemble_from_results
 from experiment import annotate_results, parse_metadata, plate_heatmap, summarize_groups
 from phenotype import Rule, group_phenotype_summary, marker_positivity, score_cells
 from tracking import TrackingConfig, link_frames, summarize_tracks
+from opticell.segmentation import ThresholdSegmenter, available_backends, get_backend, register_backend
 
 
 def test_compartment_assignment_and_ratios():
@@ -66,3 +67,16 @@ def test_ensemble_empty_validation():
     import pytest
     with pytest.raises(ValueError):
         ensemble_from_results([])
+
+
+def test_backend_registry_supports_builtin_and_custom_backend():
+    assert "threshold" in available_backends()
+    backend = get_backend("threshold", min_area=10)
+    assert isinstance(backend, ThresholdSegmenter)
+
+    class DummyBackend(ThresholdSegmenter):
+        name = "dummy"
+
+    register_backend("dummy", DummyBackend)
+    assert "dummy" in available_backends()
+    assert isinstance(get_backend("dummy", min_area=10), DummyBackend)
