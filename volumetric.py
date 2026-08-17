@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Sequence
 
 import numpy as np
-from scipy import ndimage
 from scipy.spatial import cKDTree
 
 
@@ -18,8 +17,15 @@ def _validate_labels(labels: np.ndarray) -> np.ndarray:
 
 
 def _surface_area(arr: np.ndarray, label_id: int, spacing: tuple[float, float, float]) -> float:
-    """Compute exposed voxel-face area with anisotropic voxel spacing."""
-    mask = arr == label_id
+    """Compute exposed voxel-face area on a minimal local crop."""
+    coords = np.argwhere(arr == label_id)
+    if coords.size == 0:
+        return 0.0
+    mins = np.maximum(coords.min(axis=0) - 1, 0)
+    maxs = np.minimum(coords.max(axis=0) + 2, np.asarray(arr.shape))
+    z0, y0, x0 = mins
+    z1, y1, x1 = maxs
+    mask = arr[z0:z1, y0:y1, x0:x1] == label_id
     vz, vy, vx = spacing
     area = 0.0
     area += np.count_nonzero(mask[0, :, :]) * vy * vx
@@ -28,7 +34,6 @@ def _surface_area(arr: np.ndarray, label_id: int, spacing: tuple[float, float, f
     area += np.count_nonzero(mask[:, -1, :]) * vz * vx
     area += np.count_nonzero(mask[:, :, 0]) * vz * vy
     area += np.count_nonzero(mask[:, :, -1]) * vz * vy
-
     area += np.count_nonzero(mask[1:, :, :] & ~mask[:-1, :, :]) * vy * vx
     area += np.count_nonzero(mask[:-1, :, :] & ~mask[1:, :, :]) * vy * vx
     area += np.count_nonzero(mask[:, 1:, :] & ~mask[:, :-1, :]) * vz * vx
@@ -82,8 +87,7 @@ def nearest_neighbor_distances_3d(features: list[dict[str, float]]) -> np.ndarra
     points = np.asarray([[x["centroid_z_um"], x["centroid_y_um"], x["centroid_x_um"]] for x in features], dtype=float)
     if len(points) < 2:
         return np.full(len(points), np.nan, dtype=float)
-    tree = cKDTree(points)
-    distances, _ = tree.query(points, k=2)
+    distances, _ = cKDTree(points).query(points, k=2)
     return distances[:, 1].astype(float)
 
 
