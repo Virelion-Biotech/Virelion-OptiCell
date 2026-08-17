@@ -5,9 +5,13 @@ from quantitative import add_spatial_features, object_channel_intensity, summari
 from validation import benchmark_segmentation, paired_segmentation_metrics
 from .batch import BatchConfig, analyze_paths_parallel
 from .benchmarking import aggregate_backend_benchmarks, benchmark_backends
+from .exports import dataframe_to_long_form, write_dataframe
 from .experiment_qc import normalize_to_controls, plate_edge_effect, plate_qc_summary, robust_zscore
 from .experiment_stats import bootstrap_ci, replicate_effect_summary, summarize_experiment
 from .lineage import build_lineage_table, summarize_lineages
+from .lineage_quality import lineage_quality_summary
+from .ome_io import OMEImageInfo, load_ome_series, read_ome_info
+from .power import two_group_sample_size
 from .provenance import build_manifest, collect_input_manifest, file_sha256, write_manifest
 from .profiling import ProfileRecord, profile_call, profile_records, summarize_profile
 from .reporting import RuntimeStats, build_report, dataframe_summary, runtime_stats, write_report
@@ -22,18 +26,18 @@ from .volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_
 from .volumetric_segmentation import VolumetricSegmentationResult, segment_threshold_3d
 
 __all__ = [
-    "BaseSegmenter", "BatchConfig", "CellposeBackend", "ProfileRecord", "QCThresholds", "RuntimeCapabilities", "RuntimeStats",
+    "BaseSegmenter", "BatchConfig", "CellposeBackend", "OMEImageInfo", "ProfileRecord", "QCThresholds", "RuntimeCapabilities", "RuntimeStats",
     "ThresholdSegmenter", "Tracking3DConfig", "VolumetricSegmentationResult", "add_spatial_features", "aggregate_backend_benchmarks",
     "analyze_folder", "analyze_image", "analyze_paths", "analyze_paths_parallel", "available_backends", "benchmark_backends",
     "benchmark_segmentation", "benjamini_hochberg", "bootstrap_ci", "build_lineage_table", "build_manifest", "build_report",
     "capabilities", "capabilities_dict", "classify_divisions", "collect_input_manifest", "compare_backends", "compare_two_groups",
-    "dataframe_summary", "detect_time_series_events", "detect_transition_events", "extract_object_features", "file_sha256", "get_backend",
-    "iter_array_chunks", "iter_tiff_frames", "link_frames_3d", "measure", "memmap_tiff", "nearest_neighbor_distances_3d",
-    "normalize_to_controls", "object_channel_intensity", "paired_segmentation_metrics", "percent_control", "plate_edge_effect",
-    "plate_qc_summary", "preferred_accelerator", "profile_call", "profile_records", "register_backend", "replicate_effect_summary",
-    "robust_zscore", "runtime_stats", "segment_threshold_3d", "summarize_by_replicate", "summarize_experiment", "summarize_lineages",
-    "summarize_profile", "summarize_spatial_features", "summarize_tracks_3d", "summarize_volume", "volume_features", "write_manifest",
-    "write_report", "z_prime_factor",
+    "dataframe_summary", "dataframe_to_long_form", "detect_time_series_events", "detect_transition_events", "extract_object_features",
+    "file_sha256", "get_backend", "iter_array_chunks", "iter_tiff_frames", "lineage_quality_summary", "link_frames_3d", "load_ome_series",
+    "measure", "memmap_tiff", "nearest_neighbor_distances_3d", "normalize_to_controls", "object_channel_intensity", "paired_segmentation_metrics",
+    "percent_control", "plate_edge_effect", "plate_qc_summary", "preferred_accelerator", "profile_call", "profile_records", "read_ome_info",
+    "register_backend", "replicate_effect_summary", "robust_zscore", "runtime_stats", "segment_threshold_3d", "summarize_by_replicate",
+    "summarize_experiment", "summarize_lineages", "summarize_profile", "summarize_spatial_features", "summarize_tracks_3d",
+    "summarize_volume", "two_group_sample_size", "volume_features", "write_dataframe", "write_manifest", "write_report", "z_prime_factor",
 ]
 
-__version__ = "2.11.0"
+__version__ = "2.12.0"
