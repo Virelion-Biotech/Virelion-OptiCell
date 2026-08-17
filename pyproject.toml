@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opticell"
-version = "2.3.0"
+version = "2.4.0"
 description = "Quantitative microscopy quality control and cell analysis engine"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,8 +26,12 @@ dev = [
 [project.scripts]
 opticell = "qc_pipeline:_main"
 
-[tool.setuptools]
-py-modules = [
+[tool.setuptools.packages.find]
+include = ["opticell*"]
+
+[tool.setuptools.py-modules]
+# Legacy modules remain top-level for backward compatibility.
+modules = [
   "qc_pipeline",
   "quantitative",
   "image_io",
@@ -37,6 +41,9 @@ py-modules = [
   "tracking",
   "ensemble",
   "experiment",
+  "statistics",
+  "texture",
+  "preprocessing",
 ]
 
 [tool.pytest.ini_options]
