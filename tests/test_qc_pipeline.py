@@ -106,7 +106,6 @@ def test_batch_analysis_keeps_duplicate_basenames(tmp_path):
 
 def test_adaptive_qc_adds_score_without_erasing_absolute_flags():
     df = analyze_paths([], adaptive_qc=False)
-    # Use a minimal synthetic result table for direct adaptive-QC testing.
     import pandas as pd
 
     synthetic = pd.DataFrame(
