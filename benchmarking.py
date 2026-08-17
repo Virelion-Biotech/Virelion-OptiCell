@@ -10,18 +10,8 @@ import pandas as pd
 from validation import paired_segmentation_metrics
 
 
-def benchmark_backends(
-    image: np.ndarray,
-    reference_labels: np.ndarray,
-    backends: Mapping[str, object],
-    *,
-    max_distance: float = 3.0,
-) -> pd.DataFrame:
-    """Run several segmenters against one ground-truth label image.
-
-    Every backend must expose ``segment(image)`` and return an object with a
-    ``labels`` array. Failures are retained as rows for auditability.
-    """
+def benchmark_backends(image: np.ndarray, reference_labels: np.ndarray, backends: Mapping[str, object], *, max_distance: float = 3.0) -> pd.DataFrame:
+    """Run several segmenters against one ground-truth label image."""
     rows: list[dict[str, object]] = []
     reference_instances = int(np.max(reference_labels)) if np.asarray(reference_labels).size else 0
     for name, backend in backends.items():
@@ -48,10 +38,16 @@ def aggregate_backend_benchmarks(results: Sequence[pd.DataFrame]) -> pd.DataFram
     numeric = [c for c in ["elapsed_seconds", "instances_predicted", "instances_reference",
                            "iou", "dice", "precision", "recall", "f1",
                            "absolute_count_error", "relative_count_error"] if c in frame.columns]
-    grouped = frame.groupby("backend", dropna=False)[numeric].agg(["mean", "median", "std", "count"])
-    grouped["failed_runs"] = frame.groupby("backend", dropna=False)["error"].apply(lambda s: int(s.notna().sum())).to_numpy()
-    grouped.columns = [f"{a}_{b}" if b else str(a) for a, b in grouped.columns]
-    return grouped.reset_index()
+    grouped = frame.groupby("backend", dropna=False)[numeric].agg(["mean", "median", "std", "count"]).reset_index()
+    flat: list[str] = []
+    for column in grouped.columns:
+        if isinstance(column, tuple):
+            flat.append(str(column[0]) if column[1] == "" else f"{column[0]}_{column[1]}")
+        else:
+            flat.append(str(column))
+    grouped.columns = flat
+    failures = frame.groupby("backend", dropna=False)["error"].apply(lambda s: int(s.notna().sum())).rename("failed_runs").reset_index()
+    return grouped.merge(failures, on="backend", how="left")
 
 
 __all__ = ["benchmark_backends", "aggregate_backend_benchmarks"]
