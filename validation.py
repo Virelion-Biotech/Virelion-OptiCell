@@ -1,10 +1,8 @@
 """Validation and benchmarking utilities for OptiCell segmentation.
 
-These metrics are intentionally model-agnostic and can be used with manually
-annotated masks or synthetic ground truth. They are not a substitute for a
-proper domain-specific validation study.
+These metrics are model-agnostic and support both 2-D and 3-D labelled masks.
+They are not a substitute for a domain-specific validation study.
 """
-
 from __future__ import annotations
 
 from typing import Any, Sequence
@@ -13,7 +11,7 @@ import numpy as np
 
 
 def binary_iou(pred: np.ndarray, truth: np.ndarray) -> float:
-    """Pixel-level intersection-over-union for binary masks."""
+    """Pixel/voxel-level intersection-over-union for binary masks."""
     p = np.asarray(pred, dtype=bool)
     t = np.asarray(truth, dtype=bool)
     if p.shape != t.shape:
@@ -23,7 +21,7 @@ def binary_iou(pred: np.ndarray, truth: np.ndarray) -> float:
 
 
 def binary_dice(pred: np.ndarray, truth: np.ndarray) -> float:
-    """Pixel-level Sørensen-Dice coefficient."""
+    """Pixel/voxel-level Sørensen-Dice coefficient."""
     p = np.asarray(pred, dtype=bool)
     t = np.asarray(truth, dtype=bool)
     if p.shape != t.shape:
@@ -33,7 +31,7 @@ def binary_dice(pred: np.ndarray, truth: np.ndarray) -> float:
 
 
 def segmentation_pixel_metrics(pred: np.ndarray, truth: np.ndarray) -> dict[str, float]:
-    """Return IoU, Dice, precision and recall for foreground segmentation."""
+    """Return IoU, Dice, precision and recall for binary segmentation."""
     p = np.asarray(pred, dtype=bool)
     t = np.asarray(truth, dtype=bool)
     if p.shape != t.shape:
@@ -52,21 +50,24 @@ def segmentation_pixel_metrics(pred: np.ndarray, truth: np.ndarray) -> dict[str,
 
 
 def count_error(pred_count: int, truth_count: int) -> dict[str, float]:
-    """Return absolute and relative cell-count error."""
+    """Return absolute and relative object-count error."""
     absolute = abs(int(pred_count) - int(truth_count))
     relative = absolute / abs(truth_count) if truth_count else (0.0 if pred_count == 0 else float("inf"))
     return {"absolute_count_error": float(absolute), "relative_count_error": float(relative)}
 
 
 def _centroids_from_labels(labels: np.ndarray) -> np.ndarray:
-    labels = np.asarray(labels)
-    ids = np.unique(labels)
+    """Return one centroid per positive label for 2-D or 3-D masks."""
+    arr = np.asarray(labels)
+    if arr.ndim not in {2, 3}:
+        raise ValueError("label arrays must be 2-D or 3-D")
+    ids = np.unique(arr)
     ids = ids[ids > 0]
     points = []
     for label_id in ids:
-        y, x = np.nonzero(labels == label_id)
-        if len(x):
-            points.append((float(x.mean()), float(y.mean())))
+        coords = np.argwhere(arr == label_id)
+        if len(coords):
+            points.append(coords.mean(axis=0))
     return np.asarray(points, dtype=float)
 
 
@@ -75,7 +76,9 @@ def match_instance_centroids(
     truth_labels: np.ndarray,
     max_distance_px: float = 20.0,
 ) -> tuple[int, int, int]:
-    """Greedy one-to-one centroid matching for instance-level validation."""
+    """Greedy one-to-one centroid matching for 2-D or 3-D instance validation."""
+    if max_distance_px <= 0:
+        raise ValueError("max_distance_px must be positive")
     pred = _centroids_from_labels(predicted_labels)
     truth = _centroids_from_labels(truth_labels)
     if pred.size == 0 and truth.size == 0:
@@ -97,9 +100,7 @@ def match_instance_centroids(
         used_pred.add(p_idx)
         used_truth.add(t_idx)
         tp += 1
-    fp = len(pred) - tp
-    fn = len(truth) - tp
-    return tp, fp, fn
+    return tp, len(pred) - tp, len(truth) - tp
 
 
 def instance_metrics(predicted_labels: np.ndarray, truth_labels: np.ndarray, max_distance_px: float = 20.0) -> dict[str, float]:
@@ -108,8 +109,10 @@ def instance_metrics(predicted_labels: np.ndarray, truth_labels: np.ndarray, max
     precision = tp / (tp + fp) if tp + fp else 1.0
     recall = tp / (tp + fn) if tp + fn else 1.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    pred_count = int(np.max(predicted_labels)) if np.asarray(predicted_labels).size else 0
-    truth_count = int(np.max(truth_labels)) if np.asarray(truth_labels).size else 0
+    pred_arr = np.asarray(predicted_labels)
+    truth_arr = np.asarray(truth_labels)
+    pred_count = int(np.max(pred_arr)) if pred_arr.size else 0
+    truth_count = int(np.max(truth_arr)) if truth_arr.size else 0
     return {
         "true_positives": float(tp),
         "false_positives": float(fp),
@@ -126,7 +129,7 @@ def benchmark_segmentation(
     truth_labels: Sequence[np.ndarray],
     max_distance_px: float = 20.0,
 ) -> dict[str, Any]:
-    """Aggregate pixel and instance metrics over paired validation images."""
+    """Aggregate pixel/voxel and instance metrics over paired 2-D or 3-D masks."""
     if len(predicted_labels) != len(truth_labels):
         raise ValueError("predicted_labels and truth_labels must have the same length")
     if not predicted_labels:
