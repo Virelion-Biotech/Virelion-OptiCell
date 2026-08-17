@@ -353,19 +353,23 @@ def segment_threshold(
 class CellposeSegmenter:
     """Reusable Cellpose model wrapper; model initialization happens once."""
 
-    def __init__(self, model_type: str = "cyto3") -> None:
+    def __init__(self, model_type: str = "cyto3", gpu: bool | None = None) -> None:
         if not _HAS_CELLPOSE:
             raise RuntimeError("Cellpose is not installed. Install the optional cellpose dependency.")
         self.model_type = model_type
+        self.gpu = gpu
         self._model = None
 
     @property
     def model(self):
         if self._model is None:
+            kwargs: dict[str, Any] = {"model_type": self.model_type}
+            if self.gpu is not None:
+                kwargs["gpu"] = bool(self.gpu)
             try:
-                self._model = _cellpose_models.CellposeModel(model_type=self.model_type)
+                self._model = _cellpose_models.CellposeModel(**kwargs)
             except AttributeError:
-                self._model = _cellpose_models.Cellpose(model_type=self.model_type)
+                self._model = _cellpose_models.Cellpose(**kwargs)
         return self._model
 
     def segment(
