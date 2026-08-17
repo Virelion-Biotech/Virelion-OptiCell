@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opticell"
-version = "2.14.0"
+version = "2.15.0"
 description = "Quantitative microscopy quality control and cell analysis engine"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,7 +30,7 @@ opticell = "qc_pipeline:_main"
 
 [tool.setuptools]
 py-modules = [
-  "qc_pipeline", "quantitative", "image_io", "validation", "compartments", "phenotype", "tracking", "ensemble", "experiment", "texture", "preprocessing", "volumetric", "volumetric_segmentation", "tracking3d", "provenance", "reporting", "benchmarking", "runtime", "tracking_events", "experiment_stats", "experiment_qc", "profiling", "lineage", "screening", "stream_io", "screening_qc", "sensitivity", "lineage_events", "artifact_quality", "acceptance", "robustness", "quality_gate",
+  "qc_pipeline", "quantitative", "image_io", "validation", "compartments", "phenotype", "tracking", "ensemble", "experiment", "texture", "preprocessing", "volumetric", "volumetric_segmentation", "tracking3d", "provenance", "reporting", "benchmarking", "runtime", "tracking_events", "experiment_stats", "experiment_qc", "profiling", "lineage", "screening", "stream_io", "screening_qc", "sensitivity", "lineage_events", "artifact_quality", "acceptance", "robustness", "quality_gate", "screening_advanced", "reproducibility", "tracking_validation",
 ]
 
 [tool.setuptools.packages.find]
