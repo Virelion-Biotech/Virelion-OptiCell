@@ -9,6 +9,8 @@ from quantitative import add_spatial_features, object_channel_intensity, summari
 from validation import benchmark_segmentation
 from .statistics import benjamini_hochberg, compare_two_groups, summarize_by_replicate
 from .volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_features
+from .segmentation import BaseSegmenter, CellposeBackend, ThresholdSegmenter, compare_backends, get_backend
+from .volumetric_segmentation import VolumetricSegmentationResult, segment_threshold_3d
 
 __all__ = [
     "QCThresholds",
@@ -26,6 +28,13 @@ __all__ = [
     "volume_features",
     "summarize_volume",
     "nearest_neighbor_distances_3d",
+    "BaseSegmenter",
+    "ThresholdSegmenter",
+    "CellposeBackend",
+    "get_backend",
+    "compare_backends",
+    "VolumetricSegmentationResult",
+    "segment_threshold_3d",
 ]
 
-__version__ = "2.5.0"
+__version__ = "2.6.0"
