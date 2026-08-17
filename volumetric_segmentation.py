@@ -30,7 +30,7 @@ def _validate_volume(volume: np.ndarray) -> np.ndarray:
 
 
 def _otsu_threshold(values: np.ndarray) -> float:
-    """Compute a normalized Otsu threshold without adding another dependency."""
+    """Compute a normalized Otsu threshold without invalid divide warnings."""
     hist, edges = np.histogram(values.ravel(), bins=256, range=(0.0, 1.0))
     total = hist.sum()
     if total == 0:
@@ -41,7 +41,10 @@ def _otsu_threshold(values: np.ndarray) -> float:
     mu = np.cumsum(probabilities * centers)
     mu_total = mu[-1]
     denom = omega * (1.0 - omega)
-    sigma = np.where(denom > 0, (mu_total * omega - mu) ** 2 / denom, 0.0)
+    numerator = (mu_total * omega - mu) ** 2
+    sigma = np.zeros_like(numerator)
+    valid = denom > 0
+    sigma[valid] = numerator[valid] / denom[valid]
     return float(centers[int(np.argmax(sigma))])
 
 
