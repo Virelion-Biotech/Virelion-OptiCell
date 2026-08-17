@@ -1,11 +1,8 @@
-# Core (required)
-numpy
-opencv-python-headless
-pandas
-matplotlib
-streamlit
-tifffile
+numpy>=1.26,<3
+opencv-python-headless>=4.9,<5
+pandas>=2.1,<3
+tifffile>=2024.2,<2027
 
-# Optional — enables the deep-learning cell counter (adds torch, ~1-2GB).
-# Leave commented out unless you specifically want Cellpose.
-# cellpose
+# Optional deep-learning segmentation backend.
+# Install with: pip install 'opticell[cellpose]'
+# or: pip install cellpose
