@@ -6,6 +6,7 @@ from ensemble import threshold_ensemble, ensemble_from_results
 from experiment import annotate_results, parse_metadata, plate_heatmap, summarize_groups
 from phenotype import Rule, group_phenotype_summary, marker_positivity, score_cells
 from tracking import TrackingConfig, link_frames, summarize_tracks
+from validation import instance_metrics, match_instance_centroids
 from opticell.segmentation import ThresholdSegmenter, available_backends, get_backend, register_backend
 
 
@@ -80,3 +81,26 @@ def test_backend_registry_supports_builtin_and_custom_backend():
     register_backend("dummy", DummyBackend)
     assert "dummy" in available_backends()
     assert isinstance(get_backend("dummy", min_area=10), DummyBackend)
+
+
+def test_validation_uses_unique_nonzero_labels():
+    predicted = np.zeros((16, 16), dtype=np.int32)
+    truth = np.zeros_like(predicted)
+    predicted[2:5, 2:5] = 10
+    predicted[8:11, 8:11] = 42
+    truth[2:5, 2:5] = 3
+    truth[8:11, 8:11] = 7
+    metrics = instance_metrics(predicted, truth, max_distance_px=2)
+    assert metrics["f1"] == 1.0
+    assert metrics["absolute_count_error"] == 0.0
+
+
+def test_validation_matching_is_one_to_one_and_globally_optimal():
+    predicted = np.zeros((30, 30), dtype=np.int32)
+    truth = np.zeros_like(predicted)
+    predicted[10:12, 5:7] = 1
+    predicted[10:12, 11:13] = 2
+    truth[10:12, 8:10] = 5
+    truth[10:12, 14:16] = 9
+    tp, fp, fn = match_instance_centroids(predicted, truth, max_distance_px=10)
+    assert (tp, fp, fn) == (2, 0, 0)
