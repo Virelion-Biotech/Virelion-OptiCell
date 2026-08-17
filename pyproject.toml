@@ -30,7 +30,7 @@ opticell = "qc_pipeline:_main"
 
 [tool.setuptools]
 py-modules = [
-  "qc_pipeline", "quantitative", "image_io", "validation", "compartments", "phenotype", "tracking", "ensemble", "experiment", "texture", "preprocessing", "volumetric", "volumetric_segmentation", "tracking3d", "provenance", "reporting", "benchmarking", "runtime", "tracking_events", "experiment_stats", "experiment_qc", "profiling", "lineage", "screening", "stream_io", "screening_qc", "sensitivity", "lineage_events", "artifact_quality", "acceptance", "robustness",
+  "qc_pipeline", "quantitative", "image_io", "validation", "compartments", "phenotype", "tracking", "ensemble", "experiment", "texture", "preprocessing", "volumetric", "volumetric_segmentation", "tracking3d", "provenance", "reporting", "benchmarking", "runtime", "tracking_events", "experiment_stats", "experiment_qc", "profiling", "lineage", "screening", "stream_io", "screening_qc", "sensitivity", "lineage_events", "artifact_quality", "acceptance", "robustness", "quality_gate",
 ]
 
 [tool.setuptools.packages.find]
