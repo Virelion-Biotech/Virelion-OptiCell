@@ -80,3 +80,13 @@ def test_reporting_summarizes_results_and_normalizes_nonfinite(tmp_path):
     text = (tmp_path / "report.json").read_text()
     assert '"validation"' in text
     assert "NaN" not in text
+
+
+def test_stable_package_wrappers_are_importable():
+    from opticell.provenance import build_manifest as package_manifest
+    from opticell.reporting import build_report as package_report
+    from opticell.tracking3d import Tracking3DConfig as package_config
+
+    assert package_manifest is build_manifest
+    assert package_report is build_report
+    assert package_config is Tracking3DConfig
