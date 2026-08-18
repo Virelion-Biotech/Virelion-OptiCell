@@ -8,6 +8,7 @@ from .artifact_quality import acquisition_artifact_metrics, artifact_burden_scor
 from .batch import BatchConfig, analyze_paths_parallel
 from .benchmarking import aggregate_backend_benchmarks, benchmark_backends
 from .exports import dataframe_to_long_form, write_dataframe
+from .experiment_audit import ExperimentAudit, audit_experiment
 from .experiment_qc import normalize_to_controls, plate_edge_effect, plate_qc_summary, robust_zscore
 from .experiment_stats import bootstrap_ci, replicate_effect_summary, summarize_experiment
 from .lineage import build_lineage_table, summarize_lineages
@@ -36,9 +37,9 @@ from .volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_
 from .volumetric_segmentation import VolumetricSegmentationResult, segment_threshold_3d
 
 __all__ = [
-    "AssayQCDecision", "BaseSegmenter", "BatchConfig", "CellposeBackend", "ExperimentQualityGate", "OMEImageInfo", "ProfileRecord", "QCThresholds", "RuntimeCapabilities", "RuntimeStats", "SegmentationAcceptance",
+    "AssayQCDecision", "BaseSegmenter", "BatchConfig", "CellposeBackend", "ExperimentAudit", "ExperimentQualityGate", "OMEImageInfo", "ProfileRecord", "QCThresholds", "RuntimeCapabilities", "RuntimeStats", "SegmentationAcceptance",
     "ThresholdSegmenter", "Tracking3DConfig", "VolumetricSegmentationResult", "acquisition_artifact_metrics", "add_spatial_features", "aggregate_backend_benchmarks", "analysis_fingerprint", "analyze_folder",
-    "analyze_image", "analyze_paths", "analyze_paths_parallel", "artifact_burden_score", "assay_qc_decision", "available_backends", "b_score", "benchmark_backends", "benchmark_segmentation",
+    "analyze_image", "analyze_paths", "analyze_paths_parallel", "artifact_burden_score", "assay_qc_decision", "audit_experiment", "available_backends", "b_score", "benchmark_backends", "benchmark_segmentation",
     "benjamini_hochberg", "bootstrap_ci", "build_lineage_table", "build_manifest", "build_report", "canonical_json", "capabilities", "capabilities_dict", "classify_divisions", "classify_z_prime",
     "collect_input_manifest", "compare_backends", "compare_manifests", "compare_two_groups", "dataframe_summary", "dataframe_to_long_form", "detect_time_series_events", "detect_transition_events",
     "division_consistency", "environment_fingerprint", "experiment_quality_gate", "extract_object_features", "file_sha256", "get_backend", "iter_array_chunks", "iter_tiff_frames", "lineage_event_summary", "lineage_quality_summary",
@@ -49,4 +50,4 @@ __all__ = [
     "threshold_sensitivity", "track_fragmentation", "track_gap_rate", "track_purity", "two_group_sample_size", "volume_features", "write_dataframe", "write_manifest", "write_report", "z_prime_factor",
 ]
 
-__version__ = "2.15.0"
+__version__ = "2.16.0"
