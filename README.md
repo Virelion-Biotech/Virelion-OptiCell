@@ -1,6 +1,6 @@
 # Virelion-OptiCell
 
-**OptiCell 2.14** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
+**OptiCell 2.16** is a headless, research-oriented microscopy quality-control and quantitative cell-analysis toolkit from Virelion Biotech.
 
 There is **no Streamlit and no GUI dependency**. The stable public API is under `opticell`; legacy top-level analysis modules remain available where compatibility is useful.
 
@@ -26,7 +26,8 @@ There is **no Streamlit and no GUI dependency**. The stable public API is under 
 - Export interoperability: deterministic long-form feature tables plus CSV/Parquet output when a Parquet engine is installed.
 - Preprocessing: background, illumination, and artifact utilities.
 - 3-D volumetric analysis: physical-unit object volume, centroids, bounding boxes, anisotropic surface area, volume fraction, density, and KD-tree nearest-neighbour distances.
-- Reproducibility: input SHA-256 hashes, runtime/platform metadata, parameter manifests, and JSON reports.
+- Reproducibility: input SHA-256 hashes, runtime/platform metadata, deterministic analysis fingerprints, parameter manifests, and manifest comparison.
+- Experiment auditing: a machine-readable composite audit combining acquisition QC, segmentation QC, reproducibility fingerprints, and reference-manifest differences without hiding component evidence.
 - Performance profiling: structured operation timing, throughput, and machine-readable profiling tables.
 
 ## Stable package API
@@ -50,8 +51,27 @@ from opticell import (
     lineage_event_summary,
     memmap_tiff,
     profile_call,
+    audit_experiment,
 )
 ```
+
+### Experiment audit
+
+```python
+from opticell import audit_experiment
+
+audit = audit_experiment(
+    parameters={"threshold": 0.5},
+    input_hashes={"image": "<sha256>"},
+    artifact_score=92,
+    segmentation_score=89,
+    artifact_status="PASS",
+    segmentation_status="PASS",
+)
+print(audit.status, audit.score, audit.fingerprint)
+```
+
+The audit is deliberately transparent: it reports the composite gate while preserving the underlying QC reasons and, when supplied, whether inputs and parameters match a reference manifest. It is a reproducibility/QC aid, not proof of biological validity.
 
 ### Assay QC decision
 
@@ -139,30 +159,4 @@ opticell /path/to/images --no-adaptive-qc -o qc_summary.csv
 
 ## Testing
 
-```bash
-pytest
-ruff check . --select E9,F
-python -m compileall -q qc_pipeline.py quantitative.py image_io.py validation.py compartments.py phenotype.py tracking.py ensemble.py experiment.py texture.py preprocessing.py volumetric.py volumetric_segmentation.py tracking3d.py provenance.py reporting.py benchmarking.py runtime.py tracking_events.py experiment_stats.py experiment_qc.py profiling.py lineage.py screening.py stream_io.py screening_qc.py sensitivity.py lineage_events.py artifact_quality.py acceptance.py robustness.py opticell
-python qc_pipeline.py --help
-python -m build
-```
-
-CI tests Python 3.10, 3.11, and 3.12, runs the full test suite, correctness-focused linting, package compilation/build checks, and public API import validation.
-
-## Scientific limitations
-
-OptiCell is **not a validated clinical measurement system**. Segmentation and tracking performance depends on cell type, staining, modality, magnification, acquisition quality, and experimental context. Rule-based phenotyping is transparent but is not a substitute for a validated trained classifier where one is required.
-
-Statistics should be performed at the correct experimental unit. OptiCell provides replicate-aware aggregation specifically to reduce cell-level pseudoreplication, but users must define biological and technical replicates correctly.
-
-The 3-D segmentation/tracking and lineage layers are transparent baselines, not claims of universal volumetric or lineage accuracy. They should be benchmarked against representative ground truth before use as primary endpoints.
-
-Artifact metrics are descriptive QC signals. Acceptance thresholds are configurable project rules, not universal criteria for image quality, segmentation validity, or instrument performance.
-
-Control-normalized plate metrics assume the specified control group is an appropriate reference. Z′ and edge-effect metrics are screening/QC statistics, not proof of biological mechanism or acquisition failure.
-
-The prospective power calculation is an approximation and should not be used as a substitute for design-specific power analysis when clustering, blocking, repeated measures, non-Gaussian outcomes, or multiple endpoints matter.
-
-OME-TIFF metadata are parsed conservatively from the first TIFF series. Unsupported microscopy container features should not be assumed to be preserved unless explicitly represented by the returned metadata or axes.
-
-Sensitivity/robustness analysis measures parameter stability, not correctness. Before using OptiCell outputs as experimental endpoints, benchmark segmentation/tracking against representative ground truth, document acquisition and analysis settings, define the experimental unit, and preserve provenance.
+The CI matrix validates Python 3.10, 3.11, and 3.12 with pytest, correctness-focused Ruff checks, module compilation, CLI help, distribution builds, and public API import smoke tests.
