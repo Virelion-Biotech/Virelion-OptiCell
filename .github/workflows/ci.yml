@@ -26,8 +26,13 @@ jobs:
       - run: python qc_pipeline.py --help
       - run: python -m build
       - run: sha256sum dist/*
-      - run: python -m pip install --force-reinstall --no-deps dist/*.whl
-      - run: python -c "import importlib, statistics; assert hasattr(statistics, 'mean'); import opticell; assert opticell.__version__ == '2.16.0'; missing = [name for name in opticell.__all__ if not hasattr(opticell, name)]; assert not missing, missing; wrappers = ['acceptance','artifact_quality','batch','benchmarking','experiment_audit','experiment_qc','experiment_stats','exports','lineage','lineage_events','lineage_quality','ome_io','power','profiling','quality_gate','reproducibility','robustness','runtime','screening','screening_advanced','screening_qc','segmentation','sensitivity','statistics','stream_io','tracking3d','tracking_events','tracking_validation','volumetric_segmentation']; [importlib.import_module('opticell.' + name) for name in wrappers]; print('OptiCell wheel API contract OK', opticell.__version__)"
-      - run: python -m pip uninstall -y opticell
-      - run: python -m pip install --force-reinstall --no-deps dist/*.tar.gz
-      - run: python -c "import opticell; assert opticell.__version__ == '2.16.0'; assert opticell.__all__; from opticell import audit_experiment; print('OptiCell sdist API OK', opticell.__version__)"
+      - run: python -m venv /tmp/opticell-wheel-venv
+      - run: /tmp/opticell-wheel-venv/bin/python -m pip install --upgrade pip
+      - run: /tmp/opticell-wheel-venv/bin/python -m pip install dist/*.whl
+      - run: /tmp/opticell-wheel-venv/bin/python -m pip check
+      - run: /tmp/opticell-wheel-venv/bin/python -c "import importlib, statistics; assert hasattr(statistics, 'mean'); import opticell; assert opticell.__version__ == '2.16.0'; missing = [name for name in opticell.__all__ if not hasattr(opticell, name)]; assert not missing, missing; wrappers = ['acceptance','artifact_quality','batch','benchmarking','experiment_audit','experiment_qc','experiment_stats','exports','lineage','lineage_events','lineage_quality','ome_io','power','profiling','quality_gate','reproducibility','robustness','runtime','screening','screening_advanced','screening_qc','segmentation','sensitivity','statistics','stream_io','tracking3d','tracking_events','tracking_validation','volumetric_segmentation']; [importlib.import_module('opticell.' + name) for name in wrappers]; print('OptiCell isolated wheel API OK', opticell.__version__)"
+      - run: python -m venv /tmp/opticell-sdist-venv
+      - run: /tmp/opticell-sdist-venv/bin/python -m pip install --upgrade pip
+      - run: /tmp/opticell-sdist-venv/bin/python -m pip install dist/*.tar.gz
+      - run: /tmp/opticell-sdist-venv/bin/python -m pip check
+      - run: /tmp/opticell-sdist-venv/bin/python -c "import opticell; assert opticell.__version__ == '2.16.0'; assert opticell.__all__; from opticell import audit_experiment; print('OptiCell isolated sdist API OK', opticell.__version__)"
