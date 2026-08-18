@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If OptiCell contributes to published work, please cite this software and the specific version used."
+title: "Virelion-OptiCell"
+version: "2.16.0"
+date-released: "2026-08-18"
+type: software
+license: MIT
+repository-code: "https://github.com/Virelion-Biotech/Virelion-OptiCell"
+url: "https://github.com/Virelion-Biotech/Virelion-OptiCell"
+authors:
+  - family-names: Hannan
+    given-names: Umer
+    affiliation: "Virelion Biotech"
+keywords:
+  - microscopy
+  - image analysis
+  - cell segmentation
+  - cell tracking
+  - quantitative microscopy
+  - high-content screening
+  - reproducibility
+abstract: >-
+  Headless research-oriented microscopy quality-control and quantitative
+  cell-analysis toolkit with segmentation, tracking, experiment QC,
+  reproducibility, benchmarking, and screening analysis capabilities.
