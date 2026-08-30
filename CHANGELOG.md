@@ -2,6 +2,12 @@
 
 All notable OptiCell changes are documented here.
 
+## Unreleased
+
+### Documentation
+
+- Added `DATASETS_AND_VALIDATION_REPORT.md`: catalogue of real large-scale public microscopy datasets (LIVECell, TissueNet, BBBC focus/QC sets, Cell Painting collections, etc.) suitable for OptiCell validation and future training, plus an explicit no-hallucination policy. No training metrics are claimed; full-scale training requires data + compute outside the present environment.
+
 ## 2.16.0 — 2026-08-18
 
 ### Added
