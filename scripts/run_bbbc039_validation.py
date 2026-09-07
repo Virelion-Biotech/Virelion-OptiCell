@@ -3,7 +3,7 @@
 
 Usage:
   python scripts/run_bbbc039_validation.py --max-images 50 --skip-download
-  python scripts/run_bbbc039_validation.py --max-images 50 --backend cellpose --skip-download
+  python scripts/run_bbbc039_validation.py --max-images 50 --backend cellpose --gpu --skip-download
 """
 from __future__ import annotations
 
@@ -200,6 +200,11 @@ def main() -> int:
         default="cpsam",
         help="Cellpose pretrained_model / model_type (default: cpsam for Cellpose 4)",
     )
+    parser.add_argument(
+        "--gpu",
+        action="store_true",
+        help="Use GPU for Cellpose (set True on Ibex with --gres=gpu:...)",
+    )
     args = parser.parse_args()
 
     data_dir = args.data_dir.expanduser().resolve()
@@ -227,7 +232,7 @@ def main() -> int:
         return 3
 
     pairs = pairs[: max(1, args.max_images)]
-    print(f"[run] backend={args.backend} n_images={len(pairs)}")
+    print(f"[run] backend={args.backend} n_images={len(pairs)} gpu={args.gpu}")
     print(f"[env] cellpose_available={_HAS_CELLPOSE} import_error={_CELLPOSE_IMPORT_ERROR!r}")
 
     cellpose_seg: CellposeSegmenter | None = None
@@ -239,9 +244,8 @@ def main() -> int:
             )
             print("Try: python -c 'from cellpose import models; print(models)'", file=sys.stderr)
             return 5
-        print(f"[cellpose] loading model={args.cellpose_model!r} (once)...")
-        cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=False)
-        # force init so failures surface before the loop
+        print(f"[cellpose] loading model={args.cellpose_model!r} gpu={args.gpu} (once)...")
+        cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=bool(args.gpu))
         _ = cellpose_seg.model
         print("[cellpose] model ready")
 
@@ -307,6 +311,7 @@ def main() -> int:
         "source": "https://bbbc.broadinstitute.org/BBBC039",
         "backend": args.backend,
         "cellpose_model": args.cellpose_model if args.backend == "cellpose" else None,
+        "gpu": bool(args.gpu),
         "n_requested": len(pairs),
         "n_scored": len(pred_labels),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
