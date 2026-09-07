@@ -5,15 +5,13 @@ BBBC039 layout after unzip (nested):
   data/bbbc039/images/images/*.tif   (16-bit Hoechst FOVs)
   data/bbbc039/masks/masks/*.png     (color-encoded instance masks)
 
-Mask decode (official gist pattern):
-  take channel 0, then connected-component label non-zero pixels.
+Mask decode (official gist pattern, RGB-aware):
   https://gist.github.com/jccaicedo/15e811722fca51e3ae90e8b43057f075
+  skimage loads RGB → channel 0 = red. OpenCV loads BGR, so we convert first.
+  Fallback: any non-zero across channels if channel-0 is empty.
 
-Usage (from repo root, venv active):
-
-  pip install -e .
-  python scripts/run_bbbc039_validation.py --max-images 50
-  python scripts/run_bbbc039_validation.py --max-images 200 --backend cellpose
+Usage:
+  python scripts/run_bbbc039_validation.py --max-images 50 --skip-download
 """
 from __future__ import annotations
 
@@ -71,7 +69,6 @@ def unzip(archive: Path, out_dir: Path) -> None:
 
 
 def resolve_content_root(root: Path, kind: str) -> Path:
-    """Handle nested zip folders: images/images/, masks/masks/, ignore __MACOSX."""
     if not root.exists():
         raise FileNotFoundError(root)
 
@@ -81,9 +78,7 @@ def resolve_content_root(root: Path, kind: str) -> Path:
 
     candidates: list[Path] = []
     for p in root.rglob("*"):
-        if not p.is_dir():
-            continue
-        if "__MACOSX" in p.parts:
+        if not p.is_dir() or "__MACOSX" in p.parts:
             continue
         has_tif = any(p.glob("*.tif")) or any(p.glob("*.tiff"))
         has_png = any(p.glob("*.png"))
@@ -100,18 +95,68 @@ def resolve_content_root(root: Path, kind: str) -> Path:
 def decode_bbbc039_mask(path: Path) -> np.ndarray:
     """Decode color-encoded BBBC039 PNG into integer instance labels.
 
-    Official pattern (Caicedo gist):
-      gt = imread(png); gt = gt[:,:,0]; gt = label(gt)
+    Official gist (skimage RGB):
+        gt = imread(png); gt = gt[:,:,0]; gt = label(gt)
+
+    OpenCV loads BGR, so convert to RGB before taking channel 0.
+    If channel 0 is empty, fall back to any-channel non-zero, then to
+    unique-color labeling (handles multi-channel color encodings).
     """
     arr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
     if arr is None:
         raise IOError(f"Could not read mask {path}")
-    if arr.ndim == 3:
-        channel = arr[:, :, 0]
-    else:
+
+    if arr.ndim == 2:
         channel = arr
-    binary = (channel > 0).astype(np.uint8)
-    _n_labels, labels = cv2.connectedComponents(binary, connectivity=8)
+        binary = (channel > 0).astype(np.uint8)
+        _n, labels = cv2.connectedComponents(binary, connectivity=8)
+        return labels.astype(np.int32)
+
+    # BGR → RGB to match skimage channel-0 semantics
+    rgb = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_BGR2RGB)
+    channel0 = rgb[:, :, 0]
+    binary = (channel0 > 0).astype(np.uint8)
+
+    if int(binary.sum()) == 0:
+        # Channel 0 empty: any non-zero across RGB
+        binary = (rgb.max(axis=2) > 0).astype(np.uint8)
+
+    if int(binary.sum()) == 0:
+        return np.zeros(arr.shape[:2], dtype=np.int32)
+
+    # Prefer connected components on the binary map (gist behavior)
+    _n, labels = cv2.connectedComponents(binary, connectivity=8)
+
+    # If almost everything collapsed to 1 blob but many colors exist,
+    # re-label by unique RGB triplets (touching nuclei painted different colors).
+    n_cc = int(labels.max())
+    flat = rgb.reshape(-1, 3)
+    # sample unique colors excluding pure black
+    nonzero = flat[np.any(flat > 0, axis=1)]
+    if nonzero.size:
+        # approx unique count via view
+        view = nonzero.view([("r", nonzero.dtype), ("g", nonzero.dtype), ("b", nonzero.dtype)])
+        n_colors = int(np.unique(view).size)
+    else:
+        n_colors = 0
+
+    if n_colors > max(n_cc, 1) * 2 and n_colors > 5:
+        # Unique-color instance map
+        h, w = rgb.shape[:2]
+        packed = (
+            rgb[:, :, 0].astype(np.int32) * 256 * 256
+            + rgb[:, :, 1].astype(np.int32) * 256
+            + rgb[:, :, 2].astype(np.int32)
+        )
+        unique_vals = np.unique(packed)
+        labels = np.zeros((h, w), dtype=np.int32)
+        next_id = 1
+        for v in unique_vals:
+            if v == 0:
+                continue
+            labels[packed == v] = next_id
+            next_id += 1
+
     return labels.astype(np.int32)
 
 
@@ -125,7 +170,6 @@ def load_image_gray(path: Path) -> np.ndarray:
 
 
 def relpath(path: Path, base: Path) -> str:
-    """Safe relative path string; never raises if path is outside base."""
     try:
         return str(path.resolve().relative_to(base.resolve()))
     except ValueError:
@@ -133,7 +177,6 @@ def relpath(path: Path, base: Path) -> str:
 
 
 def find_pairs(images_root: Path, masks_root: Path) -> list[tuple[Path, Path]]:
-    """Pair TIFF images to PNG masks by matching basename (stem)."""
     img_root = resolve_content_root(images_root, "images")
     msk_root = resolve_content_root(masks_root, "masks")
     print(f"[paths] images_root={img_root}")
@@ -187,13 +230,12 @@ def segment(image_gray: np.ndarray, backend: str):
 def main() -> int:
     parser = argparse.ArgumentParser(description="BBBC039 OptiCell validation (real metrics only)")
     parser.add_argument("--data-dir", type=Path, default=Path("data/bbbc039"))
-    parser.add_argument("--max-images", type=int, default=50, help="Cap for first honest subset run")
+    parser.add_argument("--max-images", type=int, default=50)
     parser.add_argument("--backend", choices=("threshold", "adaptive", "cellpose"), default="threshold")
     parser.add_argument("--out-dir", type=Path, default=Path("outputs/bbbc039_validation"))
     parser.add_argument("--skip-download", action="store_true")
     args = parser.parse_args()
 
-    # Critical: absolute base so relative_to never fails against resolved image paths
     data_dir = args.data_dir.expanduser().resolve()
     out_dir = args.out_dir.expanduser().resolve()
 
@@ -216,14 +258,19 @@ def main() -> int:
     pairs = find_pairs(images_dir, masks_dir)
     if not pairs:
         print("ERROR: could not pair any images with masks.", file=sys.stderr)
-        print(f"  images under {images_dir}: {len(list(images_dir.rglob('*')))} entries")
-        print(f"  masks under {masks_dir}: {len(list(masks_dir.rglob('*')))} entries")
-        print("  Top-level images:", [p.name for p in list(images_dir.iterdir())[:20]])
-        print("  Top-level masks:", [p.name for p in list(masks_dir.iterdir())[:20]])
         return 3
 
     pairs = pairs[: max(1, args.max_images)]
     print(f"[run] backend={args.backend} n_images={len(pairs)}")
+
+    # Sanity-check first mask decode
+    sample_truth = decode_bbbc039_mask(pairs[0][1])
+    print(
+        f"[mask-check] {pairs[0][1].name}: shape={sample_truth.shape} "
+        f"max_label={int(sample_truth.max())} fg_pixels={int((sample_truth > 0).sum())}"
+    )
+    if int(sample_truth.max()) == 0:
+        print("WARNING: first mask decoded empty — check PNG encoding", file=sys.stderr)
 
     pred_labels: list[np.ndarray] = []
     truth_labels: list[np.ndarray] = []
@@ -256,6 +303,7 @@ def main() -> int:
             truth_labels.append(truth)
             print(
                 f"  [{i}/{len(pairs)}] {img_path.name}: "
+                f"truth={int(truth.max())} pred={int(seg.count)} "
                 f"iou={metrics['iou']:.3f} dice={metrics['dice']:.3f} "
                 f"f1={metrics['f1']:.3f} count_err={metrics['absolute_count_error']:.0f}"
             )
