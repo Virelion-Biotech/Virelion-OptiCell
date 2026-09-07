@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
 """Subset validation on BBBC039 (U2OS nuclei) using OptiCell metrics.
 
-BBBC039 layout after unzip (nested):
-  data/bbbc039/images/images/*.tif   (16-bit Hoechst FOVs)
-  data/bbbc039/masks/masks/*.png     (color-encoded instance masks)
-
-Mask decode (official gist pattern, RGB-aware):
-  https://gist.github.com/jccaicedo/15e811722fca51e3ae90e8b43057f075
-  skimage loads RGB → channel 0 = red. OpenCV loads BGR, so we convert first.
-  Fallback: any non-zero across channels if channel-0 is empty.
-
 Usage:
   python scripts/run_bbbc039_validation.py --max-images 50 --skip-download
+  python scripts/run_bbbc039_validation.py --max-images 50 --backend cellpose --skip-download
 """
 from __future__ import annotations
 
@@ -32,7 +24,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from validation import benchmark_segmentation, paired_segmentation_metrics  # noqa: E402
-from qc_pipeline import to_grayscale_uint8, segment_threshold  # noqa: E402
+from qc_pipeline import (  # noqa: E402
+    to_grayscale_uint8,
+    segment_threshold,
+    CellposeSegmenter,
+    _HAS_CELLPOSE,
+    _CELLPOSE_IMPORT_ERROR,
+)
 
 BBBC039_IMAGES = "https://data.broadinstitute.org/bbbc/BBBC039/images.zip"
 BBBC039_MASKS = "https://data.broadinstitute.org/bbbc/BBBC039/masks.zip"
@@ -71,11 +69,9 @@ def unzip(archive: Path, out_dir: Path) -> None:
 def resolve_content_root(root: Path, kind: str) -> Path:
     if not root.exists():
         raise FileNotFoundError(root)
-
     nested = root / kind
     if nested.is_dir():
         return nested.resolve()
-
     candidates: list[Path] = []
     for p in root.rglob("*"):
         if not p.is_dir() or "__MACOSX" in p.parts:
@@ -93,55 +89,34 @@ def resolve_content_root(root: Path, kind: str) -> Path:
 
 
 def decode_bbbc039_mask(path: Path) -> np.ndarray:
-    """Decode color-encoded BBBC039 PNG into integer instance labels.
-
-    Official gist (skimage RGB):
-        gt = imread(png); gt = gt[:,:,0]; gt = label(gt)
-
-    OpenCV loads BGR, so convert to RGB before taking channel 0.
-    If channel 0 is empty, fall back to any-channel non-zero, then to
-    unique-color labeling (handles multi-channel color encodings).
-    """
     arr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
     if arr is None:
         raise IOError(f"Could not read mask {path}")
-
     if arr.ndim == 2:
         channel = arr
         binary = (channel > 0).astype(np.uint8)
         _n, labels = cv2.connectedComponents(binary, connectivity=8)
         return labels.astype(np.int32)
 
-    # BGR → RGB to match skimage channel-0 semantics
     rgb = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_BGR2RGB)
     channel0 = rgb[:, :, 0]
     binary = (channel0 > 0).astype(np.uint8)
-
     if int(binary.sum()) == 0:
-        # Channel 0 empty: any non-zero across RGB
         binary = (rgb.max(axis=2) > 0).astype(np.uint8)
-
     if int(binary.sum()) == 0:
         return np.zeros(arr.shape[:2], dtype=np.int32)
 
-    # Prefer connected components on the binary map (gist behavior)
     _n, labels = cv2.connectedComponents(binary, connectivity=8)
-
-    # If almost everything collapsed to 1 blob but many colors exist,
-    # re-label by unique RGB triplets (touching nuclei painted different colors).
     n_cc = int(labels.max())
     flat = rgb.reshape(-1, 3)
-    # sample unique colors excluding pure black
     nonzero = flat[np.any(flat > 0, axis=1)]
     if nonzero.size:
-        # approx unique count via view
         view = nonzero.view([("r", nonzero.dtype), ("g", nonzero.dtype), ("b", nonzero.dtype)])
         n_colors = int(np.unique(view).size)
     else:
         n_colors = 0
 
     if n_colors > max(n_cc, 1) * 2 and n_colors > 5:
-        # Unique-color instance map
         h, w = rgb.shape[:2]
         packed = (
             rgb[:, :, 0].astype(np.int32) * 256 * 256
@@ -156,7 +131,6 @@ def decode_bbbc039_mask(path: Path) -> np.ndarray:
                 continue
             labels[packed == v] = next_id
             next_id += 1
-
     return labels.astype(np.int32)
 
 
@@ -214,19 +188,6 @@ def find_pairs(images_root: Path, masks_root: Path) -> list[tuple[Path, Path]]:
     return pairs
 
 
-def segment(image_gray: np.ndarray, backend: str):
-    if backend == "threshold":
-        return segment_threshold(image_gray)
-    if backend == "adaptive":
-        return segment_threshold(image_gray, adaptive=True)
-    if backend == "cellpose":
-        from qc_pipeline import CellposeSegmenter
-
-        seg = CellposeSegmenter(model_type="nuclei", gpu=False)
-        return seg.segment(image_gray)
-    raise ValueError(f"Unknown backend: {backend}")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="BBBC039 OptiCell validation (real metrics only)")
     parser.add_argument("--data-dir", type=Path, default=Path("data/bbbc039"))
@@ -234,6 +195,11 @@ def main() -> int:
     parser.add_argument("--backend", choices=("threshold", "adaptive", "cellpose"), default="threshold")
     parser.add_argument("--out-dir", type=Path, default=Path("outputs/bbbc039_validation"))
     parser.add_argument("--skip-download", action="store_true")
+    parser.add_argument(
+        "--cellpose-model",
+        default="cpsam",
+        help="Cellpose pretrained_model / model_type (default: cpsam for Cellpose 4)",
+    )
     args = parser.parse_args()
 
     data_dir = args.data_dir.expanduser().resolve()
@@ -262,15 +228,28 @@ def main() -> int:
 
     pairs = pairs[: max(1, args.max_images)]
     print(f"[run] backend={args.backend} n_images={len(pairs)}")
+    print(f"[env] cellpose_available={_HAS_CELLPOSE} import_error={_CELLPOSE_IMPORT_ERROR!r}")
 
-    # Sanity-check first mask decode
+    cellpose_seg: CellposeSegmenter | None = None
+    if args.backend == "cellpose":
+        if not _HAS_CELLPOSE:
+            print(
+                f"ERROR: Cellpose not importable. Detail: {_CELLPOSE_IMPORT_ERROR}",
+                file=sys.stderr,
+            )
+            print("Try: python -c 'from cellpose import models; print(models)'", file=sys.stderr)
+            return 5
+        print(f"[cellpose] loading model={args.cellpose_model!r} (once)...")
+        cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=False)
+        # force init so failures surface before the loop
+        _ = cellpose_seg.model
+        print("[cellpose] model ready")
+
     sample_truth = decode_bbbc039_mask(pairs[0][1])
     print(
         f"[mask-check] {pairs[0][1].name}: shape={sample_truth.shape} "
         f"max_label={int(sample_truth.max())} fg_pixels={int((sample_truth > 0).sum())}"
     )
-    if int(sample_truth.max()) == 0:
-        print("WARNING: first mask decoded empty — check PNG encoding", file=sys.stderr)
 
     pred_labels: list[np.ndarray] = []
     truth_labels: list[np.ndarray] = []
@@ -286,7 +265,15 @@ def main() -> int:
                     (gray.shape[1], gray.shape[0]),
                     interpolation=cv2.INTER_NEAREST,
                 ).astype(np.int32)
-            seg = segment(gray, args.backend)
+
+            if args.backend == "threshold":
+                seg = segment_threshold(gray)
+            elif args.backend == "adaptive":
+                seg = segment_threshold(gray, adaptive=True)
+            else:
+                assert cellpose_seg is not None
+                seg = cellpose_seg.segment(gray)
+
             pred = seg.labels
             metrics = paired_segmentation_metrics(pred, truth)
             row = {
@@ -319,6 +306,7 @@ def main() -> int:
         "dataset": "BBBC039",
         "source": "https://bbbc.broadinstitute.org/BBBC039",
         "backend": args.backend,
+        "cellpose_model": args.cellpose_model if args.backend == "cellpose" else None,
         "n_requested": len(pairs),
         "n_scored": len(pred_labels),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
