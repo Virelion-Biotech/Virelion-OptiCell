@@ -14,10 +14,6 @@ Usage (from repo root, venv active):
   pip install -e .
   python scripts/run_bbbc039_validation.py --max-images 50
   python scripts/run_bbbc039_validation.py --max-images 200 --backend cellpose
-
-If you already extracted data, re-run with the same --data-dir (re-extract
-is skipped via .extracted marker; delete that marker only if you need a
-force re-extract).
 """
 from __future__ import annotations
 
@@ -79,12 +75,10 @@ def resolve_content_root(root: Path, kind: str) -> Path:
     if not root.exists():
         raise FileNotFoundError(root)
 
-    # Prefer explicit nested folder named like the kind
     nested = root / kind
     if nested.is_dir():
-        return nested
+        return nested.resolve()
 
-    # Otherwise pick the directory that actually holds the files
     candidates: list[Path] = []
     for p in root.rglob("*"):
         if not p.is_dir():
@@ -98,10 +92,9 @@ def resolve_content_root(root: Path, kind: str) -> Path:
         if kind == "masks" and has_png:
             candidates.append(p)
     if not candidates:
-        return root
-    # Prefer shallower paths
+        return root.resolve()
     candidates.sort(key=lambda x: (len(x.parts), str(x)))
-    return candidates[0]
+    return candidates[0].resolve()
 
 
 def decode_bbbc039_mask(path: Path) -> np.ndarray:
@@ -109,20 +102,16 @@ def decode_bbbc039_mask(path: Path) -> np.ndarray:
 
     Official pattern (Caicedo gist):
       gt = imread(png); gt = gt[:,:,0]; gt = label(gt)
-    Implemented with OpenCV only (no skimage dependency).
     """
     arr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
     if arr is None:
         raise IOError(f"Could not read mask {path}")
     if arr.ndim == 3:
-        # Keep first channel (BGR or RGB — same index 0 in OpenCV BGR load)
         channel = arr[:, :, 0]
     else:
         channel = arr
-    # Non-zero pixels form instance seeds; connected components give instance IDs
     binary = (channel > 0).astype(np.uint8)
-    n_labels, labels = cv2.connectedComponents(binary, connectivity=8)
-    # labels already 0=bg, 1..n-1 = instances
+    _n_labels, labels = cv2.connectedComponents(binary, connectivity=8)
     return labels.astype(np.int32)
 
 
@@ -133,6 +122,14 @@ def load_image_gray(path: Path) -> np.ndarray:
     if arr.ndim == 3 and arr.shape[2] >= 3:
         arr = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_BGR2RGB)
     return to_grayscale_uint8(arr)
+
+
+def relpath(path: Path, base: Path) -> str:
+    """Safe relative path string; never raises if path is outside base."""
+    try:
+        return str(path.resolve().relative_to(base.resolve()))
+    except ValueError:
+        return str(path.resolve())
 
 
 def find_pairs(images_root: Path, masks_root: Path) -> list[tuple[Path, Path]]:
@@ -146,7 +143,6 @@ def find_pairs(images_root: Path, masks_root: Path) -> list[tuple[Path, Path]]:
     for ext in ("*.tif", "*.tiff"):
         image_files.extend(p for p in img_root.glob(ext) if p.is_file())
         image_files.extend(p for p in img_root.rglob(ext) if p.is_file())
-    # de-dupe
     image_files = sorted({p.resolve() for p in image_files})
 
     mask_by_stem: dict[str, Path] = {}
@@ -166,7 +162,10 @@ def find_pairs(images_root: Path, masks_root: Path) -> list[tuple[Path, Path]]:
             continue
         pairs.append((img, m))
 
-    print(f"[pair] images={len(image_files)} masks={len(mask_by_stem)} paired={len(pairs)} missing_mask={missing}")
+    print(
+        f"[pair] images={len(image_files)} masks={len(mask_by_stem)} "
+        f"paired={len(pairs)} missing_mask={missing}"
+    )
     if pairs:
         print(f"[pair] example: {pairs[0][0].name} <-> {pairs[0][1].name}")
     return pairs
@@ -194,7 +193,10 @@ def main() -> int:
     parser.add_argument("--skip-download", action="store_true")
     args = parser.parse_args()
 
-    data_dir: Path = args.data_dir
+    # Critical: absolute base so relative_to never fails against resolved image paths
+    data_dir = args.data_dir.expanduser().resolve()
+    out_dir = args.out_dir.expanduser().resolve()
+
     raw_dir = data_dir / "raw"
     images_zip = raw_dir / "images.zip"
     masks_zip = raw_dir / "masks.zip"
@@ -218,11 +220,6 @@ def main() -> int:
         print(f"  masks under {masks_dir}: {len(list(masks_dir.rglob('*')))} entries")
         print("  Top-level images:", [p.name for p in list(images_dir.iterdir())[:20]])
         print("  Top-level masks:", [p.name for p in list(masks_dir.iterdir())[:20]])
-        # deeper peek
-        for sub in ("images", "masks"):
-            d = images_dir / sub if sub == "images" else masks_dir / sub
-            if d.is_dir():
-                print(f"  Sample under {d}:", [p.name for p in list(d.iterdir())[:8]])
         return 3
 
     pairs = pairs[: max(1, args.max_images)]
@@ -247,8 +244,8 @@ def main() -> int:
             metrics = paired_segmentation_metrics(pred, truth)
             row = {
                 "index": i,
-                "image": str(img_path.relative_to(data_dir)),
-                "mask": str(mask_path.relative_to(data_dir)),
+                "image": relpath(img_path, data_dir),
+                "mask": relpath(mask_path, data_dir),
                 "pred_count": int(seg.count),
                 "truth_count": int(truth.max()),
                 "method": seg.method,
@@ -286,9 +283,9 @@ def main() -> int:
         "note": "All numbers measured on the listed images only. Not a full-corpus claim.",
     }
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    out_json = args.out_dir / f"bbbc039_{args.backend}_n{len(pred_labels)}.json"
-    out_csv = args.out_dir / f"bbbc039_{args.backend}_n{len(pred_labels)}.csv"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_json = out_dir / f"bbbc039_{args.backend}_n{len(pred_labels)}.json"
+    out_csv = out_dir / f"bbbc039_{args.backend}_n{len(pred_labels)}.csv"
     out_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     if per_image:
