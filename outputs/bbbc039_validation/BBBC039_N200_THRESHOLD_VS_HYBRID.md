@@ -5,13 +5,12 @@
 | Field | Value |
 |-------|-------|
 | Dataset | BBBC039 (U2OS Hoechst nuclei) |
-| n_images | **200** (full paired corpus) |
+| n_images scored | **200** paired FOVs |
+| n with nonzero GT | **197** (3 empty-GT FOVs excluded from relative count mean) |
 | Backends | threshold (Otsu), hybrid (count-gated) |
-| Script | `scripts/run_bbbc039_multi_backend.py` / `run_bbbc039_validation.py` |
+| Script | `scripts/run_bbbc039_multi_backend.py` |
 
 ## Aggregate metrics (measured)
-
-Backend order matches the user’s paste: first SUMMARY = **threshold**, second = **hybrid** (higher Dice / IoU, slightly higher count error — same pattern as n=50).
 
 | Metric | Threshold | Hybrid |
 |--------|----------:|-------:|
@@ -21,39 +20,31 @@ Backend order matches the user’s paste: first SUMMARY = **threshold**, second 
 | Instance precision | 0.9680 | 0.9517 |
 | Instance recall | 0.9121 | 0.9187 |
 | Mean \|count error\| | **8.74** | 8.97 |
-| Relative count error (mean) | **inf** | **inf** |
+| Mean relative count error (197 FOVs) | **0.0770** | 0.0827 |
 
-## Comparison to n=50 (same backends, measured earlier)
+Empty-GT FOVs (documented in `BBBC039_EMPTY_GT_FOVS.md`):
 
-| Backend | n | Dice | F1 | \|count err\| |
-|---------|--:|-----:|---:|-------------:|
-| Threshold | 50 | 0.9448 | 0.9554 | 6.06 |
-| Threshold | 200 | 0.9249 | 0.9289 | 8.74 |
-| Hybrid | 50 | 0.9514 | 0.9500 | 6.42 |
-| Hybrid | 200 | 0.9294 | 0.9239 | 8.97 |
+- `IXMtest_F13_s7_w13C1B1D8C-293E-454F-B0FD-6C2C3F9F5173`
+- `IXMtest_L01_s2_w1E5038251-DBA3-44D0-BC37-E43E2FC8C174`
+- `IXMtest_L10_s6_w12D12D64C-2639-4CA8-9BB4-99F92C9B7068`
 
-Full-corpus scores are **lower** than the first-50 subset — expected; the pilot FOVs were not a random harder tail.
+## vs n=50 pilot (measured earlier)
 
-## `relative_count_error: inf` (important)
+| Backend | n | Dice | F1 | \|count err\| | rel count |
+|---------|--:|-----:|---:|-------------:|----------:|
+| Threshold | 50 | 0.9448 | 0.9554 | 6.06 | 0.058 |
+| Threshold | 200 | 0.9249 | 0.9289 | 8.74 | **0.077** |
+| Hybrid | 50 | 0.9514 | 0.9500 | 6.42 | 0.065 |
+| Hybrid | 200 | 0.9294 | 0.9239 | 8.97 | **0.083** |
 
-`validation.count_error` returns `inf` when `truth_count == 0` and `pred_count > 0`. A mean of **inf** means **at least one FOV** in the 200 has an empty decoded ground-truth mask (or max label 0) while the backend predicted objects.
-
-This does **not** invalidate IoU/Dice/F1/absolute count error (those are finite). It does mean:
-
-1. Relative count error must not be quoted as a single finite headline number for n=200 until empty-GT FOVs are filtered or fixed.
-2. Follow-up: list FOVs with `truth_count == 0` from the per-image CSV and verify mask decode / pairing.
+Full corpus is harder than the first-50 slice.
 
 ## Honest interpretation
 
-- On the **full 200**, hybrid still looks like a mild Dice/IoU gain over threshold with nearly the same count error and slightly lower instance F1 — consistent with n=50.
-- Neither backend claims SOTA; both are strong classical / hybrid baselines for fluorescent nuclei QC.
-- Cellpose n=200 not included in this paste (GPU optional next).
-
-## Next measured steps
-
-1. Filter or fix empty-GT FOVs; recompute finite `relative_count_error_mean`.
-2. Run cellpose n=200 when GPU available; extend comparison table.
-3. CellProfiler baseline on the same basename-sorted list.
+- **Hybrid** remains a mild Dice/IoU improvement over threshold with nearly the same count error and slightly lower instance F1.
+- **Threshold** remains the count/F1-safer classical default.
+- Relative count error is finite once empty-GT FOVs are handled (`nan` + finite mean).
+- Cellpose n=200 still pending GPU run.
 
 ---
 
