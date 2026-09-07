@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Subset validation on BBBC039 (U2OS nuclei) using OptiCell metrics.
 
-This script:
-  1. Downloads BBBC039 images + masks if missing (~80 MB).
-  2. Builds instance label maps from per-nucleus PNG masks.
-  3. Runs OptiCell threshold segmentation (and optional Cellpose).
-  4. Scores with validation.benchmark_segmentation / paired metrics.
-  5. Writes only measured numbers to JSON + CSV.
+BBBC039 layout after unzip (nested):
+  data/bbbc039/images/images/*.tif   (16-bit Hoechst FOVs)
+  data/bbbc039/masks/masks/*.png     (color-encoded instance masks)
 
-No invented metrics. Scale with --max-images after the pipeline works.
+Mask decode (official gist pattern):
+  take channel 0, then connected-component label non-zero pixels.
+  https://gist.github.com/jccaicedo/15e811722fca51e3ae90e8b43057f075
 
 Usage (from repo root, venv active):
 
@@ -16,7 +15,9 @@ Usage (from repo root, venv active):
   python scripts/run_bbbc039_validation.py --max-images 50
   python scripts/run_bbbc039_validation.py --max-images 200 --backend cellpose
 
-Data source: https://bbbc.broadinstitute.org/BBBC039
+If you already extracted data, re-run with the same --data-dir (re-extract
+is skipped via .extracted marker; delete that marker only if you need a
+force re-extract).
 """
 from __future__ import annotations
 
@@ -32,7 +33,6 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-# Allow running from repo root without install
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -74,72 +74,101 @@ def unzip(archive: Path, out_dir: Path) -> None:
     marker.write_text(datetime.now(timezone.utc).isoformat() + "\n", encoding="utf-8")
 
 
-def masks_to_instance_labels(mask_dir: Path) -> np.ndarray:
-    """Merge per-nucleus binary PNGs into a single integer label image."""
-    mask_files = sorted(mask_dir.glob("*.png"))
-    if not mask_files:
-        raise FileNotFoundError(f"No PNG masks in {mask_dir}")
-    first = cv2.imread(str(mask_files[0]), cv2.IMREAD_GRAYSCALE)
-    if first is None:
-        raise IOError(f"Could not read {mask_files[0]}")
-    labels = np.zeros(first.shape, dtype=np.int32)
-    next_id = 1
-    for mf in mask_files:
-        m = cv2.imread(str(mf), cv2.IMREAD_GRAYSCALE)
-        if m is None:
+def resolve_content_root(root: Path, kind: str) -> Path:
+    """Handle nested zip folders: images/images/, masks/masks/, ignore __MACOSX."""
+    if not root.exists():
+        raise FileNotFoundError(root)
+
+    # Prefer explicit nested folder named like the kind
+    nested = root / kind
+    if nested.is_dir():
+        return nested
+
+    # Otherwise pick the directory that actually holds the files
+    candidates: list[Path] = []
+    for p in root.rglob("*"):
+        if not p.is_dir():
             continue
-        if m.shape != labels.shape:
-            raise ValueError(f"Mask shape mismatch: {mf}")
-        binary = m > 0
-        if not binary.any():
+        if "__MACOSX" in p.parts:
             continue
-        # Avoid overwriting existing labels if masks accidentally overlap
-        free = binary & (labels == 0)
-        if free.any():
-            labels[free] = next_id
-            next_id += 1
-    return labels
+        has_tif = any(p.glob("*.tif")) or any(p.glob("*.tiff"))
+        has_png = any(p.glob("*.png"))
+        if kind == "images" and has_tif:
+            candidates.append(p)
+        if kind == "masks" and has_png:
+            candidates.append(p)
+    if not candidates:
+        return root
+    # Prefer shallower paths
+    candidates.sort(key=lambda x: (len(x.parts), str(x)))
+    return candidates[0]
+
+
+def decode_bbbc039_mask(path: Path) -> np.ndarray:
+    """Decode color-encoded BBBC039 PNG into integer instance labels.
+
+    Official pattern (Caicedo gist):
+      gt = imread(png); gt = gt[:,:,0]; gt = label(gt)
+    Implemented with OpenCV only (no skimage dependency).
+    """
+    arr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if arr is None:
+        raise IOError(f"Could not read mask {path}")
+    if arr.ndim == 3:
+        # Keep first channel (BGR or RGB — same index 0 in OpenCV BGR load)
+        channel = arr[:, :, 0]
+    else:
+        channel = arr
+    # Non-zero pixels form instance seeds; connected components give instance IDs
+    binary = (channel > 0).astype(np.uint8)
+    n_labels, labels = cv2.connectedComponents(binary, connectivity=8)
+    # labels already 0=bg, 1..n-1 = instances
+    return labels.astype(np.int32)
 
 
 def load_image_gray(path: Path) -> np.ndarray:
     arr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
     if arr is None:
         raise IOError(f"Could not read image {path}")
-    if arr.ndim == 3 and arr.shape[2] == 3:
-        arr = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
+    if arr.ndim == 3 and arr.shape[2] >= 3:
+        arr = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_BGR2RGB)
     return to_grayscale_uint8(arr)
 
 
 def find_pairs(images_root: Path, masks_root: Path) -> list[tuple[Path, Path]]:
-    """Pair image folders with corresponding mask folders by stem name."""
-    # BBBC039 layout after extract is typically flat or one level deep;
-    # support both: images/*.tif and images/<id>/*.tif style.
+    """Pair TIFF images to PNG masks by matching basename (stem)."""
+    img_root = resolve_content_root(images_root, "images")
+    msk_root = resolve_content_root(masks_root, "masks")
+    print(f"[paths] images_root={img_root}")
+    print(f"[paths] masks_root={msk_root}")
+
     image_files: list[Path] = []
-    for ext in ("*.tif", "*.tiff", "*.png"):
-        image_files.extend(images_root.rglob(ext))
-    image_files = sorted({p.resolve() for p in image_files if p.is_file()})
+    for ext in ("*.tif", "*.tiff"):
+        image_files.extend(p for p in img_root.glob(ext) if p.is_file())
+        image_files.extend(p for p in img_root.rglob(ext) if p.is_file())
+    # de-dupe
+    image_files = sorted({p.resolve() for p in image_files})
+
+    mask_by_stem: dict[str, Path] = {}
+    for p in list(msk_root.glob("*.png")) + list(msk_root.rglob("*.png")):
+        if not p.is_file() or "__MACOSX" in p.parts:
+            continue
+        mask_by_stem[p.stem] = p.resolve()
 
     pairs: list[tuple[Path, Path]] = []
+    missing = 0
     for img in image_files:
-        stem = img.stem
-        # Common patterns: masks/<stem>/ or masks/<stem>_masks/ or same stem dir
-        candidates = [
-            masks_root / stem,
-            masks_root / f"{stem}_masks",
-            masks_root / img.parent.name,
-        ]
-        # Also: masks next to image if nested
-        candidates.append(img.parent / "masks")
-        mask_dir = next((c for c in candidates if c.is_dir() and any(c.glob("*.png"))), None)
-        if mask_dir is None:
-            # Try any subdir under masks_root whose name contains stem
-            for d in masks_root.rglob("*"):
-                if d.is_dir() and stem in d.name and any(d.glob("*.png")):
-                    mask_dir = d
-                    break
-        if mask_dir is None:
+        if "__MACOSX" in img.parts:
             continue
-        pairs.append((img, mask_dir))
+        m = mask_by_stem.get(img.stem)
+        if m is None:
+            missing += 1
+            continue
+        pairs.append((img, m))
+
+    print(f"[pair] images={len(image_files)} masks={len(mask_by_stem)} paired={len(pairs)} missing_mask={missing}")
+    if pairs:
+        print(f"[pair] example: {pairs[0][0].name} <-> {pairs[0][1].name}")
     return pairs
 
 
@@ -184,12 +213,16 @@ def main() -> int:
 
     pairs = find_pairs(images_dir, masks_dir)
     if not pairs:
-        # Fallback: list structure for debugging
-        print("ERROR: could not pair any images with mask folders.", file=sys.stderr)
+        print("ERROR: could not pair any images with masks.", file=sys.stderr)
         print(f"  images under {images_dir}: {len(list(images_dir.rglob('*')))} entries")
         print(f"  masks under {masks_dir}: {len(list(masks_dir.rglob('*')))} entries")
         print("  Top-level images:", [p.name for p in list(images_dir.iterdir())[:20]])
         print("  Top-level masks:", [p.name for p in list(masks_dir.iterdir())[:20]])
+        # deeper peek
+        for sub in ("images", "masks"):
+            d = images_dir / sub if sub == "images" else masks_dir / sub
+            if d.is_dir():
+                print(f"  Sample under {d}:", [p.name for p in list(d.iterdir())[:8]])
         return 3
 
     pairs = pairs[: max(1, args.max_images)]
@@ -199,20 +232,23 @@ def main() -> int:
     truth_labels: list[np.ndarray] = []
     per_image: list[dict] = []
 
-    for i, (img_path, mask_dir) in enumerate(pairs, 1):
+    for i, (img_path, mask_path) in enumerate(pairs, 1):
         try:
             gray = load_image_gray(img_path)
-            truth = masks_to_instance_labels(mask_dir)
+            truth = decode_bbbc039_mask(mask_path)
             if truth.shape != gray.shape:
-                # Resize labels to image if needed (rare)
-                truth = cv2.resize(truth.astype(np.float32), (gray.shape[1], gray.shape[0]), interpolation=cv2.INTER_NEAREST).astype(np.int32)
+                truth = cv2.resize(
+                    truth.astype(np.float32),
+                    (gray.shape[1], gray.shape[0]),
+                    interpolation=cv2.INTER_NEAREST,
+                ).astype(np.int32)
             seg = segment(gray, args.backend)
             pred = seg.labels
             metrics = paired_segmentation_metrics(pred, truth)
             row = {
                 "index": i,
                 "image": str(img_path.relative_to(data_dir)),
-                "mask_dir": str(mask_dir.relative_to(data_dir)),
+                "mask": str(mask_path.relative_to(data_dir)),
                 "pred_count": int(seg.count),
                 "truth_count": int(truth.max()),
                 "method": seg.method,
@@ -255,7 +291,6 @@ def main() -> int:
     out_csv = args.out_dir / f"bbbc039_{args.backend}_n{len(pred_labels)}.csv"
     out_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
-    # Minimal CSV without pandas dependency requirement beyond what OptiCell already uses
     if per_image:
         keys = list(per_image[0].keys())
         lines = [",".join(keys)]
