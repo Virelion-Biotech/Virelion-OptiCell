@@ -47,11 +47,11 @@ def segmentation_pixel_metrics(pred: np.ndarray, truth: np.ndarray) -> dict[str,
 
 def count_error(pred_count: int, truth_count: int) -> dict[str, float]:
     absolute = abs(int(pred_count) - int(truth_count))
-    relative = (
-        absolute / abs(truth_count)
-        if truth_count
-        else (0.0 if pred_count == 0 else float("inf"))
-    )
+    if truth_count:
+        relative = absolute / abs(truth_count)
+    else:
+        # Empty GT: relative error is undefined if pred>0; 0 if both empty.
+        relative = 0.0 if pred_count == 0 else float("nan")
     return {
         "absolute_count_error": float(absolute),
         "relative_count_error": float(relative),
@@ -82,7 +82,6 @@ def match_instance_centroids(
     truth_labels: np.ndarray,
     max_distance_px: float = 20.0,
 ) -> tuple[int, int, int]:
-    """Globally optimal one-to-one centroid matching within a distance gate."""
     if max_distance_px <= 0:
         raise ValueError("max_distance_px must be positive")
     pred = _centroids_from_labels(predicted_labels)
@@ -132,15 +131,9 @@ def paired_segmentation_metrics(
     truth: np.ndarray,
     max_distance_px: float = 20.0,
 ) -> dict[str, float]:
-    """Pixel and instance metrics for one paired prediction.
-
-    Pixel and instance keys are namespaced so they no longer overwrite each other.
-    Legacy flat keys (iou, dice, f1, ...) are retained for older callers.
-    """
     pixel = segmentation_pixel_metrics(np.asarray(predicted) > 0, np.asarray(truth) > 0)
     inst = instance_metrics(predicted, truth, max_distance_px)
     return {
-        # namespaced
         "pixel_iou": pixel["iou"],
         "pixel_dice": pixel["dice"],
         "pixel_precision": pixel["precision"],
@@ -153,7 +146,6 @@ def paired_segmentation_metrics(
         "false_negatives": inst["false_negatives"],
         "absolute_count_error": inst["absolute_count_error"],
         "relative_count_error": inst["relative_count_error"],
-        # legacy aliases (prefer instance F1 for 'f1'; pixel for 'iou'/'dice')
         "iou": pixel["iou"],
         "dice": pixel["dice"],
         "precision": inst["precision"],
@@ -162,12 +154,20 @@ def paired_segmentation_metrics(
     }
 
 
+def _finite_mean(values: list[float]) -> float:
+    arr = np.asarray(values, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return float("nan")
+    return float(arr.mean())
+
+
 def benchmark_segmentation(
     predicted_labels: Sequence[np.ndarray],
     truth_labels: Sequence[np.ndarray],
     max_distance_px: float = 20.0,
 ) -> dict[str, float]:
-    """Aggregate metrics with both namespaced and legacy keys."""
+    """Aggregate metrics. Non-finite relative errors (empty GT) are ignored in the mean."""
     if len(predicted_labels) != len(truth_labels):
         raise ValueError("predicted_labels and truth_labels must have the same length")
     if not predicted_labels:
@@ -178,7 +178,7 @@ def benchmark_segmentation(
     ]
 
     def mean(key: str) -> float:
-        return float(np.nanmean([row[key] for row in rows]))
+        return _finite_mean([row[key] for row in rows])
 
     return {
         "n_images": float(len(rows)),
@@ -191,7 +191,6 @@ def benchmark_segmentation(
         "instance_f1_mean": mean("instance_f1"),
         "absolute_count_error_mean": mean("absolute_count_error"),
         "relative_count_error_mean": mean("relative_count_error"),
-        # legacy
         "iou": mean("pixel_iou"),
         "dice": mean("pixel_dice"),
         "precision": mean("instance_precision"),
