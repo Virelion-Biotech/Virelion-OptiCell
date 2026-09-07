@@ -4,6 +4,7 @@
 Usage:
   python scripts/run_bbbc039_validation.py --max-images 50 --skip-download
   python scripts/run_bbbc039_validation.py --max-images 50 --backend cellpose --gpu --skip-download
+  python scripts/run_bbbc039_validation.py --max-images 50 --backend hybrid --gpu --skip-download
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ from qc_pipeline import (  # noqa: E402
     _HAS_CELLPOSE,
     _CELLPOSE_IMPORT_ERROR,
 )
+from ensemble import hybrid_threshold_cellpose  # noqa: E402
 
 BBBC039_IMAGES = "https://data.broadinstitute.org/bbbc/BBBC039/images.zip"
 BBBC039_MASKS = "https://data.broadinstitute.org/bbbc/BBBC039/masks.zip"
@@ -93,8 +95,7 @@ def decode_bbbc039_mask(path: Path) -> np.ndarray:
     if arr is None:
         raise IOError(f"Could not read mask {path}")
     if arr.ndim == 2:
-        channel = arr
-        binary = (channel > 0).astype(np.uint8)
+        binary = (arr > 0).astype(np.uint8)
         _n, labels = cv2.connectedComponents(binary, connectivity=8)
         return labels.astype(np.int32)
 
@@ -111,7 +112,9 @@ def decode_bbbc039_mask(path: Path) -> np.ndarray:
     flat = rgb.reshape(-1, 3)
     nonzero = flat[np.any(flat > 0, axis=1)]
     if nonzero.size:
-        view = nonzero.view([("r", nonzero.dtype), ("g", nonzero.dtype), ("b", nonzero.dtype)])
+        view = nonzero.view(
+            [("r", nonzero.dtype), ("g", nonzero.dtype), ("b", nonzero.dtype)]
+        )
         n_colors = int(np.unique(view).size)
     else:
         n_colors = 0
@@ -189,22 +192,20 @@ def find_pairs(images_root: Path, masks_root: Path) -> list[tuple[Path, Path]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="BBBC039 OptiCell validation (real metrics only)")
+    parser = argparse.ArgumentParser(
+        description="BBBC039 OptiCell validation (real metrics only)"
+    )
     parser.add_argument("--data-dir", type=Path, default=Path("data/bbbc039"))
     parser.add_argument("--max-images", type=int, default=50)
-    parser.add_argument("--backend", choices=("threshold", "adaptive", "cellpose"), default="threshold")
+    parser.add_argument(
+        "--backend",
+        choices=("threshold", "adaptive", "cellpose", "hybrid"),
+        default="threshold",
+    )
     parser.add_argument("--out-dir", type=Path, default=Path("outputs/bbbc039_validation"))
     parser.add_argument("--skip-download", action="store_true")
-    parser.add_argument(
-        "--cellpose-model",
-        default="cpsam",
-        help="Cellpose pretrained_model / model_type (default: cpsam for Cellpose 4)",
-    )
-    parser.add_argument(
-        "--gpu",
-        action="store_true",
-        help="Use GPU for Cellpose (set True on Ibex with --gres=gpu:...)",
-    )
+    parser.add_argument("--cellpose-model", default="cpsam")
+    parser.add_argument("--gpu", action="store_true")
     args = parser.parse_args()
 
     data_dir = args.data_dir.expanduser().resolve()
@@ -223,7 +224,10 @@ def main() -> int:
         unzip(masks_zip, masks_dir)
     else:
         if not images_dir.exists() or not masks_dir.exists():
-            print("ERROR: --skip-download set but images/masks folders missing", file=sys.stderr)
+            print(
+                "ERROR: --skip-download set but images/masks folders missing",
+                file=sys.stderr,
+            )
             return 2
 
     pairs = find_pairs(images_dir, masks_dir)
@@ -233,19 +237,25 @@ def main() -> int:
 
     pairs = pairs[: max(1, args.max_images)]
     print(f"[run] backend={args.backend} n_images={len(pairs)} gpu={args.gpu}")
-    print(f"[env] cellpose_available={_HAS_CELLPOSE} import_error={_CELLPOSE_IMPORT_ERROR!r}")
+    print(
+        f"[env] cellpose_available={_HAS_CELLPOSE} import_error={_CELLPOSE_IMPORT_ERROR!r}"
+    )
 
+    needs_cellpose = args.backend in ("cellpose", "hybrid")
     cellpose_seg: CellposeSegmenter | None = None
-    if args.backend == "cellpose":
+    if needs_cellpose:
         if not _HAS_CELLPOSE:
             print(
                 f"ERROR: Cellpose not importable. Detail: {_CELLPOSE_IMPORT_ERROR}",
                 file=sys.stderr,
             )
-            print("Try: python -c 'from cellpose import models; print(models)'", file=sys.stderr)
             return 5
-        print(f"[cellpose] loading model={args.cellpose_model!r} gpu={args.gpu} (once)...")
-        cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=bool(args.gpu))
+        print(
+            f"[cellpose] loading model={args.cellpose_model!r} gpu={args.gpu} (once)..."
+        )
+        cellpose_seg = CellposeSegmenter(
+            model_type=args.cellpose_model, gpu=bool(args.gpu)
+        )
         _ = cellpose_seg.model
         print("[cellpose] model ready")
 
@@ -274,9 +284,11 @@ def main() -> int:
                 seg = segment_threshold(gray)
             elif args.backend == "adaptive":
                 seg = segment_threshold(gray, adaptive=True)
-            else:
+            elif args.backend == "cellpose":
                 assert cellpose_seg is not None
                 seg = cellpose_seg.segment(gray)
+            else:
+                seg = hybrid_threshold_cellpose(gray, cellpose_segmenter=cellpose_seg)
 
             pred = seg.labels
             metrics = paired_segmentation_metrics(pred, truth)
@@ -296,7 +308,8 @@ def main() -> int:
                 f"  [{i}/{len(pairs)}] {img_path.name}: "
                 f"truth={int(truth.max())} pred={int(seg.count)} "
                 f"iou={metrics['iou']:.3f} dice={metrics['dice']:.3f} "
-                f"f1={metrics['f1']:.3f} count_err={metrics['absolute_count_error']:.0f}"
+                f"f1={metrics['f1']:.3f} count_err={metrics['absolute_count_error']:.0f} "
+                f"method={seg.method}"
             )
         except Exception as exc:
             print(f"  [{i}/{len(pairs)}] FAIL {img_path.name}: {exc}")
@@ -310,7 +323,7 @@ def main() -> int:
         "dataset": "BBBC039",
         "source": "https://bbbc.broadinstitute.org/BBBC039",
         "backend": args.backend,
-        "cellpose_model": args.cellpose_model if args.backend == "cellpose" else None,
+        "cellpose_model": args.cellpose_model if needs_cellpose else None,
         "gpu": bool(args.gpu),
         "n_requested": len(pairs),
         "n_scored": len(pred_labels),
