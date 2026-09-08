@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Subset validation on BBBC039 (U2OS nuclei) using OptiCell metrics.
+"""BBBC039 validation using OptiCell metrics (measured numbers only).
 
 Usage:
   python scripts/run_bbbc039_validation.py --max-images 50 --skip-download
-  python scripts/run_bbbc039_validation.py --max-images 50 --backend cellpose --gpu --skip-download
-  python scripts/run_bbbc039_validation.py --max-images 50 --backend hybrid --gpu --skip-download
+  python scripts/run_bbbc039_validation.py --max-images 200 --backend hybrid --gpu --skip-download
 """
 from __future__ import annotations
 
@@ -32,7 +31,7 @@ from qc_pipeline import (  # noqa: E402
     _HAS_CELLPOSE,
     _CELLPOSE_IMPORT_ERROR,
 )
-from ensemble import hybrid_threshold_cellpose  # noqa: E402
+from ensemble import hybrid_threshold_cellpose, fov_confidence  # noqa: E402
 
 BBBC039_IMAGES = "https://data.broadinstitute.org/bbbc/BBBC039/images.zip"
 BBBC039_MASKS = "https://data.broadinstitute.org/bbbc/BBBC039/masks.zip"
@@ -206,6 +205,11 @@ def main() -> int:
     parser.add_argument("--skip-download", action="store_true")
     parser.add_argument("--cellpose-model", default="cpsam")
     parser.add_argument("--gpu", action="store_true")
+    parser.add_argument(
+        "--include-empty-gt",
+        action="store_true",
+        help="Score FOVs whose decoded ground truth has zero objects (default: skip)",
+    )
     args = parser.parse_args()
 
     data_dir = args.data_dir.expanduser().resolve()
@@ -268,6 +272,7 @@ def main() -> int:
     pred_labels: list[np.ndarray] = []
     truth_labels: list[np.ndarray] = []
     per_image: list[dict] = []
+    skipped_empty_gt: list[str] = []
 
     for i, (img_path, mask_path) in enumerate(pairs, 1):
         try:
@@ -279,6 +284,12 @@ def main() -> int:
                     (gray.shape[1], gray.shape[0]),
                     interpolation=cv2.INTER_NEAREST,
                 ).astype(np.int32)
+
+            truth_count = int(truth.max())
+            if truth_count == 0 and not args.include_empty_gt:
+                skipped_empty_gt.append(img_path.name)
+                print(f"  [{i}/{len(pairs)}] SKIP empty-GT {img_path.name}")
+                continue
 
             if args.backend == "threshold":
                 seg = segment_threshold(gray)
@@ -292,13 +303,16 @@ def main() -> int:
 
             pred = seg.labels
             metrics = paired_segmentation_metrics(pred, truth)
+            conf = fov_confidence(gray, pred)
             row = {
                 "index": i,
                 "image": relpath(img_path, data_dir),
                 "mask": relpath(mask_path, data_dir),
                 "pred_count": int(seg.count),
-                "truth_count": int(truth.max()),
+                "truth_count": truth_count,
                 "method": seg.method,
+                "confidence_score": float(conf["confidence_score"]),
+                "confidence_flags": str(conf["flags"]),
                 **{k: float(v) for k, v in metrics.items()},
             }
             per_image.append(row)
@@ -306,10 +320,10 @@ def main() -> int:
             truth_labels.append(truth)
             print(
                 f"  [{i}/{len(pairs)}] {img_path.name}: "
-                f"truth={int(truth.max())} pred={int(seg.count)} "
+                f"truth={truth_count} pred={int(seg.count)} "
                 f"iou={metrics['iou']:.3f} dice={metrics['dice']:.3f} "
                 f"f1={metrics['f1']:.3f} count_err={metrics['absolute_count_error']:.0f} "
-                f"method={seg.method}"
+                f"conf={conf['confidence_score']:.0f}"
             )
         except Exception as exc:
             print(f"  [{i}/{len(pairs)}] FAIL {img_path.name}: {exc}")
@@ -317,6 +331,9 @@ def main() -> int:
     if not pred_labels:
         print("ERROR: no successful segmentations", file=sys.stderr)
         return 4
+
+    if skipped_empty_gt:
+        print(f"[note] skipped empty-GT FOVs: {len(skipped_empty_gt)} -> {skipped_empty_gt}")
 
     summary = benchmark_segmentation(pred_labels, truth_labels)
     payload = {
@@ -327,6 +344,8 @@ def main() -> int:
         "gpu": bool(args.gpu),
         "n_requested": len(pairs),
         "n_scored": len(pred_labels),
+        "n_skipped_empty_gt": len(skipped_empty_gt),
+        "skipped_empty_gt": skipped_empty_gt,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "software": {
             "script": "scripts/run_bbbc039_validation.py",
@@ -334,7 +353,7 @@ def main() -> int:
         },
         "summary": {k: float(v) for k, v in summary.items()},
         "per_image": per_image,
-        "note": "All numbers measured on the listed images only. Not a full-corpus claim.",
+        "note": "Measured only. Empty-GT FOVs skipped unless --include-empty-gt.",
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
