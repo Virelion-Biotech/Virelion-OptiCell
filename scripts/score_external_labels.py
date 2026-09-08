@@ -11,13 +11,11 @@ Usage:
     --max-images 50 \
     --name cellprofiler \
     --out-dir outputs/bbbc039_validation
-
-Prediction files must share the image stem with BBBC039 TIFFs
-(e.g. IXMtest_A02_s1_....png or .tif label maps).
 """
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from datetime import datetime, timezone
@@ -32,13 +30,21 @@ if str(ROOT) not in sys.path:
 
 from validation import benchmark_segmentation, paired_segmentation_metrics  # noqa: E402
 
-# Reuse BBBC039 pairing/decode from the main runner
-from scripts.run_bbbc039_validation import (  # noqa: E402
-    decode_bbbc039_mask,
-    find_pairs,
-    load_image_gray,
-    relpath,
-)
+
+def _load_bbbc039_helpers():
+    path = ROOT / "scripts" / "run_bbbc039_validation.py"
+    spec = importlib.util.spec_from_file_location("run_bbbc039_validation", path)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_bbbc = _load_bbbc039_helpers()
+decode_bbbc039_mask = _bbbc.decode_bbbc039_mask
+find_pairs = _bbbc.find_pairs
+load_image_gray = _bbbc.load_image_gray
+relpath = _bbbc.relpath
 
 
 def load_label_map(path: Path) -> np.ndarray:
@@ -46,7 +52,6 @@ def load_label_map(path: Path) -> np.ndarray:
     if arr is None:
         raise IOError(f"Could not read prediction labels {path}")
     if arr.ndim == 3:
-        # color-encoded → connected components on nonzero
         if arr.shape[2] >= 3:
             rgb = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_BGR2RGB)
             binary = (rgb.max(axis=2) > 0).astype(np.uint8)
@@ -54,12 +59,9 @@ def load_label_map(path: Path) -> np.ndarray:
             binary = (arr[:, :, 0] > 0).astype(np.uint8)
         _n, labels = cv2.connectedComponents(binary, connectivity=8)
         return labels.astype(np.int32)
-    # already integer labels or binary
-    if arr.dtype == np.uint8 or arr.dtype == np.uint16:
-        if int(arr.max()) <= 1:
-            _n, labels = cv2.connectedComponents((arr > 0).astype(np.uint8), connectivity=8)
-            return labels.astype(np.int32)
-        return arr.astype(np.int32)
+    if arr.dtype in (np.uint8, np.uint16) and int(arr.max()) <= 1:
+        _n, labels = cv2.connectedComponents((arr > 0).astype(np.uint8), connectivity=8)
+        return labels.astype(np.int32)
     return arr.astype(np.int32)
 
 
@@ -73,7 +75,6 @@ def index_predictions(pred_dir: Path) -> dict[str, Path]:
         if "__MACOSX" in p.parts:
             continue
         out[p.stem] = p.resolve()
-        # also strip common prefixes like label_
         if p.stem.startswith("label_"):
             out[p.stem[len("label_") :]] = p.resolve()
     return out
@@ -86,11 +87,7 @@ def main() -> int:
     parser.add_argument("--max-images", type=int, default=50)
     parser.add_argument("--name", default="external")
     parser.add_argument("--out-dir", type=Path, default=Path("outputs/bbbc039_validation"))
-    parser.add_argument(
-        "--include-empty-gt",
-        action="store_true",
-        help="Include FOVs with empty decoded GT (default: skip)",
-    )
+    parser.add_argument("--include-empty-gt", action="store_true")
     args = parser.parse_args()
 
     data_dir = args.data_dir.expanduser().resolve()
@@ -99,9 +96,7 @@ def main() -> int:
         print(f"ERROR: pred-dir not found: {pred_dir}", file=sys.stderr)
         return 2
 
-    images_dir = data_dir / "images"
-    masks_dir = data_dir / "masks"
-    pairs = find_pairs(images_dir, masks_dir)
+    pairs = find_pairs(data_dir / "images", data_dir / "masks")
     if not pairs:
         print("ERROR: no BBBC039 pairs", file=sys.stderr)
         return 3
@@ -147,7 +142,7 @@ def main() -> int:
                 "index": i,
                 "image": relpath(img_path, data_dir),
                 "mask": relpath(mask_path, data_dir),
-                "pred": relpath(pred_path, pred_dir),
+                "pred": str(pred_path),
                 "pred_count": int(pred.max()),
                 "truth_count": truth_count,
                 "method": args.name,
