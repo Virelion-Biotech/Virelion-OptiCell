@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 
-from qc_pipeline import SegmentationResult, segment_threshold, CellposeSegmenter, _build_segmentation_result
+from qc_pipeline import SegmentationResult, segment_threshold, CellposeSegmenter
 
 
 @dataclass(frozen=True)
@@ -80,6 +80,58 @@ def ensemble_from_results(
     )
 
 
+def fov_confidence(
+    gray: np.ndarray,
+    labels: np.ndarray,
+    *,
+    focus_score: float | None = None,
+    agreement_iou: float | None = None,
+    count_delta: int | None = None,
+) -> dict[str, float | str]:
+    """Cheap per-FOV confidence features for orchestration / QC dashboards.
+
+    Not a calibrated probability. Higher `score` (0–100) means fewer red flags.
+    """
+    import cv2
+
+    if focus_score is None:
+        focus_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    fg = labels > 0
+    fg_frac = float(fg.mean()) if labels.size else 0.0
+    n = int(labels.max()) if labels.size else 0
+
+    score = 100.0
+    flags: list[str] = []
+    if focus_score < 50:
+        score -= 25
+        flags.append("LOW_FOCUS")
+    if fg_frac < 0.005:
+        score -= 20
+        flags.append("SPARSE_FG")
+    if fg_frac > 0.55:
+        score -= 15
+        flags.append("DENSE_FG")
+    if n == 0:
+        score -= 30
+        flags.append("ZERO_OBJECTS")
+    if agreement_iou is not None and agreement_iou < 0.5:
+        score -= 20
+        flags.append("BACKEND_DISAGREE")
+    if count_delta is not None and count_delta > 20:
+        score -= 15
+        flags.append("COUNT_DISAGREE")
+
+    return {
+        "confidence_score": float(np.clip(score, 0, 100)),
+        "focus_score": float(focus_score),
+        "foreground_fraction": fg_frac,
+        "object_count": float(n),
+        "agreement_iou": float(agreement_iou) if agreement_iou is not None else float("nan"),
+        "count_delta": float(count_delta) if count_delta is not None else float("nan"),
+        "flags": ";".join(flags) if flags else "",
+    }
+
+
 def hybrid_threshold_cellpose(
     gray: np.ndarray,
     cellpose_segmenter: Optional[CellposeSegmenter] = None,
@@ -88,26 +140,16 @@ def hybrid_threshold_cellpose(
     count_tol_frac: float = 0.12,
     count_tol_abs: int = 8,
 ) -> SegmentationResult:
-    """Hybrid backend measured to balance Cellpose boundaries with threshold counts.
+    """Count-gated hybrid: Cellpose when counts agree with threshold, else threshold.
 
-    Measured on BBBC039 n=50 (2026-09):
-      - threshold: Dice≈0.95, instance F1≈0.96, |count err|≈6
-      - cellpose cpsam: Dice≈0.97, instance F1≈0.91, |count err|≈15
-
-    Rule (count-safe):
-      - Run both backends.
-      - If Cellpose count is within tol of threshold count → prefer **Cellpose**
-        (better pixel overlap when instance topology agrees).
-      - Otherwise prefer **threshold** (more reliable object counts on this modality).
-
-    Always attaches diagnostics on the chosen SegmentationResult.method string.
+    Measured BBBC039 n=50: threshold F1≈0.96 / count≈6; cellpose Dice≈0.97 / count≈15.
+    n=200: hybrid Dice 0.929, F1 0.924, |count|≈9 — count-safe default, not dual-axis SOTA.
     """
     thr = segment_threshold(
         gray, min_area=min_area, max_area_frac=max_area_frac, adaptive=False
     )
 
     if cellpose_segmenter is None:
-        # classical-only fallback
         return SegmentationResult(
             count=thr.count,
             labels=thr.labels,

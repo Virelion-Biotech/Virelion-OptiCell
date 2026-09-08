@@ -1,70 +1,87 @@
 # Virelion-OptiCell
 
-OptiCell is a headless Python toolkit for microscopy quality control, cell segmentation, tracking, phenotyping, experiment QC, and quantitative image analysis.
+**Headless Python toolkit** for microscopy QC, segmentation, tracking, phenotyping, and experiment-level quantitative analysis.
+
+**Product thesis:** given raw microscopy data, OptiCell should produce *trustworthy* measurements with less manual work and explicit QC — not another black-box segmenter.
+
+We publish **measured** numbers only. No fabricated benchmarks.
+
+---
+
+## Measured baseline — BBBC039 (U2OS Hoechst nuclei)
+
+Public dataset: [BBBC039](https://bbbc.broadinstitute.org/BBBC039) · 200 FOVs with instance masks.
+
+| Backend | n | Dice | Instance F1 | Mean \|count err\| | Rel. count err. |
+|---------|--:|-----:|------------:|------------------:|----------------:|
+| **Threshold (Otsu)** | 50 | 0.945 | **0.955** | **6.1** | 0.058 |
+| **Cellpose-SAM (`cpsam`)** | 50 | **0.970** | 0.908 | 15.0 | — |
+| **Hybrid (count-gated)** | 50 | 0.951 | 0.950 | 6.4 | 0.065 |
+| **Threshold** | **200** | 0.925 | **0.929** | **8.7** | **0.077** |
+| **Hybrid** | **200** | **0.929** | 0.924 | 9.0 | 0.083 |
+
+- n=200 relative count error uses **197 FOVs** with nonzero ground truth (3 empty-GT masks documented under `outputs/bbbc039_validation/`).
+- Hybrid prefers Cellpose when object counts agree with threshold; otherwise threshold (count-safe default).
+- Full write-ups: `outputs/bbbc039_validation/`.
+
+```bash
+# Reproduce (data cached after first download)
+pip install -e '.[cellpose]'   # optional for Cellpose/hybrid
+python scripts/run_bbbc039_multi_backend.py --max-images 200 --backends threshold,hybrid --skip-download
+```
+
+---
 
 ## What it contains
 
-- Acquisition QC for focus, brightness, contrast, saturation, dimensions, channels, clipping, illumination, and artifacts.
-- Threshold and adaptive-threshold segmentation with optional Cellpose backends.
-- Segmentation acceptance and parameter-sensitivity analysis.
-- 2-D/3-D tracking and lineage tables.
-- Morphology, intensity, texture, density, and spatial features.
-- Nuclear/cytoplasmic compartment measurements.
-- Time-lapse event analysis.
-- Plate/well QC, control normalization, edge-effect analysis, Z-prime, and sample-size planning.
-- Replicate-aware statistics, bootstrap intervals, permutation tests, and FDR.
-- TIFF/OME-TIFF I/O and large-image iteration.
-- Deterministic outputs and input/parameter provenance.
+- Acquisition QC: focus, brightness, contrast, saturation, clipping, illumination, artifacts
+- Segmentation: Otsu / adaptive / optional Cellpose / **hybrid** ensemble
+- Validation metrics: IoU, Dice, instance F1 (centroid matching), count error
+- Tracking, lineage, morphology/intensity/texture features
+- Plate/well QC, Z-prime, replicate-aware statistics, provenance
 
-There is no required GUI or Streamlit dependency. The public Python API is under `opticell`.
+Public API: `opticell`. No required GUI.
 
 ## Installation
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
+pip install -U pip
 pip install -e .
-```
-
-Optional Cellpose support:
-
-```bash
+# optional
 pip install -e '.[cellpose]'
+pip install packaging   # needed by some Cellpose installs
 ```
 
 ## Usage
 
 ```bash
 opticell /path/to/images -o qc_summary.csv
-opticell /path/to/images -o qc_summary.csv --json qc_summary.json
 opticell /path/to/images --cell-method cellpose -o qc_summary.csv
 ```
 
-Python:
-
 ```python
 from opticell import analyze_folder
-
 result = analyze_folder("images/")
 ```
 
-## Inputs and outputs
+### Benchmark a public set
 
-**Inputs:** TIFF/OME-TIFF microscopy images or image folders, acquisition metadata, segmentation/tracking parameters, optional masks/labels, and experimental grouping information.
+```bash
+python scripts/run_bbbc039_validation.py --max-images 50 --backend threshold --skip-download
+python scripts/run_bbbc039_validation.py --max-images 50 --backend hybrid --gpu --skip-download
+python scripts/run_bbbc039_multi_backend.py --max-images 200 --backends threshold,hybrid --skip-download
+```
 
-**Outputs:** QC summaries, segmentation results, object-level feature tables, tracks/lineages, time-lapse events, experiment-level statistics, and provenance records.
+## Roadmap
 
-## Validation
-
-Segmentation benchmarking supports pixel/voxel overlap metrics, instance matching, count error, runtime, and failure accounting. Robustness summaries measure sensitivity to analysis parameters. Software tests and CI cover supported Python versions, linting, compilation, CLI checks, distribution builds, and public API imports.
-
-Ground-truth image annotations remain necessary to establish segmentation correctness.
+See [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md): Stage 1 scientific benchmark → one killer workflow (QC→segment→track→phenotype) → orchestration AI → usability → hard real-world datasets.
 
 ## Limitations
 
-Image-derived measurements depend on acquisition settings, preprocessing, segmentation quality, and biological context. QC gates are decision aids, not evidence of biological validity. Statistical calculations must use the experimental unit defined by the study design. Cellpose performance depends on the selected model and image domain.
+QC gates are decision aids, not biological proof. Segmentation quality depends on modality and parameters. Cellpose depends on the chosen model and domain. Always keep train/val/test discipline if you fine-tune.
 
 ## License
 
-GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). See `LICENSE`.
+AGPL-3.0-or-later. See `LICENSE`.
