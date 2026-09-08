@@ -1,73 +1,92 @@
-# CellProfiler baseline on BBBC039 (Stage 1)
+# CellProfiler baseline on BBBC039 (Stage 1 — real CP labels)
 
-**Goal:** fair comparison on the **same FOV list** used by OptiCell threshold / hybrid / Cellpose.
+**Goal:** measure CellProfiler on the **same FOVs** as OptiCell, with the **same** `validation.py` metrics.
 
-Policy: publish only measured metrics from this procedure.
+Policy: no fabricated CP numbers. This doc only describes how to produce them.
 
-## Why
+## Reality check
 
-The product headline is: *Is OptiCell measurably better, faster, or more reproducible than existing workflows?*
+| Environment | CellProfiler |
+|-------------|--------------|
+| Laptop / workstation | Supported (GUI or CLI) |
+| Conda + Java | Supported (`conda install -c bioconda cellprofiler`) |
+| Google Colab | **Usually not practical** (Java, wx, Python pin) |
 
-CellProfiler is the established open platform for HCS. BBBC006 itself used CellProfiler `IdentifyPrimaryObjects` (Otsu 2-class) for nuclei counts.
+On Colab, use OptiCell backends. Run **real CP** on a machine where `cellprofiler` works, then score.
 
-## Procedure
+---
 
-### 1. Install CellProfiler
+## Path A — one script (CLI on PATH)
 
-https://cellprofiler.org/releases (GUI or headless `cellprofiler` CLI).
+```bash
+cd ~/Virelion-OptiCell   # or your clone
+git pull origin main
 
-### 2. Input images
-
-Use the same BBBC039 TIFFs OptiCell scores:
-
-```text
-data/bbbc039/images/images/*.tif
+# BBBC039 data must already exist under data/bbbc039/
+MAX_IMAGES=50 bash scripts/run_cellprofiler_bbbc039.sh
 ```
 
-Basename order must match `scripts/run_bbbc039_validation.py` (sorted stems).
+This will:
 
-### 3. Recommended modules (nuclei, fluorescent)
+1. Stage first N TIFFs  
+2. Run `cellprofiler -c -r -p pipelines/bbbc039_nuclei.cppipe`  
+3. Collect label PNGs into `outputs/cellprofiler_bbbc039/labels/`  
+4. Call `score_external_labels.py --name cellprofiler`  
 
-Document these settings in your run notes:
+**Requires:** `cellprofiler` on `PATH`.
 
-| Module | Setting |
-|--------|---------|
-| Images / Metadata / NamesAndTypes | Load grayscale DNA/Hoechst channel |
-| IdentifyPrimaryObjects | Input = DNA |
-| Typical diameter | min 10–15 px, max ~80–120 px (tune on 1 FOV) |
-| Threshold | Global **Otsu**, **two-class**, minimize weighted variance |
-| Discard objects outside diameter | Yes |
-| Discard objects touching border | Optional (report which) |
-| Declump | Shape or Intensity; report choice |
-| ConvertObjectsToImage | Objects → uint16 label image |
-| SaveImages | One label PNG/TIFF per FOV, stem = image stem |
+If the bundled `.cppipe` fails to load in your CP version, use Path B (GUI) and keep the same score command.
 
-Optional reference pipeline style: BBBC006 `Batch_data.cppipe`  
-https://data.broadinstitute.org/bbbc/BBBC006/Batch_data.cppipe
+---
 
-### 4. Score with OptiCell (same metrics)
+## Path B — CellProfiler GUI (most reliable)
+
+1. Install: https://cellprofiler.org/releases  
+2. Open CellProfiler → **File → Import → Pipeline from file** → `pipelines/bbbc039_nuclei.cppipe`  
+   (or build IdentifyPrimaryObjects manually with settings below)  
+3. **Images** module: drag `data/bbbc039/images/images/*.tif` (first 50 for pilot)  
+4. **IdentifyPrimaryObjects** (recommended starting point):
+
+   | Setting | Value |
+   |---------|--------|
+   | Input | DNA / grayscale |
+   | Diameter (min, max) | 10, 80 px |
+   | Discard outside diameter | Yes |
+   | Discard touching border | Yes |
+   | Threshold | Global **Otsu**, **two classes** |
+   | Declump | Shape |
+
+5. **ConvertObjectsToImage** → uint16 labels  
+6. **SaveImages** → PNG, one file per FOV  
+   - File name **from image filename**  
+   - Prefer exact stem match: `IXMtest_....png` (same as TIFF without `.tif`)  
+7. Score:
 
 ```bash
 python scripts/score_external_labels.py \
-  --pred-dir path/to/cellprofiler_labels \
+  --pred-dir /path/to/your/cp_label_pngs \
   --data-dir data/bbbc039 \
   --max-images 50 \
-  --name cellprofiler \
-  --out-dir outputs/bbbc039_validation
+  --name cellprofiler
 ```
 
-Writes `bbbc039_cellprofiler_nN.json` with IoU, Dice, instance F1, count error — **identical metric code** as OptiCell backends.
+Paste the SUMMARY block into the repo (measured only).
 
-### 5. Report
+---
 
-Paste SUMMARY into a PR / `outputs/bbbc039_validation/BBBC039_*_CELLPROFILER.md` with:
+## Path C — you already have label PNGs
 
-- CellProfiler version
-- Exact module settings
-- n FOVs and image list hash if available
-- Runtime wall-clock
+```bash
+python scripts/score_external_labels.py \
+  --pred-dir /absolute/path/to/cp_labels \
+  --data-dir data/bbbc039 \
+  --max-images 50 \
+  --name cellprofiler
+```
 
-Do **not** invent numbers. If CP is not run, leave the row blank.
+Stems must match BBBC039 TIFF stems.
+
+---
 
 ## OptiCell numbers already measured (same set)
 
@@ -76,7 +95,19 @@ Do **not** invent numbers. If CP is not run, leave the row blank.
 | Threshold | 50 | 0.945 | 0.955 | 6.1 |
 | Cellpose-SAM | 50 | 0.970 | 0.908 | 15.0 |
 | Hybrid | 50 | 0.951 | 0.950 | 6.4 |
-| Threshold | 200 | 0.925 | 0.929 | 8.7 |
-| Hybrid | 200 | 0.929 | 0.924 | 9.0 |
+| Threshold export→score round-trip | 50 | 0.945 | 0.955 | 6.1 |
+| **CellProfiler** | 50 | *run Path A/B* | | |
 
-Fill CellProfiler when the export + score step completes.
+---
+
+## Install hints
+
+```bash
+# Conda (often easiest on Linux)
+conda create -n cp python=3.9 -y
+conda activate cp
+conda install -c bioconda -c conda-forge cellprofiler -y
+cellprofiler --version
+```
+
+Desktop app: note the full path to the binary and either add it to `PATH` or call it explicitly in the shell script.
