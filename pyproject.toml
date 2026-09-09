@@ -27,6 +27,7 @@ dev = [
 
 [project.scripts]
 opticell = "qc_pipeline:_main"
+opticell-hearttwin = "opticell.hearttwin_adapter:main"
 
 [tool.setuptools]
 py-modules = [
