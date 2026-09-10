@@ -6,7 +6,7 @@ from lineage_events import division_consistency, lineage_event_summary
 from screening import normalize_to_controls, percent_control, plate_edge_effect, robust_zscore, z_prime_factor
 from screening_qc import assay_qc_decision, classify_z_prime
 from sensitivity import threshold_sensitivity
-from stream_io import iter_array_chunks
+from stream_io import iter_array_chunks, iter_tiff_frames
 from opticell.lineage_quality import lineage_quality_summary
 from opticell.ome_io import load_ome_series, read_ome_info
 from opticell.power import two_group_sample_size
@@ -129,3 +129,11 @@ def test_stream_validation_rejects_invalid_chunks():
         assert "chunk_size" in str(exc)
     else:
         raise AssertionError("expected invalid chunk size to fail")
+
+
+def test_streaming_tiff_rejects_unsupported_axis(tmp_path):
+    import tifffile
+    path = tmp_path / "stack.tif"
+    tifffile.imwrite(path, np.zeros((3, 4, 5), dtype=np.uint8))
+    with np.testing.assert_raises(ValueError):
+        list(iter_tiff_frames(str(path), axis=1))
