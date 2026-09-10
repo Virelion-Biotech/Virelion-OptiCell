@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from image_io import ImageStack, canonicalize_axes, project_z, select_channel, select_time
 from quantitative import (
@@ -68,6 +69,20 @@ def test_dimension_aware_stack_helpers():
     projected = project_z(stack, "max")
     assert projected.axes == "TCYX"
     assert projected.data.shape == (2, 2, 4, 5)
+
+
+def test_integer_mean_projection_preserves_fractional_signal():
+    data = np.array([[[[0, 0], [0, 0]]], [[[1, 1], [1, 1]]]], dtype=np.uint16)
+    stack = ImageStack(data=data, axes="ZCYX", path="x.tif", dtype="uint16", shape=data.shape)
+    projected = project_z(stack, "mean")
+    assert np.issubdtype(projected.data.dtype, np.floating)
+    assert np.allclose(projected.data, 0.5)
+
+
+def test_canonicalize_axes_rejects_duplicate_axes():
+    stack = ImageStack(data=np.zeros((2, 2)), axes="YY", path="x.tif", dtype="float64", shape=(2, 2))
+    with pytest.raises(ValueError, match="unique name"):
+        canonicalize_axes(stack)
 
 
 def test_canonicalize_axes():
