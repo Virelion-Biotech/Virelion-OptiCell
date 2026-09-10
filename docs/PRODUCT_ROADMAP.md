@@ -2,8 +2,6 @@
 
 **Headline question:** *Is OptiCell measurably better, faster, or more reproducible than existing workflows?*
 
-Differentiator is **not** “we wrap Cellpose.” It is:
-
 > Given raw microscopy data, OptiCell automatically produces **trustworthy biological measurements** with less manual work and better QC than the alternatives.
 
 Policy: publish only measured metrics. Stop rather than invent numbers.
@@ -14,15 +12,15 @@ Policy: publish only measured metrics. Stop rather than invent numbers.
 
 | Stage | Status |
 |-------|--------|
-| **1 Scientific benchmark** | **Done** — BBBC039 n=197 (threshold, hybrid, Cellpose-SAM, CellProfiler) |
-| **2 Killer use case** | **Done (pipeline + CTC runs)** — QC→segment→features→phenotype→tracking on 6 CTC sequences |
-| **3 AI orchestration** | FOV confidence + hybrid present; auto-backend next |
+| **1 Scientific benchmark** | **Done** — BBBC039 n=197 |
+| **2 Killer use case + TRA** | **Done (measured)** — CTC TRA/DET/LNK on 6 sequences |
+| **3 AI orchestration** | Next |
 | **4 Easy UI** | Not started |
 | **5 Ugly real data** | Not started |
 
 ---
 
-## Stage 1 — BBBC039 (measured)
+## Stage 1 — BBBC039 segmentation (measured)
 
 | Backend | n | Dice | Instance F1 | Mean \|count err\| | Rel count |
 |---------|--:|-----:|------------:|------------------:|----------:|
@@ -33,34 +31,32 @@ Policy: publish only measured metrics. Stop rather than invent numbers.
 
 ---
 
-## Stage 2 — Killer workflow + CTC TL
+## Stage 2 — CTC tracking accuracy (measured)
 
-```bash
-python scripts/run_killer_workflow.py data/ctc/Fluo-N2DH-GOWT1/01 \
-  -o outputs/stage2_gowt1_01 --backend threshold --enable-tracking
-```
+Threshold + assignment tracking; `traccuracy` CTCMetrics.
 
-**Measured Colab runs** (threshold + tracking, 6 sequences):
+| Dataset / seq | TRA | DET | LNK |
+|---------------|----:|----:|----:|
+| GOWT1 01 | 0.364 | 0.367 | 0.346 |
+| GOWT1 02 | 0.310 | 0.309 | 0.314 |
+| SIM+ 01 | **0.809** | **0.831** | **0.664** |
+| SIM+ 02 | **0.000** | **0.000** | 0.098 |
+| HeLa 01 | 0.652 | 0.684 | 0.439 |
+| HeLa 02 | 0.715 | 0.754 | 0.453 |
 
-| Dataset / seq | Frames | Objects | Tracks |
-|---------------|-------:|--------:|-------:|
-| GOWT1 01/02 | 92+92 | 2.6k+2.9k | 730+869 |
-| SIM+ 01/02 | 65+150 | 2.7k+28k | 596+8013 |
-| HeLa 01/02 | 92+92 | 6.7k+21k | 1.6k+5.5k |
+Full report: `outputs/stage2_ctc/STAGE2_CTC_TRA_REPORT.md`.
 
-Report: `outputs/stage2_ctc/STAGE2_CTC_REPORT.md`.
-
-**Not yet:** TRA/SEG vs CTC ground truth (optional next measurement).
+**Takeaway:** end-to-end TL pipeline works and is auditable; threshold DET limits TRA on hard sequences; SIM+02 is a documented failure mode (massive FP).
 
 ---
 
-## Stage 3 — AI orchestration
+## Stage 3 — AI orchestration (next)
 
 ```
 image → QC → choose backend → segment → confidence → track → phenotype → report
 ```
 
-Present: hybrid switch, `fov_confidence()`. Next: auto backend from confidence, HITL hooks.
+Use measured confidence / DET proxies to avoid SIM+02-style collapses.
 
 ---
 
