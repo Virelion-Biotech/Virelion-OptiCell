@@ -81,13 +81,8 @@ def test_tracking_reports_local_assignment_ambiguity_without_changing_ids():
     b = np.zeros_like(a)
     b[10, 9] = 1
     b[10, 11] = 2
-
-    tracks = link_frames(
-        [a, b],
-        TrackingConfig(max_distance_px=10, ambiguity_margin_fraction=0.25),
-    )
+    tracks = link_frames([a, b], TrackingConfig(max_distance_px=10, ambiguity_margin_fraction=0.25))
     matched = tracks[tracks["frame"] == 1].sort_values("track_id")
-
     assert list(matched["track_id"]) == [1, 2]
     assert np.allclose(matched["distance_px"].to_numpy(), [4.0, 4.0])
     assert np.allclose(matched["alternative_distance_px"].to_numpy(), [6.0, 6.0])
@@ -99,6 +94,15 @@ def test_tracking_reports_local_assignment_ambiguity_without_changing_ids():
 def test_tracking_rejects_invalid_ambiguity_threshold():
     with pytest.raises(ValueError):
         TrackingConfig(ambiguity_margin_fraction=1.1).validate()
+
+
+def test_tracking_reuses_per_frame_labels_without_losing_active_track():
+    first = np.zeros((30, 30), dtype=np.int32); first[5:9, 5:9] = 1
+    empty = np.zeros_like(first)
+    reused = np.zeros_like(first); reused[5:9, 6:10] = 1
+    tracks = link_frames([first, empty, reused], TrackingConfig(max_distance_px=5, max_gap=1))
+    observed = tracks[tracks["frame"] == 2]
+    assert observed.iloc[0]["track_id"] == 1
 
 
 def test_experiment_metadata_and_plate_matrix():
