@@ -90,13 +90,13 @@ def link_frames_3d(
         current_labels = sorted(centers)
         current_points = np.asarray([centers[label] for label in current_labels], dtype=float)
         previous = []
-        for object_label, state in list(active.items()):
+        for track_id, state in list(active.items()):
             gap = frame - int(state["last_frame"])
             if gap <= cfg.max_gap + 1:
                 position = np.asarray(state["position"], dtype=float)
                 velocity = np.asarray(state["velocity"], dtype=float)
                 predicted = position + velocity * frame_interval * gap if cfg.use_velocity_prediction and gap > 0 else position
-                previous.append((object_label, state, predicted, gap))
+                previous.append((track_id, state, predicted, gap))
 
         used_current: set[int] = set()
         if previous and len(current_points):
@@ -104,7 +104,7 @@ def link_frames_3d(
             distance_matrix = np.linalg.norm(previous_points[:, None, :] - current_points[None, :, :], axis=2)
             row_limits = np.asarray([cfg.max_distance_um * max(1, item[3]) for item in previous], dtype=float)
             for previous_index, current_index, distance in _assignment_3d(distance_matrix, row_limits):
-                object_label, state, _, gap = previous[previous_index]
+                previous_track_id, state, _, gap = previous[previous_index]
                 new_label = current_labels[current_index]
                 position = current_points[current_index]
                 old_position = np.asarray(state["position"], dtype=float)
@@ -121,8 +121,8 @@ def link_frames_3d(
                     "distance_um": distance, "gap": gap - 1,
                     "match_confidence": max(0.0, 1.0 - distance / row_limits[previous_index]),
                 })
-                active.pop(object_label, None)
-                active[new_label] = {"position": position, "velocity": velocity, "last_frame": frame, "track_id": track_id}
+                active.pop(previous_track_id, None)
+                active[track_id] = {"position": position, "velocity": velocity, "last_frame": frame, "track_id": track_id}
                 used_current.add(new_label)
 
         for label in current_labels:
@@ -135,9 +135,9 @@ def link_frames_3d(
                 "dz_um": np.nan, "dy_um": np.nan, "dx_um": np.nan,
                 "distance_um": np.nan, "gap": 0, "match_confidence": np.nan,
             })
-            active[label] = {"position": position, "velocity": np.zeros(3), "last_frame": frame, "track_id": next_track}
+            active[next_track] = {"position": position, "velocity": np.zeros(3), "last_frame": frame, "track_id": next_track}
             next_track += 1
-        active = {label: state for label, state in active.items() if frame - int(state["last_frame"]) <= cfg.max_gap}
+        active = {track_id: state for track_id, state in active.items() if frame - int(state["last_frame"]) <= cfg.max_gap}
 
     columns = ["frame", "label", "track_id", "z_um", "y_um", "x_um", "dz_um", "dy_um", "dx_um", "distance_um", "gap", "match_confidence"]
     return pd.DataFrame(rows, columns=columns)
