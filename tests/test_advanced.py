@@ -57,6 +57,33 @@ def test_tracking_motion_summary_accounts_for_missing_frames():
     assert summary.iloc[0]["net_speed"] == 2.5
 
 
+def test_tracking_reports_local_assignment_ambiguity_without_changing_ids():
+    a = np.zeros((30, 30), dtype=np.int32)
+    a[10, 5] = 1
+    a[10, 15] = 2
+    b = np.zeros_like(a)
+    b[10, 9] = 1
+    b[10, 11] = 2
+
+    tracks = link_frames(
+        [a, b],
+        TrackingConfig(max_distance_px=10, ambiguity_margin_fraction=0.25),
+    )
+    matched = tracks[tracks["frame"] == 1].sort_values("track_id")
+
+    assert list(matched["track_id"]) == [1, 2]
+    assert np.allclose(matched["distance_px"].to_numpy(), [4.0, 4.0])
+    assert np.allclose(matched["alternative_distance_px"].to_numpy(), [6.0, 6.0])
+    assert np.allclose(matched["assignment_margin_px"].to_numpy(), [2.0, 2.0])
+    assert np.allclose(matched["assignment_margin_fraction"].to_numpy(), [0.2, 0.2])
+    assert matched["assignment_ambiguous"].tolist() == [True, True]
+
+
+def test_tracking_rejects_invalid_ambiguity_threshold():
+    with pytest.raises(ValueError):
+        TrackingConfig(ambiguity_margin_fraction=1.1).validate()
+
+
 def test_experiment_metadata_and_plate_matrix():
     meta = parse_metadata("Plate2_MI_A07_t3.png")
     assert meta["plate"] == 2 and meta["well"] == "A07" and meta["timepoint"] == 3
