@@ -3,7 +3,9 @@ import pandas as pd
 import pytest
 
 from opticell.statistics import (
+    benjamini_hochberg,
     compare_paired_groups,
+    effect_size_mean_difference,
     paired_permutation_pvalue,
     permutation_pvalue,
     summarize_by_replicate,
@@ -65,6 +67,36 @@ def test_compare_paired_groups_rejects_duplicate_pair_condition_rows():
             group_b="treated",
             n_permutations=100,
         )
+
+
+def test_compare_paired_groups_rejects_incomplete_pair_ids():
+    data = pd.DataFrame(
+        {
+            "pair": ["p1", "p1", "p2"],
+            "condition": ["control", "treated", "control"],
+            "value": [10.0, 12.0, 20.0],
+        }
+    )
+    with pytest.raises(ValueError, match="exactly once"):
+        compare_paired_groups(
+            data,
+            value_column="value",
+            group_column="condition",
+            pair_column="pair",
+            group_a="control",
+            group_b="treated",
+            n_permutations=100,
+        )
+
+
+def test_constant_groups_do_not_report_zero_cohens_d():
+    with pytest.raises(ValueError, match="Cohen's d is undefined"):
+        effect_size_mean_difference([1.0, 1.0], [2.0, 2.0])
+
+
+def test_benjamini_hochberg_rejects_invalid_finite_pvalues():
+    with pytest.raises(ValueError, match="\[0, 1\]"):
+        benjamini_hochberg([0.01, 1.2, np.nan])
 
 
 def test_summarize_by_replicate_rejects_missing_replicate_ids():
