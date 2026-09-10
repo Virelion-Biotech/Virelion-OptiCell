@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 
-from qc_pipeline import SegmentationResult, segment_threshold, CellposeSegmenter
+from qc_pipeline import CellposeSegmenter, SegmentationResult, segment_threshold
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,12 @@ def _iou_by_mask(a: np.ndarray, b: np.ndarray) -> float:
     aa, bb = a > 0, b > 0
     union = np.logical_or(aa, bb).sum()
     return float(np.logical_and(aa, bb).sum() / union) if union else 1.0
+
+
+def _positive_label_count(labels: np.ndarray) -> int:
+    """Count distinct foreground labels; label IDs need not be contiguous."""
+    positive = np.asarray(labels)[np.asarray(labels) > 0]
+    return int(np.unique(positive).size) if positive.size else 0
 
 
 def threshold_ensemble(
@@ -98,7 +104,7 @@ def fov_confidence(
         focus_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
     fg = labels > 0
     fg_frac = float(fg.mean()) if labels.size else 0.0
-    n = int(labels.max()) if labels.size else 0
+    n = _positive_label_count(labels)
 
     score = 100.0
     flags: list[str] = []
