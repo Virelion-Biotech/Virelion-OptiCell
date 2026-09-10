@@ -31,6 +31,10 @@ def experiment_quality_gate(
     ):
         raise ValueError("thresholds must satisfy 0 <= review_threshold < pass_threshold <= 100")
 
+    allowed_statuses = {None, "PASS", "REVIEW", "FAIL"}
+    if artifact_status not in allowed_statuses or segmentation_status not in allowed_statuses:
+        raise ValueError("component status must be None, 'PASS', 'REVIEW', or 'FAIL'")
+
     scores = [float(artifact_score), float(segmentation_score)]
     if any(not math.isfinite(v) or not 0 <= v <= 100 for v in scores):
         raise ValueError("component scores must be finite values in [0, 100]")
@@ -46,9 +50,15 @@ def experiment_quality_gate(
     elif segmentation_status == "REVIEW":
         reasons.append("segmentation QC requires review")
 
-    if any(status == "FAIL" for status in (artifact_status, segmentation_status)) or score < thresholds[0]:
+    if score < thresholds[0]:
+        reasons.append(f"conservative QC score below fail threshold ({thresholds[0]:g})")
         status = "FAIL"
-    elif any(status == "REVIEW" for status in (artifact_status, segmentation_status)) or score < thresholds[1]:
+    elif score < thresholds[1]:
+        reasons.append(f"conservative QC score below pass threshold ({thresholds[1]:g})")
+        status = "REVIEW"
+    elif any(status == "FAIL" for status in (artifact_status, segmentation_status)):
+        status = "FAIL"
+    elif any(status == "REVIEW" for status in (artifact_status, segmentation_status)):
         status = "REVIEW"
     else:
         status = "PASS"
