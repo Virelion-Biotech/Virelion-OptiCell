@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from validation import (
     benchmark_segmentation,
@@ -39,6 +40,29 @@ def test_instance_matching_and_count_error():
     assert metrics["false_positives"] == 1
     assert metrics["f1"] < 1
     assert count_error(3, 2)["absolute_count_error"] == 1
+
+
+def test_instance_matching_maximizes_valid_cardinality():
+    predicted = np.zeros((12, 12), dtype=np.int32)
+    truth = np.zeros_like(predicted)
+    pred_points = [(10, 6), (8, 6), (2, 10)]
+    truth_points = [(8, 7), (8, 3), (5, 8)]
+    for label, (x, y) in enumerate(pred_points, start=1):
+        predicted[y, x] = label
+    for label, (x, y) in enumerate(truth_points, start=1):
+        truth[y, x] = label
+
+    tp, fp, fn = match_instance_centroids(predicted, truth, max_distance_px=3.0)
+    assert (tp, fp, fn) == (2, 1, 1)
+
+
+def test_invalid_centroid_validation_inputs_are_rejected():
+    with pytest.raises(ValueError, match="identical shapes"):
+        match_instance_centroids(np.zeros((4, 4), dtype=np.int32), np.zeros((5, 5), dtype=np.int32))
+    with pytest.raises(ValueError, match="integer instance IDs"):
+        match_instance_centroids(np.zeros((4, 4), dtype=float), np.zeros((4, 4), dtype=np.int32))
+    with pytest.raises(ValueError, match="finite positive"):
+        match_instance_centroids(np.zeros((4, 4), dtype=np.int32), np.zeros((4, 4), dtype=np.int32), max_distance_px=np.nan)
 
 
 def test_benchmark_aggregation():
