@@ -53,7 +53,7 @@ def group_summary(
             values = pd.to_numeric(frame[col], errors="coerce").dropna().to_numpy(dtype=float)
             row[f"{col}_mean"] = float(values.mean()) if values.size else np.nan
             row[f"{col}_median"] = float(np.median(values)) if values.size else np.nan
-            row[f"{col}_std"] = float(values.std(ddof=1)) if values.size > 1 else 0.0
+            row[f"{col}_std"] = float(values.std(ddof=1)) if values.size > 1 else np.nan
             row[f"{col}_sem"] = float(values.std(ddof=1) / np.sqrt(values.size)) if values.size > 1 else np.nan
         rows.append(row)
     return pd.DataFrame(rows)
@@ -68,8 +68,8 @@ def effect_size_mean_difference(a: Sequence[float], b: Sequence[float]) -> float
     if len(x) < 2 or len(y) < 2:
         return float("nan")
     pooled_var = (((len(x) - 1) * x.var(ddof=1)) + ((len(y) - 1) * y.var(ddof=1))) / (len(x) + len(y) - 2)
-    if pooled_var <= 0:
-        return 0.0
+    if not np.isfinite(pooled_var) or pooled_var <= 0:
+        raise ValueError("pooled standard deviation is zero or non-finite; Cohen's d is undefined")
     return float((x.mean() - y.mean()) / np.sqrt(pooled_var))
 
 
@@ -126,6 +126,9 @@ def paired_permutation_pvalue(
 def benjamini_hochberg(pvalues: Sequence[float]) -> np.ndarray:
     """Benjamini-Hochberg FDR-adjusted q-values."""
     p = np.asarray(list(pvalues), dtype=float)
+    invalid = np.isfinite(p) & ((p < 0) | (p > 1))
+    if invalid.any():
+        raise ValueError("finite p-values must be in [0, 1]")
     q = np.full_like(p, np.nan)
     finite = np.isfinite(p)
     if not finite.any():
@@ -190,20 +193,18 @@ def compare_paired_groups(
         raise ValueError(f"missing required columns: {missing}")
     if pair_df[pair_column].isna().any():
         raise ValueError(f"{pair_column} contains missing pair IDs")
+    if group_a == group_b:
+        raise ValueError("group_a and group_b must be distinct")
     selected = pair_df[pair_df[group_column].isin([group_a, group_b])].copy()
     counts = selected.groupby([pair_column, group_column], dropna=False).size()
     bad = counts[counts != 1]
     if not bad.empty:
         raise ValueError("each pair ID must occur exactly once in each requested group")
+    pair_ids_a = set(selected.loc[selected[group_column] == group_a, pair_column])
+    pair_ids_b = set(selected.loc[selected[group_column] == group_b, pair_column])
+    if pair_ids_a != pair_ids_b:
+        raise ValueError("each pair ID must occur exactly once in each requested group")
     pivot = selected.pivot(index=pair_column, columns=group_column, values=value_column)
-    if group_a not in pivot.columns or group_b not in pivot.columns:
-        return {
-            "n_pairs": 0.0,
-            "mean_group_a": np.nan,
-            "mean_group_b": np.nan,
-            "mean_difference": np.nan,
-            "paired_permutation_p": np.nan,
-        }
     values_a = pd.to_numeric(pivot[group_a], errors="coerce")
     values_b = pd.to_numeric(pivot[group_b], errors="coerce")
     finite = np.isfinite(values_a.to_numpy(float)) & np.isfinite(values_b.to_numpy(float))
