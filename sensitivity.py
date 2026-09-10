@@ -18,18 +18,27 @@ def threshold_sensitivity(
     intentionally evaluates only count and foreground-fraction stability; it does
     not imply that a stable count is a correct segmentation.
     """
+    array = np.asarray(image)
+    if array.ndim == 0 or array.size == 0:
+        raise ValueError("image must be a non-empty array")
     values = [float(value) for value in thresholds]
     if not values:
         raise ValueError("thresholds must contain at least one value")
+    if any(not np.isfinite(value) for value in values):
+        raise ValueError("thresholds must be finite")
     if len(set(values)) != len(values):
         raise ValueError("thresholds must be unique")
+    if not callable(segmenter):
+        raise TypeError("segmenter must be callable")
     rows: list[dict[str, float | int]] = []
     for threshold in values:
-        labels = np.asarray(segmenter(image, threshold))
-        if labels.shape != image.shape:
+        labels = np.asarray(segmenter(array, threshold))
+        if labels.shape != array.shape:
             raise ValueError("segmenter output shape must match image shape")
+        if not np.issubdtype(labels.dtype, np.integer):
+            raise ValueError("segmenter output must contain integer instance IDs")
         foreground = labels > 0
-        count = int(len(np.unique(labels[foreground]))) if foreground.any() else 0
+        count = int(np.unique(labels[foreground]).size) if foreground.any() else 0
         rows.append(
             {
                 "threshold": threshold,
