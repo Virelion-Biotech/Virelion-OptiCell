@@ -36,7 +36,7 @@ except Exception as exc:  # pragma: no cover
     _CELLPOSE_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
 
 SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp")
-PIPELINE_VERSION = "2.0.3"
+PIPELINE_VERSION = "2.0.4"
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,9 @@ class QCThresholds:
     cell_count_high: Optional[int] = None
 
     def validate(self) -> None:
+        finite = [self.focus_min, self.brightness_min, self.brightness_max, self.saturation_max_fraction, self.max_cell_area_frac]
+        if any(not np.isfinite(float(v)) for v in finite):
+            raise ValueError("QC thresholds must be finite")
         if self.focus_min < 0:
             raise ValueError("focus_min must be >= 0")
         if not 0 <= self.brightness_min <= 255:
@@ -67,7 +70,7 @@ class QCThresholds:
             raise ValueError("max_cell_area_frac must be in (0, 1]")
         if self.cell_count_low < 0:
             raise ValueError("cell_count_low must be >= 0")
-        if self.cell_count_high is not None and self.cell_count_high < self.cell_count_low:
+        if self.cell_count_high is not None and (self.cell_count_high < self.cell_count_low):
             raise ValueError("cell_count_high must be >= cell_count_low")
 
 
@@ -119,6 +122,8 @@ class ImageResult:
 
 
 def sha256_file(path: str, chunk_size: int = 1024 * 1024) -> str:
+    if int(chunk_size) <= 0:
+        raise ValueError("chunk_size must be positive")
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
         while True:
@@ -202,17 +207,32 @@ def to_grayscale_uint8(arr: np.ndarray) -> np.ndarray:
 
 
 def compute_focus_score(gray: np.ndarray) -> float:
-    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    arr = np.asarray(gray)
+    if arr.ndim != 2 or arr.size == 0:
+        raise ValueError("gray must be a non-empty 2-D image")
+    if not np.issubdtype(arr.dtype, np.number) or not np.isfinite(arr.astype(np.float64, copy=False)).all():
+        raise ValueError("gray must contain finite numeric values")
+    return float(cv2.Laplacian(arr, cv2.CV_64F).var())
 
 
 def compute_brightness(gray: np.ndarray) -> tuple[float, float]:
-    return float(gray.mean()), float(gray.std())
+    arr = np.asarray(gray)
+    if arr.ndim != 2 or arr.size == 0:
+        raise ValueError("gray must be a non-empty 2-D image")
+    if not np.issubdtype(arr.dtype, np.number) or not np.isfinite(arr.astype(np.float64, copy=False)).all():
+        raise ValueError("gray must contain finite numeric values")
+    return float(arr.mean()), float(arr.std())
 
 
 def compute_saturation_fraction(gray: np.ndarray, low: int = 1, high: int = 254) -> float:
-    if gray.size == 0:
+    arr = np.asarray(gray)
+    if arr.ndim != 2 or not np.issubdtype(arr.dtype, np.number):
+        raise ValueError("gray must be a 2-D numeric image")
+    if not np.isfinite(float(low)) or not np.isfinite(float(high)) or low > high:
+        raise ValueError("low/high must be finite with low <= high")
+    if arr.size == 0:
         return 0.0
-    return float(((gray <= low) | (gray >= high)).mean())
+    return float(((arr <= low) | (arr >= high)).mean())
 
 
 def _safe_cv(values: Sequence[float]) -> float:
@@ -224,7 +244,12 @@ def _safe_cv(values: Sequence[float]) -> float:
 
 
 def _segmentation_diagnostics(labels: np.ndarray, image_shape: tuple[int, int], min_area: int, max_area_frac: float) -> tuple[float, float, float, float, float, float, float]:
-    num_labels, _, stats, _ = cv2.connectedComponentsWithStats((labels > 0).astype(np.uint8), connectivity=8)
+    label_arr = np.asarray(labels)
+    if label_arr.ndim != 2 or label_arr.shape != image_shape:
+        raise ValueError("labels must be a 2-D array matching image_shape")
+    if min_area < 1 or not np.isfinite(max_area_frac) or not 0 < max_area_frac <= 1:
+        raise ValueError("invalid segmentation area limits")
+    num_labels, _, stats, _ = cv2.connectedComponentsWithStats((label_arr > 0).astype(np.uint8), connectivity=8)
     if num_labels <= 1:
         return 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0
     areas = stats[1:, cv2.CC_STAT_AREA].astype(float)
@@ -240,7 +265,7 @@ def _segmentation_diagnostics(labels: np.ndarray, image_shape: tuple[int, int], 
         h = int(stats[label_id, cv2.CC_STAT_HEIGHT])
         if x == 0 or y == 0 or x + w >= image_shape[1] or y + h >= image_shape[0]:
             border_count += 1
-    object_count = max(1, num_labels - 1)
+    object_count = num_labels - 1
     border_fraction = float(border_count / object_count)
     tiny_fraction = float((areas < max(1, min_area * 2)).mean())
     merged_fraction = float((areas > total_pixels * max_area_frac).mean()) if areas.size else 0.0
@@ -249,14 +274,27 @@ def _segmentation_diagnostics(labels: np.ndarray, image_shape: tuple[int, int], 
 
 
 def _build_segmentation_result(labels: np.ndarray, gray: np.ndarray, method: str, min_area: int, max_area_frac: float, error: Optional[str] = None) -> SegmentationResult:
-    positive_labels = labels[labels > 0]
+    labels_arr = np.asarray(labels)
+    gray_arr = np.asarray(gray)
+    if labels_arr.ndim != 2 or gray_arr.ndim != 2 or labels_arr.shape != gray_arr.shape:
+        raise ValueError("labels and gray must be matching 2-D arrays")
+    if not np.issubdtype(labels_arr.dtype, np.integer):
+        raise ValueError("labels must contain integer instance IDs")
+    positive_labels = labels_arr[labels_arr > 0]
     count = int(np.unique(positive_labels).size) if positive_labels.size else 0
-    d = _segmentation_diagnostics(labels, gray.shape, min_area, max_area_frac)
-    return SegmentationResult(count, labels.astype(np.int32, copy=False), method, d[0], d[1], d[2], d[3], d[4], d[5], d[6], error)
+    d = _segmentation_diagnostics(labels_arr, gray_arr.shape, min_area, max_area_frac)
+    return SegmentationResult(count, labels_arr.astype(np.int32, copy=False), method, d[0], d[1], d[2], d[3], d[4], d[5], d[6], error)
 
 
 def segment_threshold(gray: np.ndarray, min_area: int = 15, max_area_frac: float = 0.25, adaptive: bool = False) -> SegmentationResult:
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    arr = np.asarray(gray)
+    if arr.ndim != 2 or arr.size == 0:
+        raise ValueError("gray must be a non-empty 2-D image")
+    if arr.dtype != np.uint8:
+        raise ValueError("segment_threshold expects a 2-D uint8 working image")
+    if min_area < 1 or not np.isfinite(max_area_frac) or not 0 < max_area_frac <= 1:
+        raise ValueError("invalid segmentation area limits")
+    blurred = cv2.GaussianBlur(arr, (3, 3), 0)
     if adaptive:
         thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 3)
     else:
@@ -265,12 +303,12 @@ def segment_threshold(gray: np.ndarray, min_area: int = 15, max_area_frac: float
         thresh = cv2.bitwise_not(thresh)
     fg, bg = blurred[thresh > 0], blurred[thresh == 0]
     if fg.size == 0 or bg.size == 0 or abs(float(fg.mean()) - float(bg.mean())) < 8:
-        return _build_segmentation_result(np.zeros_like(gray, dtype=np.int32), gray, "threshold", min_area, max_area_frac)
+        return _build_segmentation_result(np.zeros_like(arr, dtype=np.int32), arr, "threshold", min_area, max_area_frac)
     kernel = np.ones((3, 3), np.uint8)
     cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
     cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel, iterations=1)
     num_labels, raw_labels, stats, _ = cv2.connectedComponentsWithStats(cleaned, connectivity=8)
-    max_area = gray.shape[0] * gray.shape[1] * max_area_frac
+    max_area = arr.shape[0] * arr.shape[1] * max_area_frac
     keep = np.zeros_like(raw_labels, dtype=np.int32)
     next_id = 1
     for label_id in range(1, num_labels):
@@ -278,7 +316,7 @@ def segment_threshold(gray: np.ndarray, min_area: int = 15, max_area_frac: float
         if min_area <= area <= max_area:
             keep[raw_labels == label_id] = next_id
             next_id += 1
-    return _build_segmentation_result(keep, gray, "threshold", min_area, max_area_frac)
+    return _build_segmentation_result(keep, arr, "threshold", min_area, max_area_frac)
 
 
 class CellposeSegmenter:
@@ -286,6 +324,8 @@ class CellposeSegmenter:
     def __init__(self, model_type: str = "cpsam", gpu: bool | None = None, diameter: Optional[float] = None) -> None:
         if not _HAS_CELLPOSE:
             raise RuntimeError(f"Cellpose is not available: {_CELLPOSE_IMPORT_ERROR or 'unknown error'}. Install with: pip install cellpose")
+        if diameter is not None and (not np.isfinite(diameter) or diameter <= 0):
+            raise ValueError("diameter must be a finite positive value")
         self.model_type, self.gpu, self.default_diameter, self._model = model_type, gpu, diameter, None
 
     @property
@@ -309,19 +349,29 @@ class CellposeSegmenter:
         raise RuntimeError(f"Could not initialize Cellpose model: {last_err}")
 
     def segment(self, gray: np.ndarray, diameter: Optional[float] = None, min_area: int = 15, max_area_frac: float = 0.25) -> SegmentationResult:
+        arr = np.asarray(gray)
+        if arr.ndim != 2 or arr.size == 0 or arr.dtype != np.uint8:
+            raise ValueError("Cellpose segmentation expects a non-empty 2-D uint8 working image")
         diam = diameter if diameter is not None else self.default_diameter
+        if diam is not None and (not np.isfinite(diam) or diam <= 0):
+            raise ValueError("diameter must be a finite positive value")
+        if min_area < 1 or not np.isfinite(max_area_frac) or not 0 < max_area_frac <= 1:
+            raise ValueError("invalid segmentation area limits")
         eval_kwargs = {"diameter": diam} if diam is not None else {}
         masks, last_err = None, None
         for extra in ({}, {"channels": [0, 0]}):
             try:
-                result = self.model.eval(gray, **eval_kwargs, **extra)
+                result = self.model.eval(arr, **eval_kwargs, **extra)
                 masks = result[0] if isinstance(result, (tuple, list)) else result
                 break
             except Exception as exc:
                 last_err = exc
         if masks is None:
             raise RuntimeError(f"Cellpose eval failed: {last_err}")
-        return _build_segmentation_result(np.asarray(masks, dtype=np.int32), gray, f"cellpose:{self.model_type}", min_area, max_area_frac)
+        mask_array = np.asarray(masks)
+        if mask_array.shape != arr.shape:
+            raise ValueError(f"Cellpose returned masks with shape {mask_array.shape}, expected {arr.shape}")
+        return _build_segmentation_result(np.asarray(mask_array, dtype=np.int32), arr, f"cellpose:{self.model_type}", min_area, max_area_frac)
 
 
 def extract_object_features(gray: np.ndarray, labels: np.ndarray) -> pd.DataFrame:
@@ -329,9 +379,12 @@ def extract_object_features(gray: np.ndarray, labels: np.ndarray) -> pd.DataFram
     values_img = np.asarray(gray)
     if values_img.ndim != 2:
         raise ValueError(f"extract_object_features expects a 2-D grayscale image, got shape {values_img.shape}")
-    labels = labels.astype(np.int32, copy=False)
-    if labels.shape != values_img.shape:
+    labels = np.asarray(labels)
+    if labels.ndim != 2 or labels.shape != values_img.shape:
         raise ValueError("gray and labels must have identical 2-D shapes")
+    if not np.issubdtype(labels.dtype, np.integer):
+        raise ValueError("labels must contain integer instance IDs")
+    labels = labels.astype(np.int32, copy=False)
     num_labels, _, stats, centroids = cv2.connectedComponentsWithStats((labels > 0).astype(np.uint8), connectivity=8)
     for label_id in range(1, num_labels):
         mask = labels == label_id
@@ -361,6 +414,8 @@ def robust_zscore(series: pd.Series) -> pd.Series:
 
 
 def adaptive_dataset_qc(df: pd.DataFrame, z_limit: float = 3.5) -> pd.DataFrame:
+    if not np.isfinite(z_limit) or z_limit <= 0:
+        raise ValueError("z_limit must be a finite positive value")
     result = df.copy()
     if result.empty:
         result["adaptive_score"] = pd.Series(dtype=float)
