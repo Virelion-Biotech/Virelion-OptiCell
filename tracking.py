@@ -41,16 +41,51 @@ def _centroids(labels: np.ndarray) -> dict[int, tuple[float, float]]:
 
 
 def _assignment(cost: np.ndarray, row_limits: np.ndarray) -> list[tuple[int, int, float]]:
+    """Hungarian assignment with distance gates.
+
+    SciPy raises ``ValueError: cost matrix is infeasible`` when every entry is
+    +inf after gating. We restrict to rows/cols that still have a finite cost,
+    replace remaining inf with a large finite penalty, then keep only finite
+    matches.
+    """
     if cost.size == 0:
         return []
     gated = np.asarray(cost, dtype=float).copy()
-    gated[gated > row_limits[:, None]] = np.inf
-    rows, cols = linear_sum_assignment(gated)
-    out = []
-    for row, col in zip(rows, cols):
-        distance = float(gated[row, col])
-        if np.isfinite(distance):
-            out.append((int(row), int(col), distance))
+    if gated.ndim != 2:
+        raise ValueError("cost must be 2-D")
+    limits = np.asarray(row_limits, dtype=float).reshape(-1)
+    if limits.shape[0] != gated.shape[0]:
+        raise ValueError("row_limits length must match cost rows")
+    gated[gated > limits[:, None]] = np.inf
+
+    finite_mask = np.isfinite(gated)
+    if not finite_mask.any():
+        return []
+
+    row_keep = finite_mask.any(axis=1)
+    col_keep = finite_mask.any(axis=0)
+    row_idx = np.flatnonzero(row_keep)
+    col_idx = np.flatnonzero(col_keep)
+    sub = gated[np.ix_(row_idx, col_idx)].copy()
+
+    finite_vals = sub[np.isfinite(sub)]
+    big = float(np.max(finite_vals)) if finite_vals.size else 1e6
+    if not np.isfinite(big) or big <= 0:
+        big = 1e6
+    penalty = big * 10.0 + 1.0
+    sub[~np.isfinite(sub)] = penalty
+
+    try:
+        rows, cols = linear_sum_assignment(sub)
+    except ValueError:
+        # Last-resort: no assignment
+        return []
+
+    out: list[tuple[int, int, float]] = []
+    for r, c in zip(rows, cols):
+        dist = float(gated[int(row_idx[r]), int(col_idx[c])])
+        if np.isfinite(dist):
+            out.append((int(row_idx[r]), int(col_idx[c]), dist))
     return out
 
 
@@ -79,7 +114,7 @@ def link_frames(labels_by_time: list[np.ndarray], config: TrackingConfig | None 
         if previous and len(current_points):
             previous_points = np.asarray([p[2] for p in previous], dtype=float)
             distances = np.linalg.norm(previous_points[:, None, :] - current_points[None, :, :], axis=2)
-            row_limits = np.asarray([cfg.max_distance_px * max(1, p[3]) for p in previous])
+            row_limits = np.asarray([cfg.max_distance_px * max(1, p[3]) for p in previous], dtype=float)
             for prev_idx, new_idx, distance in _assignment(distances, row_limits):
                 previous_label, state, _, gap = previous[prev_idx]
                 new_label = current_labels[new_idx]
@@ -99,7 +134,12 @@ def link_frames(labels_by_time: list[np.ndarray], config: TrackingConfig | None 
                     "match_confidence": max(0.0, 1.0 - distance / row_limits[prev_idx]),
                 })
                 active.pop(previous_label, None)
-                active[new_label] = {"position": position, "velocity": velocity, "last_frame": frame, "track_id": track_id}
+                active[new_label] = {
+                    "position": position,
+                    "velocity": velocity,
+                    "last_frame": frame,
+                    "track_id": track_id,
+                }
                 used_current.add(new_label)
 
         for label in current_labels:
@@ -111,16 +151,32 @@ def link_frames(labels_by_time: list[np.ndarray], config: TrackingConfig | None 
                 "x": position[0], "y": position[1], "dx": np.nan, "dy": np.nan,
                 "distance_px": np.nan, "gap": 0, "match_confidence": np.nan,
             })
-            active[label] = {"position": np.asarray(position), "velocity": np.zeros(2), "last_frame": frame, "track_id": next_track}
+            active[label] = {
+                "position": np.asarray(position),
+                "velocity": np.zeros(2),
+                "last_frame": frame,
+                "track_id": next_track,
+            }
             next_track += 1
 
-        active = {label: state for label, state in active.items() if frame - int(state["last_frame"]) <= cfg.max_gap}
+        active = {
+            label: state
+            for label, state in active.items()
+            if frame - int(state["last_frame"]) <= cfg.max_gap
+        }
 
-    columns = ["frame", "label", "track_id", "x", "y", "dx", "dy", "distance_px", "gap", "match_confidence"]
+    columns = [
+        "frame", "label", "track_id", "x", "y",
+        "dx", "dy", "distance_px", "gap", "match_confidence",
+    ]
     return pd.DataFrame(rows, columns=columns)
 
 
-def summarize_tracks(tracks: pd.DataFrame, pixel_size: float = 1.0, frame_interval: float = 1.0) -> pd.DataFrame:
+def summarize_tracks(
+    tracks: pd.DataFrame,
+    pixel_size: float = 1.0,
+    frame_interval: float = 1.0,
+) -> pd.DataFrame:
     """Summarize trajectory length, displacement, speed, straightness, and confidence."""
     if pixel_size <= 0 or frame_interval <= 0:
         raise ValueError("pixel_size and frame_interval must be positive")
@@ -132,18 +188,29 @@ def summarize_tracks(tracks: pd.DataFrame, pixel_size: float = 1.0, frame_interv
     for track_id, group in tracks.sort_values("frame").groupby("track_id"):
         g = group.reset_index(drop=True)
         positions = g[["x", "y"]].to_numpy(float)
-        step = np.linalg.norm(np.diff(positions, axis=0), axis=1) if len(g) > 1 else np.array([], dtype=float)
+        step = (
+            np.linalg.norm(np.diff(positions, axis=0), axis=1)
+            if len(g) > 1
+            else np.array([], dtype=float)
+        )
         duration = max(1, int(g["frame"].iloc[-1] - g["frame"].iloc[0])) * frame_interval
         path = float(step.sum() * pixel_size)
         net = float(np.linalg.norm(positions[-1] - positions[0]) * pixel_size)
         rows.append({
-            "track_id": int(track_id), "frames": len(g),
-            "start_frame": int(g["frame"].iloc[0]), "end_frame": int(g["frame"].iloc[-1]),
-            "path_length": path, "net_displacement": net,
+            "track_id": int(track_id),
+            "frames": len(g),
+            "start_frame": int(g["frame"].iloc[0]),
+            "end_frame": int(g["frame"].iloc[-1]),
+            "path_length": path,
+            "net_displacement": net,
             "mean_speed": float(step.mean() * pixel_size / frame_interval) if len(step) else 0.0,
             "net_speed": float(net / duration),
             "straightness": float(net / path) if path > 0 else (1.0 if net == 0 else 0.0),
-            "mean_match_confidence": float(g["match_confidence"].dropna().mean()) if "match_confidence" in g and g["match_confidence"].notna().any() else np.nan,
+            "mean_match_confidence": (
+                float(g["match_confidence"].dropna().mean())
+                if "match_confidence" in g and g["match_confidence"].notna().any()
+                else np.nan
+            ),
             "max_gap": int(g["gap"].max()) if "gap" in g else 0,
         })
     return pd.DataFrame(rows)
