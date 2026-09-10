@@ -8,7 +8,9 @@ Product use case:
 Honest limits:
   - Tracking is only meaningful for true time-lapse sequences. Enabling it on
     unrelated FOVs (e.g. BBBC039 plate wells) produces link tables, not biology.
-  - Phenotype rules are explicit thresholds — not a trained classifier.
+  - Phenotype rules are explicit morphology thresholds — not a trained classifier.
+  - Intensity measurements in cell_features_phenotype.csv preserve the native
+    grayscale pixel values; 8-bit normalization is used only for QC/segmentation.
   - No fabricated metrics.
 
 Usage:
@@ -37,6 +39,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from qc_pipeline import (  # noqa: E402
+    load_image,
     to_grayscale_uint8,
     segment_threshold,
     CellposeSegmenter,
@@ -58,21 +61,22 @@ def iter_images(folder: Path):
         yield from sorted(folder.rglob(ext))
 
 
-def load_gray(path: Path) -> np.ndarray:
-    arr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
-    if arr is None:
-        raise IOError(f"Could not read {path}")
-    if arr.ndim == 3 and arr.shape[2] >= 3:
-        arr = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_BGR2RGB)
-    return to_grayscale_uint8(arr)
+def load_gray(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Return native grayscale pixels plus an 8-bit QC/segmentation copy."""
+    arr = load_image(str(path))
+    if arr.ndim == 2:
+        native_gray = arr
+    else:
+        native_gray = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_RGB2GRAY)
+    gray8 = to_grayscale_uint8(native_gray)
+    return native_gray, gray8
 
 
 def default_phenotype_rules() -> list[Rule]:
-    """Explicit morphology/intensity rules (auditable, not ML)."""
+    """Explicit morphology rules with no bit-depth-dependent intensity cutoff."""
     return [
         Rule(feature="area_px", threshold=50.0, direction=">=", weight=1.0, label="area_ok"),
         Rule(feature="circularity", threshold=0.4, direction=">=", weight=1.0, label="roundish"),
-        Rule(feature="mean_intensity", threshold=40.0, direction=">=", weight=1.0, label="bright_enough"),
     ]
 
 
@@ -137,7 +141,7 @@ def main() -> int:
 
     for i, path in enumerate(paths, 1):
         try:
-            gray = load_gray(path)
+            native_gray, gray = load_gray(path)
             focus = compute_focus_score(gray)
             bright_mean, bright_std = compute_brightness(gray)
             sat = compute_saturation_fraction(gray)
@@ -152,7 +156,7 @@ def main() -> int:
                 seg = hybrid_threshold_cellpose(gray, cellpose_segmenter=cellpose_seg)
 
             conf = fov_confidence(gray, seg.labels, focus_score=focus)
-            feats = extract_object_features(gray, seg.labels)
+            feats = extract_object_features(native_gray, seg.labels)
             if not feats.empty:
                 feats = feats.copy()
                 feats.insert(0, "frame_index", i - 1)
@@ -267,7 +271,9 @@ def main() -> int:
         "per_image": fov_rows,
         "note": (
             "Stage-2 measured pipeline outputs. "
-            "Phenotype = explicit rules on morphology/intensity. "
+            "Phenotype = explicit morphology rules. Native grayscale intensity "
+            "features are preserved in the per-cell table. 8-bit normalization "
+            "is used only for QC and segmentation. "
             "Tracking only if --enable-tracking and ordered time-lapse frames."
         ),
     }
