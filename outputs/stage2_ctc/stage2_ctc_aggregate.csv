@@ -1,0 +1,7 @@
+run,backend,n_images,mean_object_count,mean_confidence,mean_focus,n_objects_total,n_tracks,tracking_enabled,phenotype_positive_fraction
+stage2_Fluo-N2DH-GOWT1_01,threshold,92,28.380434782608695,100.0,274.0904519152365,2611,730,True,0.0
+stage2_Fluo-N2DH-GOWT1_02,threshold,92,31.956521739130434,100.0,111.55374614531699,2940,869,True,0.0
+stage2_Fluo-N2DH-SIM+_01,threshold,65,42.292307692307695,100.0,2278.873471545858,2749,596,True,0.0
+stage2_Fluo-N2DH-SIM+_02,threshold,150,187.71333333333334,100.0,11642.835470950522,28157,8013,True,0.0
+stage2_Fluo-N2DL-HeLa_01,threshold,92,72.59782608695652,100.0,79.37350300315715,6679,1611,True,0.0
+stage2_Fluo-N2DL-HeLa_02,threshold,92,229.55434782608697,100.0,112.47959066768598,21119,5464,True,0.0

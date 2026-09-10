@@ -14,9 +14,9 @@ Policy: publish only measured metrics. Stop rather than invent numbers.
 
 | Stage | Status |
 |-------|--------|
-| **1 Scientific benchmark** | **Done** — BBBC039 n=197 all backends (threshold, hybrid, Cellpose-SAM, CellProfiler) |
-| **2 Killer use case** | **Active** — QC→segment→features→phenotype (+ optional tracking) |
-| **3 AI orchestration** | FOV confidence + hybrid switch present; auto-backend next |
+| **1 Scientific benchmark** | **Done** — BBBC039 n=197 (threshold, hybrid, Cellpose-SAM, CellProfiler) |
+| **2 Killer use case** | **Done (pipeline + CTC runs)** — QC→segment→features→phenotype→tracking on 6 CTC sequences |
+| **3 AI orchestration** | FOV confidence + hybrid present; auto-backend next |
 | **4 Easy UI** | Not started |
 | **5 Ugly real data** | Not started |
 
@@ -31,24 +31,26 @@ Policy: publish only measured metrics. Stop rather than invent numbers.
 | Cellpose-SAM | 197 | **0.969** | 0.907 | 16.7 | 0.172 |
 | CellProfiler 4.2 | 197 | 0.895 | 0.722 | 28.1 | 0.281 |
 
-Full write-up: `outputs/bbbc039_validation/BBBC039_STAGE1_COMPLETE.md`.
-
 ---
 
-## Stage 2 — Killer use case
-
-> Automated **QC → segmentation → features → phenotype** (+ tracking on real time-lapse).
+## Stage 2 — Killer workflow + CTC TL
 
 ```bash
-python scripts/run_killer_workflow.py data/bbbc039/images/images \
-  -o outputs/stage2_bbbc039_threshold --backend threshold --max-images 30
+python scripts/run_killer_workflow.py data/ctc/Fluo-N2DH-GOWT1/01 \
+  -o outputs/stage2_gowt1_01 --backend threshold --enable-tracking
 ```
 
-Docs: `docs/STAGE2_KILLER_WORKFLOW.md`.
+**Measured Colab runs** (threshold + tracking, 6 sequences):
 
-**Next measurements (only with real data):**
-1. Run Stage-2 phenotype table on BBBC039 n=30/200 (threshold) — counts + feature distributions only
-2. When a true time-lapse assay is available, enable `--enable-tracking` and report track continuity metrics if ground truth exists; otherwise report descriptive track stats only
+| Dataset / seq | Frames | Objects | Tracks |
+|---------------|-------:|--------:|-------:|
+| GOWT1 01/02 | 92+92 | 2.6k+2.9k | 730+869 |
+| SIM+ 01/02 | 65+150 | 2.7k+28k | 596+8013 |
+| HeLa 01/02 | 92+92 | 6.7k+21k | 1.6k+5.5k |
+
+Report: `outputs/stage2_ctc/STAGE2_CTC_REPORT.md`.
+
+**Not yet:** TRA/SEG vs CTC ground truth (optional next measurement).
 
 ---
 
@@ -59,12 +61,6 @@ image → QC → choose backend → segment → confidence → track → phenoty
 ```
 
 Present: hybrid switch, `fov_confidence()`. Next: auto backend from confidence, HITL hooks.
-
----
-
-## Stages 4–5
-
-UI / Docker / multi-lab ugly data — after Stage 2 is habitually used on one assay type.
 
 ---
 
