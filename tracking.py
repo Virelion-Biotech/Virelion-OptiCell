@@ -14,6 +14,7 @@ class TrackingConfig:
     max_gap: int = 0
     use_velocity_prediction: bool = True
     velocity_smoothing: float = 0.5
+    ambiguity_margin_fraction: float = 0.1
 
     def validate(self) -> None:
         if self.max_distance_px <= 0:
@@ -22,6 +23,8 @@ class TrackingConfig:
             raise ValueError("max_gap must be >= 0")
         if not 0 <= self.velocity_smoothing <= 1:
             raise ValueError("velocity_smoothing must be in [0, 1]")
+        if not 0 <= self.ambiguity_margin_fraction <= 1:
+            raise ValueError("ambiguity_margin_fraction must be in [0, 1]")
 
 
 def _centroids(labels: np.ndarray) -> dict[int, tuple[float, float]]:
@@ -79,7 +82,14 @@ def _assignment(cost: np.ndarray, row_limits: np.ndarray) -> list[tuple[int, int
 
 
 def link_frames(labels_by_time: list[np.ndarray], config: TrackingConfig | None = None) -> pd.DataFrame:
-    """Link 2-D instances using one-to-one assignment and optional short gaps."""
+    """Link 2-D instances using one-to-one assignment and optional short gaps.
+
+    Assignment IDs are preserved exactly as before. For matched observations,
+    local assignment ambiguity is reported by comparing the chosen distance
+    with the second-best gated candidate for the same previous track. This is
+    a diagnostic, not a calibrated identity-swap probability and does not
+    change the assignment decision.
+    """
     cfg = config or TrackingConfig()
     cfg.validate()
     rows: list[dict[str, object]] = []
@@ -115,12 +125,41 @@ def link_frames(labels_by_time: list[np.ndarray], config: TrackingConfig | None 
                 alpha = cfg.velocity_smoothing
                 velocity = alpha * observed_velocity + (1 - alpha) * old_velocity
                 track_id = int(state["track_id"])
+
+                candidate_distances = distances[prev_idx]
+                valid = np.isfinite(candidate_distances) & (candidate_distances <= row_limits[prev_idx])
+                valid[new_idx] = False
+                alternative_distance = (
+                    float(np.min(candidate_distances[valid]))
+                    if np.any(valid)
+                    else np.nan
+                )
+                assignment_margin = (
+                    alternative_distance - distance
+                    if np.isfinite(alternative_distance)
+                    else np.nan
+                )
+                assignment_margin_fraction = (
+                    assignment_margin / max(row_limits[prev_idx], np.finfo(float).eps)
+                    if np.isfinite(assignment_margin)
+                    else np.nan
+                )
+                assignment_ambiguous = (
+                    bool(assignment_margin_fraction < cfg.ambiguity_margin_fraction)
+                    if np.isfinite(assignment_margin_fraction)
+                    else np.nan
+                )
+
                 rows.append({
                     "frame": frame, "label": new_label, "track_id": track_id,
                     "x": float(position[0]), "y": float(position[1]),
                     "dx": float(displacement[0]), "dy": float(displacement[1]),
                     "distance_px": distance, "gap": gap - 1,
                     "match_confidence": max(0.0, 1.0 - distance / row_limits[prev_idx]),
+                    "alternative_distance_px": alternative_distance,
+                    "assignment_margin_px": assignment_margin,
+                    "assignment_margin_fraction": assignment_margin_fraction,
+                    "assignment_ambiguous": assignment_ambiguous,
                 })
                 active.pop(previous_label, None)
                 active[new_label] = {
@@ -139,6 +178,10 @@ def link_frames(labels_by_time: list[np.ndarray], config: TrackingConfig | None 
                 "frame": frame, "label": label, "track_id": next_track,
                 "x": position[0], "y": position[1], "dx": np.nan, "dy": np.nan,
                 "distance_px": np.nan, "gap": 0, "match_confidence": np.nan,
+                "alternative_distance_px": np.nan,
+                "assignment_margin_px": np.nan,
+                "assignment_margin_fraction": np.nan,
+                "assignment_ambiguous": np.nan,
             })
             active[label] = {
                 "position": np.asarray(position),
@@ -157,6 +200,8 @@ def link_frames(labels_by_time: list[np.ndarray], config: TrackingConfig | None 
     columns = [
         "frame", "label", "track_id", "x", "y",
         "dx", "dy", "distance_px", "gap", "match_confidence",
+        "alternative_distance_px", "assignment_margin_px",
+        "assignment_margin_fraction", "assignment_ambiguous",
     ]
     return pd.DataFrame(rows, columns=columns)
 
