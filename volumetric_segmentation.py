@@ -48,13 +48,32 @@ def _otsu_threshold(values: np.ndarray) -> float:
     return float(centers[int(np.argmax(sigma))])
 
 
+def _normalize_volume(work: np.ndarray, normalization: str) -> np.ndarray:
+    """Normalize intensity explicitly before the normalized Otsu step."""
+    if normalization == "percentile":
+        lo, hi = np.percentile(work, [0.5, 99.5])
+    elif normalization == "minmax":
+        lo, hi = float(np.min(work)), float(np.max(work))
+    elif normalization == "none":
+        lo, hi = 0.0, 1.0
+        if float(np.min(work)) < 0.0 or float(np.max(work)) > 1.0:
+            raise ValueError("normalization='none' requires volume values in [0, 1]")
+    else:
+        raise ValueError("normalization must be 'percentile', 'minmax', or 'none'")
+
+    if hi <= lo:
+        return np.zeros_like(work, dtype=np.float32)
+    return np.clip((work - lo) / (hi - lo), 0.0, 1.0)
+
+
 def segment_threshold_3d(
     volume: np.ndarray,
     voxel_size: Sequence[float] = (1.0, 1.0, 1.0),
     min_volume_voxels: int = 20,
     connectivity: int = 1,
+    normalization: str = "percentile",
 ) -> VolumetricSegmentationResult:
-    """Segment a 3-D volume using percentile normalization and connected components."""
+    """Segment a 3-D volume with an explicit intensity normalization mode."""
     arr = _validate_volume(volume)
     spacing = tuple(float(v) for v in voxel_size)
     if len(spacing) != 3 or any(v <= 0 for v in spacing):
@@ -63,14 +82,15 @@ def segment_threshold_3d(
         raise ValueError("min_volume_voxels must be >= 1")
     if connectivity not in {1, 2, 3}:
         raise ValueError("connectivity must be 1, 2, or 3")
+    if normalization not in {"percentile", "minmax", "none"}:
+        raise ValueError("normalization must be 'percentile', 'minmax', or 'none'")
 
     work = np.nan_to_num(arr.astype(np.float32, copy=False), nan=0.0, posinf=0.0, neginf=0.0)
-    lo, hi = np.percentile(work, [0.5, 99.5])
-    if hi <= lo:
+    scaled = _normalize_volume(work, normalization)
+    if not np.any(scaled):
         labels = np.zeros(work.shape, dtype=np.int32)
         return VolumetricSegmentationResult(labels, "threshold_3d", 0, 0.0, np.nan, 0.0)
 
-    scaled = np.clip((work - lo) / (hi - lo), 0.0, 1.0)
     threshold = _otsu_threshold(scaled)
     mask = scaled >= threshold
 
