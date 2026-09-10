@@ -17,8 +17,8 @@ def test_acquisition_artifact_metrics_and_score():
 
 
 def test_artifact_metrics_do_not_treat_float_extrema_as_detector_clipping():
-    image = np.full((20, 20), 0.5, dtype=np.float32)
-    image[10, 10] = 1.0
+    image = np.full((20, 20), 50.0, dtype=np.float32)
+    image[10, 10] = 100.0
     metrics = acquisition_artifact_metrics(image)
     assert metrics["low_clip_fraction"] == 0.0
     assert metrics["high_clip_fraction"] == 0.0
