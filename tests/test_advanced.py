@@ -41,6 +41,22 @@ def test_tracking_and_motion_summary():
     assert summary.iloc[0]["path_length"] > 0
 
 
+def test_tracking_motion_summary_accounts_for_missing_frames():
+    tracks = pd.DataFrame(
+        {
+            "track_id": [1, 1],
+            "frame": [0, 2],
+            "x": [0.0, 10.0],
+            "y": [0.0, 0.0],
+        }
+    )
+    summary = summarize_tracks(tracks, pixel_size=1.0, frame_interval=2.0)
+    assert summary.iloc[0]["path_length"] == 10.0
+    assert summary.iloc[0]["net_displacement"] == 10.0
+    assert summary.iloc[0]["mean_speed"] == 2.5
+    assert summary.iloc[0]["net_speed"] == 2.5
+
+
 def test_experiment_metadata_and_plate_matrix():
     meta = parse_metadata("Plate2_MI_A07_t3.png")
     assert meta["plate"] == 2 and meta["well"] == "A07" and meta["timepoint"] == 3
