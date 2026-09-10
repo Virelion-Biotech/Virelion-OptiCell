@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
+import pytest
 
+from opticell.statistics import group_summary, summarize_by_replicate
 from reproducibility import analysis_fingerprint, compare_manifests, environment_fingerprint
 from screening_advanced import b_score, plate_uniformity, ssmd
 from tracking_validation import track_fragmentation, track_gap_rate, track_purity
@@ -46,3 +48,14 @@ def test_tracking_quality_diagnostics():
     assert gaps["tracks_with_gaps"] == 1.0
     assert gaps["gap_rate"] == 0.5
     assert track_purity([1, 1, 2, 2], [1, 1, 2, 2]) == 1.0
+
+
+def test_statistics_reject_missing_replicate_ids():
+    features = pd.DataFrame(
+        {"condition": ["control", "control"], "replicate": ["r1", None], "value": [1.0, 2.0]}
+    )
+    with pytest.raises(ValueError, match="missing replicate IDs"):
+        summarize_by_replicate(features, "replicate", ["value"], ["condition"])
+
+    with pytest.raises(ValueError, match="missing replicate IDs"):
+        group_summary(features, "replicate", ["value"], "condition")
