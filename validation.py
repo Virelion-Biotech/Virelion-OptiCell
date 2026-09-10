@@ -62,6 +62,8 @@ def _label_ids(labels: np.ndarray) -> np.ndarray:
     arr = np.asarray(labels)
     if arr.ndim not in {2, 3}:
         raise ValueError("label arrays must be 2-D or 3-D")
+    if not np.issubdtype(arr.dtype, np.integer):
+        raise ValueError("label arrays must contain integer instance IDs")
     return np.unique(arr[arr > 0])
 
 
@@ -82,21 +84,35 @@ def match_instance_centroids(
     truth_labels: np.ndarray,
     max_distance_px: float = 20.0,
 ) -> tuple[int, int, int]:
-    if max_distance_px <= 0:
-        raise ValueError("max_distance_px must be positive")
-    pred = _centroids_from_labels(predicted_labels)
-    truth = _centroids_from_labels(truth_labels)
+    if max_distance_px <= 0 or not np.isfinite(max_distance_px):
+        raise ValueError("max_distance_px must be a finite positive value")
+    pred_arr = np.asarray(predicted_labels)
+    truth_arr = np.asarray(truth_labels)
+    if pred_arr.shape != truth_arr.shape:
+        raise ValueError("predicted_labels and truth_labels must have identical shapes")
+    pred = _centroids_from_labels(pred_arr)
+    truth = _centroids_from_labels(truth_arr)
     if pred.size == 0 and truth.size == 0:
         return 0, 0, 0
     if pred.size == 0:
         return 0, 0, len(truth)
     if truth.size == 0:
         return 0, len(pred), 0
+
     distances = np.sqrt(((pred[:, None, :] - truth[None, :, :]) ** 2).sum(axis=2))
-    cost = distances.copy()
-    cost[cost > max_distance_px] = max_distance_px + 1.0
+    valid = distances <= max_distance_px
+    if not valid.any():
+        return 0, len(pred), len(truth)
+
+    # Invalid pairings must never be allowed to displace valid pairings.
+    # The penalty is larger than the cost of any all-valid assignment, so
+    # Hungarian assignment maximizes valid-match cardinality first, then
+    # minimizes distance among assignments with that cardinality.
+    finite_distances = distances[valid]
+    penalty = float(finite_distances.max() * min(len(pred), len(truth)) + 1.0)
+    cost = np.where(valid, distances, penalty)
     rows, cols = linear_sum_assignment(cost)
-    tp = int(sum(distances[r, c] <= max_distance_px for r, c in zip(rows, cols)))
+    tp = int(sum(valid[r, c] for r, c in zip(rows, cols)))
     return tp, len(pred) - tp, len(truth) - tp
 
 
