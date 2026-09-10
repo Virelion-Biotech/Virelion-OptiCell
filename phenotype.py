@@ -43,13 +43,15 @@ def score_cells(
     negative_label: str = "negative",
 ) -> pd.DataFrame:
     """Score cells without a black-box model; every contribution is explicit."""
+    if not positive_label or not negative_label or positive_label == negative_label:
+        raise ValueError("positive_label and negative_label must be distinct non-empty strings")
     result = features.copy()
     scores = np.zeros(len(result), dtype=float)
     reasons = [[] for _ in range(len(result))]
     for rule in rules:
         if rule.feature not in result.columns:
             raise ValueError(f"feature {rule.feature!r} not present")
-        passed = pd.to_numeric(result[rule.feature], errors="coerce").map(rule.evaluate).to_numpy()
+        passed = pd.to_numeric(result[rule.feature], errors="coerce").map(rule.evaluate).to_numpy(dtype=bool)
         scores += passed.astype(float) * float(rule.weight)
         for i, ok in enumerate(passed):
             if ok:
@@ -74,6 +76,8 @@ def marker_positivity(
         raise ValueError(f"missing {intensity_column!r}")
     if not np.isfinite(float(threshold)):
         raise ValueError("threshold must be finite")
+    if not positive_label or not negative_label or positive_label == negative_label:
+        raise ValueError("positive_label and negative_label must be distinct non-empty strings")
     result = features.copy()
     values = pd.to_numeric(result[intensity_column], errors="coerce")
     result["marker_threshold"] = float(threshold)
@@ -91,11 +95,12 @@ def group_phenotype_summary(
     frame = features.copy()
     if "phenotype_label" not in frame or "phenotype_score" not in frame:
         raise ValueError("run score_cells before summarizing")
+    if not positive_label:
+        raise ValueError("positive_label must be non-empty")
     if group_column and group_column not in frame.columns:
         raise ValueError(f"missing {group_column!r}")
-    keys = [group_column] if group_column else []
-    if keys:
-        grouped = frame.groupby(keys, dropna=False)
+    if group_column:
+        grouped = frame.groupby(group_column, dropna=False)
         return grouped.agg(
             cell_count=("phenotype_score", "size"),
             positive_fraction=("phenotype_label", lambda s: float((s == positive_label).mean())),
@@ -108,6 +113,3 @@ def group_phenotype_summary(
         "mean_score": float(frame["phenotype_score"].mean()) if len(frame) else np.nan,
         "median_score": float(frame["phenotype_score"].median()) if len(frame) else np.nan,
     }])
-
-
-__all__ = ["Rule", "score_cells", "marker_positivity", "group_phenotype_summary"]
