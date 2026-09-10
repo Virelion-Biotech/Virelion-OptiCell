@@ -41,5 +41,8 @@ def test_tracking_quality_diagnostics():
     fragmentation = track_fragmentation(tracks)
     assert fragmentation["fragmented_objects"] == 1.0
     gaps = track_gap_rate(tracks)
-    assert gaps["gap_count"] == 2.0
+    # Track 2 has frames 0 and 2, so exactly one frame (1) is missing.
+    assert gaps["gap_count"] == 1.0
+    assert gaps["tracks_with_gaps"] == 1.0
+    assert gaps["gap_rate"] == 0.5
     assert track_purity([1, 1, 2, 2], [1, 1, 2, 2]) == 1.0
