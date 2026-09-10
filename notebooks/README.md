@@ -1,15 +1,33 @@
-# Notebooks
+# OptiCell notebooks
 
-## BBBC039_Colab_Validation.ipynb
+## Colab
 
-Google Colab notebook for measured BBBC039 validation (threshold + Cellpose GPU).
+| Notebook | Purpose |
+|----------|---------|
+| [BBBC039_Colab_Validation.ipynb](BBBC039_Colab_Validation.ipynb) | Stage 1 segmentation metrics |
+| [Stage2_CTC_Timelapse_Colab.ipynb](Stage2_CTC_Timelapse_Colab.ipynb) | Stage 2 QC→track on CTC TL datasets **one-by-one** |
 
-**Open in Colab:**
+### Open Stage-2 CTC notebook in Colab
 
-https://colab.research.google.com/github/Virelion-Biotech/Virelion-OptiCell/blob/main/notebooks/BBBC039_Colab_Validation.ipynb
+1. Open: https://colab.research.google.com/
+2. File → Open notebook → GitHub
+3. Repo: `Virelion-Biotech/Virelion-OptiCell`
+4. Path: `notebooks/Stage2_CTC_Timelapse_Colab.ipynb`
 
-1. Runtime → Change runtime type → **GPU (T4)**
-2. Run all cells
-3. Download JSON/CSV from `outputs/bbbc039_validation/`
+Or direct pattern:
 
-Policy: report only measured metrics; do not invent numbers.
+```text
+https://colab.research.google.com/github/Virelion-Biotech/Virelion-OptiCell/blob/main/notebooks/Stage2_CTC_Timelapse_Colab.ipynb
+```
+
+Runs (in order):
+
+1. Fluo-N2DH-GOWT1 `01` then `02` (~53 MB zip)
+2. Fluo-N2DH-SIM+ `01` then `02` (~91 MB)
+3. Fluo-N2DL-HeLa `01` then `02` (~182 MB)
+
+Each cell downloads only if needed, then runs `scripts/run_killer_workflow.py --backend threshold --enable-tracking`.
+
+**CPU runtime is enough.** Set `MAX_FRAMES = 20` for a fast pilot; `0` for full sequences.
+
+Measured aggregate table is written to `stage2_ctc_aggregate.csv` — paste that back for the Stage-2 report (no invented TRA scores).
