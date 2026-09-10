@@ -5,6 +5,7 @@ from typing import Optional
 import cv2
 import numpy as np
 import pandas as pd
+from scipy.spatial import cKDTree
 
 
 def segment_nuclei(gray: np.ndarray, min_area: int = 20, max_area_frac: float = 0.15, adaptive: bool = False) -> np.ndarray:
@@ -37,11 +38,7 @@ def segment_nuclei(gray: np.ndarray, min_area: int = 20, max_area_frac: float = 
 
 
 def assign_nuclei_to_cells(cell_labels: np.ndarray, nucleus_labels: np.ndarray, max_distance_px: Optional[float] = None) -> pd.DataFrame:
-    """Assign nuclei to cells by centroid containment, then nearest-cell boundary distance.
-
-    A nucleus whose centroid falls outside all cells is assigned using the distance
-    from its centroid to the nearest cell pixel, not to the nearest cell centroid.
-    """
+    """Assign nuclei to cells by centroid containment, then nearest cell pixel."""
     cells = np.asarray(cell_labels)
     nuclei = np.asarray(nucleus_labels)
     if cells.ndim != 2 or nuclei.ndim != 2 or cells.shape != nuclei.shape:
@@ -53,14 +50,9 @@ def assign_nuclei_to_cells(cell_labels: np.ndarray, nucleus_labels: np.ndarray, 
     if max_distance_px is not None and (not np.isfinite(max_distance_px) or max_distance_px < 0):
         raise ValueError("max_distance_px must be a finite non-negative value")
 
-    cell_ids = np.unique(cells)
-    cell_ids = cell_ids[cell_ids > 0]
+    cell_pixels = np.argwhere(cells > 0)
+    cell_tree = cKDTree(cell_pixels[:, ::-1]) if cell_pixels.size else None  # x,y coordinates
     rows = []
-    cell_distance_map = None
-    if cell_ids.size:
-        fg = (cells > 0).astype(np.uint8)
-        cell_distance_map = cv2.distanceTransform(1 - fg, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
-
     for nid in np.unique(nuclei):
         if nid <= 0:
             continue
@@ -68,23 +60,18 @@ def assign_nuclei_to_cells(cell_labels: np.ndarray, nucleus_labels: np.ndarray, 
         if not len(x):
             continue
         cx, cy = float(x.mean()), float(y.mean())
-        iy = int(np.clip(np.rint(cy), 0, cells.shape[0] - 1))
         ix = int(np.clip(np.rint(cx), 0, cells.shape[1] - 1))
+        iy = int(np.clip(np.rint(cy), 0, cells.shape[0] - 1))
         parent = int(cells[iy, ix])
-        distance = 0.0 if parent > 0 else float(cell_distance_map[iy, ix]) if cell_distance_map is not None else np.inf
-        if parent == 0 and cell_ids.size:
-            min_distance = float(np.min(cell_distance_map[y, x])) if cell_distance_map is not None else np.inf
-            if max_distance_px is None or min_distance <= max_distance_px:
-                candidate_pixels = np.argwhere((cell_distance_map == min_distance) & (cells > 0))
-                if candidate_pixels.size:
-                    py, px = candidate_pixels[0]
-                    parent = int(cells[py, px])
-                    distance = min_distance
-            else:
-                distance = min_distance
+        distance = 0.0 if parent > 0 else np.inf
+        if parent == 0 and cell_tree is not None:
+            distance, nearest = cell_tree.query([[cx, cy]], k=1)
+            distance = float(distance[0])
+            py, px = cell_pixels[int(nearest[0])]
+            parent = int(cells[py, px])
         if max_distance_px is not None and distance > max_distance_px:
             parent = 0
-        rows.append({"nucleus_label": int(nid), "cell_label": parent, "nucleus_area_px": int(len(x),), "nucleus_centroid_x": cx, "nucleus_centroid_y": cy, "assignment_distance_px": distance})
+        rows.append({"nucleus_label": int(nid), "cell_label": parent, "nucleus_area_px": int(len(x)), "nucleus_centroid_x": cx, "nucleus_centroid_y": cy, "assignment_distance_px": distance})
     return pd.DataFrame(rows)
 
 
@@ -105,7 +92,7 @@ def compartment_features(image: np.ndarray, cell_labels: np.ndarray, nucleus_lab
         raise ValueError("image must be 2-D or HxWxC")
     cells = np.asarray(cell_labels)
     nuclei = np.asarray(nucleus_labels)
-    if cells.shape != intensity.shape or nuclei.shape != intensity.shape:
+    if cells.ndim != 2 or nuclei.ndim != 2 or cells.shape != intensity.shape or nuclei.shape != intensity.shape:
         raise ValueError("image and label arrays must have identical 2-D spatial shapes")
     assignments = assign_nuclei_to_cells(cells, nuclei)
     rows = []
@@ -119,8 +106,17 @@ def compartment_features(image: np.ndarray, cell_labels: np.ndarray, nucleus_lab
         cell_values = intensity[cell_mask].astype(float)
         nuc_values = intensity[nucleus_mask].astype(float)
         cyto_values = intensity[cyto_mask].astype(float)
-        cell_area = int(cell_mask.sum()); nucleus_area = int(nucleus_mask.sum()); cyto_area = int(cyto_mask.sum())
+        cell_area = int(cell_mask.sum())
+        nucleus_area = int(nucleus_mask.sum())
+        cyto_area = int(cyto_mask.sum())
         nuc_mean = float(nuc_values.mean()) if nuc_values.size else np.nan
         cyto_mean = float(cyto_values.mean()) if cyto_values.size else np.nan
-        rows.append({"cell_label": int(cid), "nucleus_count": len(nucleus_ids), "cell_area_px": cell_area, "nucleus_area_px": nucleus_area, "cytoplasm_area_px": cyto_area, "nucleus_to_cell_area_ratio": nucleus_area / cell_area if cell_area else np.nan, "cell_mean_intensity": float(cell_values.mean()) if cell_values.size else np.nan, "nucleus_mean_intensity": nuc_mean, "cytoplasm_mean_intensity": cyto_mean, "nucleus_cytoplasm_intensity_ratio": nuc_mean / cyto_mean if np.isfinite(cyto_mean) and cyto_mean != 0 else np.nan})
+        rows.append({
+            "cell_label": int(cid), "nucleus_count": len(nucleus_ids), "cell_area_px": cell_area,
+            "nucleus_area_px": nucleus_area, "cytoplasm_area_px": cyto_area,
+            "nucleus_to_cell_area_ratio": nucleus_area / cell_area if cell_area else np.nan,
+            "cell_mean_intensity": float(cell_values.mean()) if cell_values.size else np.nan,
+            "nucleus_mean_intensity": nuc_mean, "cytoplasm_mean_intensity": cyto_mean,
+            "nucleus_cytoplasm_intensity_ratio": nuc_mean / cyto_mean if np.isfinite(cyto_mean) and cyto_mean != 0 else np.nan,
+        })
     return pd.DataFrame(rows)
