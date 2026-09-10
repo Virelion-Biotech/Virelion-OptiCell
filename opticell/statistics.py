@@ -13,12 +13,18 @@ def summarize_by_replicate(
     value_columns: Sequence[str],
     group_columns: Optional[Sequence[str]] = None,
 ) -> pd.DataFrame:
-    """Aggregate cell-level measurements to biological/technical replicates."""
+    """Aggregate cell-level measurements to biological/technical replicates.
+
+    Every row contributing to an estimate must have an explicit replicate ID;
+    missing IDs are rejected rather than silently pooled into one pseudo-replicate.
+    """
     group_columns = list(group_columns or [])
     required = {replicate_column, *value_columns, *group_columns}
     missing = sorted(required - set(features.columns))
     if missing:
         raise ValueError(f"missing required columns: {missing}")
+    if features[replicate_column].isna().any():
+        raise ValueError(f"{replicate_column} contains missing replicate IDs")
     keys = group_columns + [replicate_column]
     numeric = features[list(value_columns)].apply(pd.to_numeric, errors="coerce")
     frame = pd.concat([features[keys].reset_index(drop=True), numeric.reset_index(drop=True)], axis=1)
@@ -38,6 +44,8 @@ def group_summary(
     missing = sorted(required - set(replicate_df.columns))
     if missing:
         raise ValueError(f"missing required columns: {missing}")
+    if replicate_df[replicate_column].isna().any():
+        raise ValueError(f"{replicate_column} contains missing replicate IDs")
     rows = []
     for group, frame in replicate_df.groupby(group_column, dropna=False):
         row = {group_column: group, "replicates": int(frame[replicate_column].nunique())}
