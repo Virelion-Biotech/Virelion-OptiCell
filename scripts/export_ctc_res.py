@@ -24,7 +24,7 @@ import pandas as pd
 try:
     import tifffile
 except ImportError as exc:  # pragma: no cover
-    raise SystemExit("tifffile required: pip install tifffile") from exp
+    raise SystemExit("tifffile required: pip install tifffile") from exc
 
 
 def _frame_from_stem(stem: str) -> int | None:
