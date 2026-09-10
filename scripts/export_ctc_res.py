@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 """Export OptiCell Stage-2 outputs to CTC result format (maskT.tif + res_track.txt).
 
-Expected Stage-2 layout:
-  out_dir/
-    masks/{stem}_labels.png   # per-frame instance labels
-    tracks.csv                # columns: frame, label, track_id, ...
+CTC rule: if res_track.txt says track L spans frames B..E, label L must appear
+in *every* maskT for T in [B, E]. OptiCell tracks can have gaps, so we split
+each track_id into continuous tracklets and assign each tracklet a unique CTC ID.
 
-Writes:
-  res_dir/mask000.tif ...
-  res_dir/res_track.txt       # L B E P (parent=0)
-
-Guarantees traccuracy consistency: every track ID listed for frame t appears
-as a positive label in mask t, and every positive mask label is listed.
+Stage-2 layout:
+  masks/{stem}_labels.png  +  tracks.csv (frame, label, track_id)
 """
 from __future__ import annotations
 
@@ -35,7 +30,6 @@ def _frame_from_stem(stem: str) -> int | None:
 
 
 def _read_label_mask(path: Path) -> np.ndarray:
-    """Read instance label image; prefer tifffile for 16-bit safety."""
     suffix = path.suffix.lower()
     if suffix in {".tif", ".tiff"}:
         arr = np.asarray(tifffile.imread(str(path)))
@@ -46,6 +40,28 @@ def _read_label_mask(path: Path) -> np.ndarray:
     if arr.ndim == 3:
         arr = arr[:, :, 0]
     return arr.astype(np.int32, copy=False)
+
+
+def _continuous_runs(frames: list[int]) -> list[tuple[int, int, list[int]]]:
+    """Split sorted frame list into contiguous runs. Returns (B, E, frames_in_run)."""
+    if not frames:
+        return []
+    frames = sorted(set(int(f) for f in frames))
+    runs: list[tuple[int, int, list[int]]] = []
+    start = frames[0]
+    prev = frames[0]
+    buf = [frames[0]]
+    for f in frames[1:]:
+        if f == prev + 1:
+            buf.append(f)
+            prev = f
+        else:
+            runs.append((start, prev, buf))
+            start = f
+            prev = f
+            buf = [f]
+    runs.append((start, prev, buf))
+    return runs
 
 
 def export_ctc_res(
@@ -76,87 +92,98 @@ def export_ctc_res(
         if fr is None:
             continue
         mask_paths[fr] = p
-
     if not mask_paths:
         raise RuntimeError(f"No masks under {masks_dir}")
+
+    # Keep only track rows whose instance label exists on that frame's mask
+    valid_rows: list[dict] = []
+    skipped = 0
+    label_cache: dict[int, np.ndarray] = {}
+    present_inst_cache: dict[int, set[int]] = {}
+
+    for fr, path in mask_paths.items():
+        lab = _read_label_mask(path)
+        label_cache[fr] = lab
+        present_inst_cache[fr] = {int(x) for x in np.unique(lab) if int(x) > 0}
+
+    for _, row in tracks.iterrows():
+        fr = int(row["frame"])
+        inst = int(row["label"])
+        tid = int(row["track_id"])
+        if fr not in present_inst_cache or tid <= 0 or inst <= 0:
+            skipped += 1
+            continue
+        if inst not in present_inst_cache[fr]:
+            skipped += 1
+            continue
+        valid_rows.append({"frame": fr, "label": inst, "track_id": tid})
+
+    if not valid_rows:
+        raise RuntimeError("No valid track rows after mask intersection")
+
+    valid = pd.DataFrame(valid_rows)
+    if skipped:
+        print(f"NOTE: dropped {skipped} track rows with missing instance pixels")
+
+    # Split each OptiCell track_id into continuous CTC tracklets
+    # Map (frame, opticell_track_id) -> ctc_id
+    pair_to_ctc: dict[tuple[int, int], int] = {}
+    track_lines: list[str] = []  # "L B E 0"
+    next_ctc = 1
+    n_splits = 0
+
+    for oid, g in valid.groupby("track_id", sort=True):
+        frames = sorted(int(x) for x in g["frame"].unique())
+        runs = _continuous_runs(frames)
+        if len(runs) > 1:
+            n_splits += len(runs) - 1
+        for b, e, run_frames in runs:
+            ctc_id = next_ctc
+            next_ctc += 1
+            for fr in run_frames:
+                pair_to_ctc[(fr, int(oid))] = ctc_id
+            track_lines.append(f"{ctc_id} {b} {e} 0")
 
     res_dir = res_dir.resolve()
     res_dir.mkdir(parents=True, exist_ok=True)
 
-    # Collect which (frame, track_id) pairs actually received pixels
-    present: list[tuple[int, int]] = []
-    skipped_missing_label = 0
+    # Write masks with CTC IDs
     frames_sorted = sorted(mask_paths)
-
     for fr in frames_sorted:
-        lab = _read_label_mask(mask_paths[fr])
-        present_inst = set(int(x) for x in np.unique(lab) if int(x) > 0)
-
-        sub = tracks[tracks["frame"] == fr]
+        lab = label_cache[fr]
         out = np.zeros(lab.shape, dtype=np.uint16)
-
-        # Prefer explicit label→track_id from tracks; only if label exists in mask
-        used_inst: set[int] = set()
+        sub = valid[valid["frame"] == fr]
         for _, row in sub.iterrows():
+            oid = int(row["track_id"])
             inst = int(row["label"])
-            tid = int(row["track_id"])
-            if tid <= 0 or inst <= 0:
+            ctc_id = pair_to_ctc.get((fr, oid))
+            if ctc_id is None:
                 continue
-            if inst not in present_inst:
-                skipped_missing_label += 1
-                continue
-            out[lab == inst] = np.uint16(tid)
-            used_inst.add(inst)
-            present.append((fr, tid))
+            out[lab == inst] = np.uint16(ctc_id)
+        tifffile.imwrite(str(res_dir / f"mask{fr:03d}.tif"), out)
 
-        # Any mask instances not in tracks.csv get synthetic track IDs so
-        # det_ids ⊆ track_ids for this frame. Use high IDs to avoid clash.
-        # Better: drop orphan pixels (leave 0) and only list present track IDs.
-        # Orphans would fail the opposite check if we left them labeled.
-        # So zero-out orphans (already 0 if not written).
+    track_lines.sort(key=lambda s: int(s.split()[0]))
+    (res_dir / "res_track.txt").write_text("\n".join(track_lines) + "\n", encoding="utf-8")
 
-        out_path = res_dir / f"mask{fr:03d}.tif"
-        tifffile.imwrite(str(out_path), out)
-
-    if skipped_missing_label:
-        print(
-            f"NOTE: skipped {skipped_missing_label} track rows whose instance "
-            f"label was absent from the saved mask (export consistency)."
-        )
-
-    # Rebuild lineage file strictly from IDs that appear in masks
-    if not present:
-        raise RuntimeError("No track IDs written into any mask — cannot export")
-
-    present_df = pd.DataFrame(present, columns=["frame", "track_id"]).drop_duplicates()
-    lines: list[str] = []
-    for tid, g in present_df.groupby("track_id"):
-        tid = int(tid)
-        b = int(g["frame"].min())
-        e = int(g["frame"].max())
-        lines.append(f"{tid} {b} {e} 0")
-    lines.sort(key=lambda s: int(s.split()[0]))
-    (res_dir / "res_track.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    # Verify CTC consistency before caller runs traccuracy
+    # Hard consistency check (CTC semantics)
     for fr in frames_sorted:
         mask = np.asarray(tifffile.imread(str(res_dir / f"mask{fr:03d}.tif")))
-        det_ids = set(int(x) for x in np.unique(mask) if int(x) > 0)
-        track_ids = set(
-            int(t)
-            for t, g in present_df.groupby("track_id")
-            if int(g["frame"].min()) <= fr <= int(g["frame"].max())
-        )
-        # CTC requires IDs present on this frame in both places
-        on_frame = set(present_df.loc[present_df["frame"] == fr, "track_id"].astype(int))
-        if on_frame != det_ids:
+        det_ids = {int(x) for x in np.unique(mask) if int(x) > 0}
+        track_ids = set()
+        for line in track_lines:
+            L, B, E, _P = line.split()
+            L, B, E = int(L), int(B), int(E)
+            if B <= fr <= E:
+                track_ids.add(L)
+        if track_ids != det_ids:
             raise RuntimeError(
-                f"Internal consistency failed at t={fr}: "
-                f"tracks-only={on_frame - det_ids} mask-only={det_ids - on_frame}"
+                f"CTC consistency failed at t={fr}: "
+                f"in_tracks_not_mask={track_ids - det_ids} "
+                f"in_mask_not_tracks={det_ids - track_ids}"
             )
 
     print(f"Wrote {len(frames_sorted)} masks + res_track.txt → {res_dir}")
-    print(f"  unique track IDs exported: {present_df['track_id'].nunique()}")
+    print(f"  CTC tracklets: {len(track_lines)} (gap splits: {n_splits})")
     return res_dir
 
 
