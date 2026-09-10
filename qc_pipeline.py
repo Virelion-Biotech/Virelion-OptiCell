@@ -36,7 +36,7 @@ except Exception as exc:  # pragma: no cover
     _CELLPOSE_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
 
 SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp")
-PIPELINE_VERSION = "2.0.2"
+PIPELINE_VERSION = "2.0.3"
 
 
 @dataclass(frozen=True)
@@ -129,17 +129,17 @@ def sha256_file(path: str, chunk_size: int = 1024 * 1024) -> str:
     return digest.hexdigest()
 
 
-def _collapse_tiff_stack(arr: np.ndarray) -> np.ndarray:
-    """Preserve historical TIFF collapse behavior; multidimensional semantics are not inferred."""
-    if arr.ndim <= 2:
-        return arr
-    if arr.ndim == 3 and arr.shape[-1] in (3, 4):
-        return arr
-    while arr.ndim > 3:
-        arr = np.max(arr, axis=0)
-    if arr.ndim == 3 and arr.shape[-1] not in (3, 4):
-        arr = np.max(arr, axis=0)
-    return arr
+def _validate_tiff_shape(arr: np.ndarray) -> np.ndarray:
+    """Accept only analysis-ready TIFF shapes; never infer Z/T/C semantics."""
+    values = np.asarray(arr)
+    if values.ndim <= 2:
+        return values
+    if values.ndim == 3 and values.shape[-1] in (3, 4):
+        return values
+    raise ValueError(
+        "Multidimensional TIFFs must be explicitly reduced to a single 2-D plane "
+        "or RGB/RGBA image before QC; no Z/T/C projection is inferred automatically"
+    )
 
 
 def load_image(path: str) -> np.ndarray:
@@ -148,7 +148,7 @@ def load_image(path: str) -> np.ndarray:
     if ext not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"Unsupported image extension: {ext}")
     if ext in (".tif", ".tiff") and _HAS_TIFFFILE:
-        return _collapse_tiff_stack(np.asarray(tifffile.imread(path)))
+        return _validate_tiff_shape(np.asarray(tifffile.imread(path)))
     arr = cv2.imread(path, cv2.IMREAD_UNCHANGED)
     if arr is None:
         raise IOError(f"Could not read image: {path}")
@@ -156,6 +156,8 @@ def load_image(path: str) -> np.ndarray:
         arr = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
     elif arr.ndim == 3 and arr.shape[2] == 4:
         arr = cv2.cvtColor(arr, cv2.COLOR_BGRA2RGBA)
+    elif arr.ndim > 3:
+        raise ValueError(f"Expected 2-D or RGB/RGBA image, got shape {arr.shape}")
     return arr
 
 
@@ -193,6 +195,8 @@ def to_grayscale_uint8(arr: np.ndarray) -> np.ndarray:
         raise ValueError(f"Expected 2-D or 3-D image, got shape {values.shape}")
     if values.shape[2] == 1:
         return to_grayscale_uint8(values[:, :, 0])
+    if values.shape[2] not in (3, 4):
+        raise ValueError(f"Expected grayscale or RGB/RGBA image, got shape {values.shape}")
     rgb8 = values[:, :, :3] if values.dtype == np.uint8 else _rescale_to_uint8(values[:, :, :3])
     return cv2.cvtColor(rgb8, cv2.COLOR_RGB2GRAY)
 
@@ -322,7 +326,12 @@ class CellposeSegmenter:
 
 def extract_object_features(gray: np.ndarray, labels: np.ndarray) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
+    values_img = np.asarray(gray)
+    if values_img.ndim != 2:
+        raise ValueError(f"extract_object_features expects a 2-D grayscale image, got shape {values_img.shape}")
     labels = labels.astype(np.int32, copy=False)
+    if labels.shape != values_img.shape:
+        raise ValueError("gray and labels must have identical 2-D shapes")
     num_labels, _, stats, centroids = cv2.connectedComponentsWithStats((labels > 0).astype(np.uint8), connectivity=8)
     for label_id in range(1, num_labels):
         mask = labels == label_id
@@ -334,11 +343,11 @@ def extract_object_features(gray: np.ndarray, labels: np.ndarray) -> pd.DataFram
         circularity = float((4 * np.pi * area) / (perimeter * perimeter)) if perimeter else 0.0
         x, y = int(stats[label_id, cv2.CC_STAT_LEFT]), int(stats[label_id, cv2.CC_STAT_TOP])
         w, h = int(stats[label_id, cv2.CC_STAT_WIDTH]), int(stats[label_id, cv2.CC_STAT_HEIGHT])
-        values = gray[mask]
+        object_values = values_img[mask]
         rows.append({"label": label_id, "area_px": area, "perimeter_px": perimeter, "circularity": float(np.clip(circularity, 0, 1)),
                      "bbox_x": x, "bbox_y": y, "bbox_width": w, "bbox_height": h, "aspect_ratio": float(w / h) if h else 0.0,
                      "centroid_x": float(centroids[label_id][0]), "centroid_y": float(centroids[label_id][1]),
-                     "mean_intensity": float(values.mean()), "std_intensity": float(values.std()), "max_intensity": int(values.max())})
+                     "mean_intensity": float(object_values.mean()), "std_intensity": float(object_values.std()), "max_intensity": float(object_values.max())})
     return pd.DataFrame(rows)
 
 
