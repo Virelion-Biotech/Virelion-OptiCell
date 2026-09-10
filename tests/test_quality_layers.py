@@ -16,6 +16,29 @@ def test_acquisition_artifact_metrics_and_score():
     assert 0 <= score <= 100
 
 
+def test_artifact_metrics_do_not_treat_float_extrema_as_detector_clipping():
+    image = np.full((20, 20), 0.5, dtype=np.float32)
+    image[10, 10] = 1.0
+    metrics = acquisition_artifact_metrics(image)
+    assert metrics["low_clip_fraction"] == 0.0
+    assert metrics["high_clip_fraction"] == 0.0
+    assert metrics["hot_pixel_fraction"] > 0
+
+
+def test_explicit_float_intensity_range_enables_clipping_metrics():
+    image = np.full((20, 20), 0.5, dtype=np.float32)
+    image[:, 0] = 1.0
+    metrics = acquisition_artifact_metrics(image, intensity_range=(0.0, 1.0))
+    assert metrics["high_clip_fraction"] > 0
+
+
+def test_bright_structure_is_not_counted_as_hot_pixels():
+    image = np.full((25, 25), 100, dtype=np.uint8)
+    image[8:17, 8:17] = 255
+    metrics = acquisition_artifact_metrics(image)
+    assert metrics["hot_pixel_fraction"] == 0.0
+
+
 def test_segmentation_acceptance_pass_review_fail():
     passed = segmentation_acceptance(quality_score=90, border_fraction=0.05, tiny_object_fraction=0.05, merged_object_fraction=0.02)
     assert passed.status == "PASS"
