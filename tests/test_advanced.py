@@ -31,6 +31,22 @@ def test_phenotype_rules_are_auditable():
     assert int(positive["marker_positive"].sum()) == 1
 
 
+def test_phenotype_custom_positive_label_is_preserved_in_summary():
+    df = pd.DataFrame({"marker": [0.1, 0.9]})
+    scored = score_cells(df, [Rule("marker", 0.5)], positive_label="hit", negative_label="miss")
+    summary = group_phenotype_summary(scored, positive_label="hit")
+    assert summary.iloc[0]["positive_fraction"] == 0.5
+
+
+def test_phenotype_rules_reject_invalid_thresholds_and_weights():
+    with pytest.raises(ValueError):
+        Rule("marker", float("nan"))
+    with pytest.raises(ValueError):
+        Rule("marker", 0.5, weight=-1)
+    with pytest.raises(ValueError):
+        Rule("marker", 0.5, direction="=")
+
+
 def test_tracking_and_motion_summary():
     a = np.zeros((30, 30), dtype=np.int32); a[5:9, 5:9] = 1
     b = np.zeros_like(a); b[6:10, 7:11] = 1
