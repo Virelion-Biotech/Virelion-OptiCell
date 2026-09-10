@@ -17,6 +17,7 @@ class ExperimentAudit:
     fingerprint: str
     inputs_match: bool | None
     parameters_match: bool | None
+    environment_match: bool | None
     qc_reasons: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
@@ -48,16 +49,25 @@ def audit_experiment(
     fingerprint = analysis_fingerprint(parameters, input_hashes=input_hashes)
     inputs_match: bool | None = None
     parameters_match: bool | None = None
+    environment_match: bool | None = None
     reasons = list(gate.reasons)
+    status = gate.status
     if reference_manifest is not None and candidate_manifest is not None:
         diff = compare_manifests(reference_manifest, candidate_manifest)
         inputs_match = bool(diff["inputs_match"])
         parameters_match = bool(diff["parameters_match"])
+        environment_match = bool(diff["environment_match"])
         if not inputs_match:
             reasons.append("input manifest differs from reference")
         if not parameters_match:
             reasons.append("analysis parameters differ from reference")
-    return ExperimentAudit(gate.status, gate.score, fingerprint, inputs_match, parameters_match, tuple(reasons))
+        if not environment_match:
+            reasons.append("runtime environment differs from reference")
+        if not inputs_match or not parameters_match:
+            status = "FAIL"
+        elif not environment_match and status == "PASS":
+            status = "REVIEW"
+    return ExperimentAudit(status, gate.score, fingerprint, inputs_match, parameters_match, environment_match, tuple(reasons))
 
 
 __all__ = ["ExperimentAudit", "audit_experiment"]
