@@ -33,12 +33,15 @@ def _collapse_channels(image: np.ndarray) -> np.ndarray:
     raise ValueError("image must be a non-empty 2-D array or HxWxC array")
 
 
-def _native_clip_fractions(arr: np.ndarray, values: np.ndarray, intensity_range: Optional[tuple[float, float]]) -> tuple[float, float]:
+def _native_clip_fractions(
+    arr: np.ndarray, intensity_range: Optional[tuple[float, float]]
+) -> tuple[float, float]:
     """Measure clipping only against known detector/intensity bounds.
 
     Integer dtypes have well-defined representable limits. Floating-point data
     do not, so clipping is reported as unavailable (0) unless an explicit
-    ``intensity_range`` is supplied.
+    ``intensity_range`` is supplied. For multi-channel input, clipping is
+    evaluated on the original channel values rather than a channel average.
     """
     if intensity_range is not None:
         low, high = map(float, intensity_range)
@@ -54,7 +57,10 @@ def _native_clip_fractions(arr: np.ndarray, values: np.ndarray, intensity_range:
     total = int(arr.size)
     if not total or not finite.any():
         return 0.0, 0.0
-    return float(np.count_nonzero(arr[finite] <= low) / total), float(np.count_nonzero(arr[finite] >= high) / total)
+    return (
+        float(np.count_nonzero(arr[finite] <= low) / total),
+        float(np.count_nonzero(arr[finite] >= high) / total),
+    )
 
 
 def _local_hot_pixel_fraction(work: np.ndarray) -> float:
@@ -63,18 +69,19 @@ def _local_hot_pixel_fraction(work: np.ndarray) -> float:
     if work.size == 0 or not finite.any() or min(work.shape) < 3:
         return 0.0
 
-    safe = np.where(finite, work, np.nanmedian(work[finite])).astype(np.float32, copy=False)
+    fill_value = float(np.median(work[finite]))
+    safe = np.where(finite, work, fill_value).astype(np.float32, copy=False)
     local_median = cv2.medianBlur(safe, 3)
     residual = safe - local_median
     valid_residual = residual[finite]
-    mad = float(np.median(np.abs(valid_residual - np.median(valid_residual))))
+    residual_median = float(np.median(valid_residual))
+    mad = float(np.median(np.abs(valid_residual - residual_median)))
     scale = 1.4826 * mad
     threshold = max(5.0, 6.0 * scale)
     hot = finite & (residual > threshold)
 
     # A hot-pixel metric should not label an extended bright biological
-    # structure: retain only pixels that are sufficiently isolated from their
-    # immediate neighborhood.
+    # structure: retain only pixels whose surrounding neighborhood is lower.
     neighbor_max = cv2.dilate(local_median, np.ones((3, 3), np.uint8))
     isolated = hot & ((work - neighbor_max) > max(2.0, threshold * 0.25))
     return float(np.count_nonzero(isolated) / work.size)
@@ -100,7 +107,7 @@ def acquisition_artifact_metrics(
     if not finite.any():
         raise ValueError("image contains no finite pixels")
     values = work[finite]
-    low_clip, high_clip = _native_clip_fractions(collapsed, values, intensity_range)
+    low_clip, high_clip = _native_clip_fractions(arr, intensity_range)
     return {
         "low_clip_fraction": low_clip,
         "high_clip_fraction": high_clip,
