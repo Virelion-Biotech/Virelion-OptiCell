@@ -7,6 +7,12 @@ import pandas as pd
 
 
 def _replicate_values(frame: pd.DataFrame, value_column: str, group_column: str, replicate_column: str, group) -> np.ndarray:
+    required = {value_column, group_column, replicate_column}
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise ValueError(f"missing required columns: {missing}")
+    if frame[replicate_column].isna().any():
+        raise ValueError(f"{replicate_column} contains missing replicate IDs")
     subset = frame.loc[frame[group_column] == group, [replicate_column, value_column]].copy()
     subset[value_column] = pd.to_numeric(subset[value_column], errors="coerce")
     subset = subset.dropna(subset=[value_column])
@@ -19,10 +25,10 @@ def bootstrap_ci(values: Sequence[float], *, n_bootstrap: int = 5000, confidence
     """Bootstrap percentile confidence interval for a replicate-level mean."""
     x = np.asarray(list(values), dtype=float)
     x = x[np.isfinite(x)]
-    if x.size == 0:
-        return (float("nan"), float("nan"))
     if not 0 < confidence < 1 or n_bootstrap < 100:
         raise ValueError("invalid confidence or n_bootstrap")
+    if x.size == 0:
+        return (float("nan"), float("nan"))
     rng = np.random.default_rng(seed)
     samples = rng.choice(x, size=(n_bootstrap, x.size), replace=True).mean(axis=1)
     alpha = (1 - confidence) / 2
