@@ -12,6 +12,8 @@ from typing import Any, Iterable, Mapping
 
 
 def file_sha256(path: str, chunk_size: int = 1024 * 1024) -> str:
+    if not isinstance(chunk_size, int) or isinstance(chunk_size, bool) or chunk_size <= 0:
+        raise ValueError("chunk_size must be a positive integer")
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
         while True:
