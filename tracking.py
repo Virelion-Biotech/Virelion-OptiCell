@@ -78,7 +78,6 @@ def _assignment(cost: np.ndarray, row_limits: np.ndarray) -> list[tuple[int, int
     try:
         rows, cols = linear_sum_assignment(sub)
     except ValueError:
-        # Last-resort: no assignment
         return []
 
     out: list[tuple[int, int, float]] = []
@@ -193,9 +192,16 @@ def summarize_tracks(
             if len(g) > 1
             else np.array([], dtype=float)
         )
+        frame_delta = (
+            np.diff(g["frame"].to_numpy(float))
+            if len(g) > 1
+            else np.array([], dtype=float)
+        )
         duration = max(1, int(g["frame"].iloc[-1] - g["frame"].iloc[0])) * frame_interval
         path = float(step.sum() * pixel_size)
         net = float(np.linalg.norm(positions[-1] - positions[0]) * pixel_size)
+        elapsed = frame_delta * frame_interval
+        mean_speed = float(np.sum(step * pixel_size) / np.sum(elapsed)) if np.all(elapsed > 0) else 0.0
         rows.append({
             "track_id": int(track_id),
             "frames": len(g),
@@ -203,7 +209,7 @@ def summarize_tracks(
             "end_frame": int(g["frame"].iloc[-1]),
             "path_length": path,
             "net_displacement": net,
-            "mean_speed": float(step.mean() * pixel_size / frame_interval) if len(step) else 0.0,
+            "mean_speed": mean_speed,
             "net_speed": float(net / duration),
             "straightness": float(net / path) if path > 0 else (1.0 if net == 0 else 0.0),
             "mean_match_confidence": (
