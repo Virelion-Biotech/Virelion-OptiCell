@@ -41,13 +41,7 @@ def _centroids(labels: np.ndarray) -> dict[int, tuple[float, float]]:
 
 
 def _assignment(cost: np.ndarray, row_limits: np.ndarray) -> list[tuple[int, int, float]]:
-    """Hungarian assignment with distance gates.
-
-    SciPy raises ``ValueError: cost matrix is infeasible`` when every entry is
-    +inf after gating. We restrict to rows/cols that still have a finite cost,
-    replace remaining inf with a large finite penalty, then keep only finite
-    matches.
-    """
+    """Hungarian assignment with distance gates."""
     if cost.size == 0:
         return []
     gated = np.asarray(cost, dtype=float).copy()
@@ -61,19 +55,15 @@ def _assignment(cost: np.ndarray, row_limits: np.ndarray) -> list[tuple[int, int
     finite_mask = np.isfinite(gated)
     if not finite_mask.any():
         return []
-
-    row_keep = finite_mask.any(axis=1)
-    col_keep = finite_mask.any(axis=0)
-    row_idx = np.flatnonzero(row_keep)
-    col_idx = np.flatnonzero(col_keep)
+    row_idx = np.flatnonzero(finite_mask.any(axis=1))
+    col_idx = np.flatnonzero(finite_mask.any(axis=0))
     sub = gated[np.ix_(row_idx, col_idx)].copy()
 
     finite_vals = sub[np.isfinite(sub)]
     big = float(np.max(finite_vals)) if finite_vals.size else 1e6
     if not np.isfinite(big) or big <= 0:
         big = 1e6
-    penalty = big * 10.0 + 1.0
-    sub[~np.isfinite(sub)] = penalty
+    sub[~np.isfinite(sub)] = big * 10.0 + 1.0
 
     try:
         rows, cols = linear_sum_assignment(sub)
@@ -183,6 +173,13 @@ def summarize_tracks(
     missing = required - set(tracks.columns)
     if missing:
         raise ValueError(f"tracks missing required columns: {sorted(missing)}")
+    if tracks.duplicated(["track_id", "frame"]).any():
+        raise ValueError("tracks must contain at most one observation per track_id and frame")
+
+    numeric = tracks[["frame", "x", "y"]].apply(pd.to_numeric, errors="coerce")
+    if not np.isfinite(numeric.to_numpy(dtype=float)).all():
+        raise ValueError("frame, x, and y must contain only finite numeric values")
+
     rows = []
     for track_id, group in tracks.sort_values("frame").groupby("track_id"):
         g = group.reset_index(drop=True)
