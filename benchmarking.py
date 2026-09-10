@@ -10,6 +10,14 @@ import pandas as pd
 from validation import paired_segmentation_metrics
 
 
+def _positive_label_count(labels: np.ndarray) -> int:
+    values = np.asarray(labels)
+    if values.ndim not in {2, 3} or not np.issubdtype(values.dtype, np.integer):
+        raise ValueError("segmentation labels must be 2-D or 3-D integer arrays")
+    positive = values[values > 0]
+    return int(np.unique(positive).size) if positive.size else 0
+
+
 def benchmark_backends(
     image: np.ndarray,
     reference_labels: np.ndarray,
@@ -19,11 +27,11 @@ def benchmark_backends(
     metadata: Mapping[str, object] | None = None,
 ) -> pd.DataFrame:
     """Run several segmenters against ground truth with explicit timing and metadata."""
-    if max_distance <= 0:
-        raise ValueError("max_distance must be > 0")
+    if not np.isfinite(max_distance) or max_distance <= 0:
+        raise ValueError("max_distance must be a finite positive value")
     rows: list[dict[str, object]] = []
     reference = np.asarray(reference_labels)
-    reference_instances = int(np.max(reference)) if reference.size else 0
+    reference_instances = _positive_label_count(reference)
     for name, backend in backends.items():
         started = perf_counter()
         base = {"backend": name, "instances_reference": reference_instances, **dict(metadata or {})}
@@ -31,9 +39,20 @@ def benchmark_backends(
             result = backend.segment(image)
             labels = np.asarray(result.labels)
             metrics = paired_segmentation_metrics(labels, reference, max_distance_px=max_distance)
-            rows.append({**base, "elapsed_seconds": perf_counter() - started, "instances_predicted": int(np.max(labels)) if labels.size else 0, "error": None, **metrics})
+            rows.append({
+                **base,
+                "elapsed_seconds": perf_counter() - started,
+                "instances_predicted": _positive_label_count(labels),
+                "error": None,
+                **metrics,
+            })
         except Exception as exc:
-            rows.append({**base, "elapsed_seconds": perf_counter() - started, "instances_predicted": 0, "error": f"{type(exc).__name__}: {exc}"})
+            rows.append({
+                **base,
+                "elapsed_seconds": perf_counter() - started,
+                "instances_predicted": 0,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
     return pd.DataFrame(rows)
 
 
@@ -45,6 +64,9 @@ def aggregate_backend_benchmarks(results: Sequence[pd.DataFrame]) -> pd.DataFram
     if "backend" not in frame.columns:
         raise ValueError("benchmark results must contain a backend column")
     numeric = [c for c in ["elapsed_seconds", "instances_predicted", "instances_reference", "iou", "dice", "precision", "recall", "f1", "absolute_count_error", "relative_count_error"] if c in frame.columns]
+    if not numeric:
+        failures = frame.groupby("backend", dropna=False)["error"].apply(lambda values: int(values.notna().sum())).rename("failed_runs").reset_index()
+        return failures
     grouped = frame.groupby("backend", dropna=False)[numeric].agg(["mean", "median", "std", "count"]).reset_index()
     grouped.columns = [str(column[0]) if isinstance(column, tuple) and column[1] == "" else (f"{column[0]}_{column[1]}" if isinstance(column, tuple) else str(column)) for column in grouped.columns]
     failures = frame.groupby("backend", dropna=False)["error"].apply(lambda values: int(values.notna().sum())).rename("failed_runs").reset_index()
