@@ -36,17 +36,26 @@ def memmap_tiff(path: str, *, series: int = 0) -> np.memmap:
 
 
 def iter_tiff_frames(path: str, *, series: int = 0, axis: int = 0) -> Iterator[np.ndarray]:
-    """Yield one leading-axis frame at a time without materializing the stack."""
+    """Yield TIFF pages along the series leading axis without materializing the stack.
+
+    Arbitrary-axis streaming is not supported by tifffile's page iterator; callers
+    requesting another axis are rejected rather than receiving frames from axis 0.
+    """
     if tifffile is None:
         raise RuntimeError("tifffile is required for streaming TIFF access") from _TIFF_ERROR
     source = Path(path)
     with tifffile.TiffFile(source) as tif:
         if series < 0 or series >= len(tif.series):
             raise IndexError(f"series {series} outside range 0..{len(tif.series) - 1}")
-        data = tif.series[series].aszarr() if False else tif.series[series].pages
-        if not data:
+        series_data = tif.series[series]
+        if not isinstance(axis, int):
+            raise TypeError("axis must be an integer")
+        normalized_axis = axis + len(series_data.shape) if axis < 0 else axis
+        if normalized_axis != 0:
+            raise ValueError("iter_tiff_frames currently supports only the leading series axis (axis=0)")
+        if not series_data.pages:
             return
-        for page in data:
+        for page in series_data.pages:
             yield np.asarray(page.asarray())
 
 
