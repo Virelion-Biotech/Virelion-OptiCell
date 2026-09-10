@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from compartments import assign_nuclei_to_cells, compartment_features
 from ensemble import threshold_ensemble, ensemble_from_results
@@ -108,7 +109,6 @@ def test_ensemble_disagreement_is_exposed():
 
 
 def test_ensemble_empty_validation():
-    import pytest
     with pytest.raises(ValueError):
         ensemble_from_results([])
 
