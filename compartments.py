@@ -12,7 +12,7 @@ def segment_nuclei(gray: np.ndarray, min_area: int = 20, max_area_frac: float = 
     image = np.asarray(gray)
     if image.ndim != 2 or image.dtype != np.uint8:
         raise ValueError("segment_nuclei expects a 2-D uint8 image")
-    if min_area < 1 or not 0 < max_area_frac <= 1:
+    if min_area < 1 or not np.isfinite(max_area_frac) or not 0 < max_area_frac <= 1:
         raise ValueError("invalid nucleus area limits")
     blur = cv2.GaussianBlur(image, (3, 3), 0)
     if adaptive:
@@ -37,17 +37,30 @@ def segment_nuclei(gray: np.ndarray, min_area: int = 20, max_area_frac: float = 
 
 
 def assign_nuclei_to_cells(cell_labels: np.ndarray, nucleus_labels: np.ndarray, max_distance_px: Optional[float] = None) -> pd.DataFrame:
-    """Assign nuclei to cells by nucleus centroid containment, then optional nearest cell."""
-    cells = np.asarray(cell_labels, dtype=np.int32)
-    nuclei = np.asarray(nucleus_labels, dtype=np.int32)
-    if cells.shape != nuclei.shape or cells.ndim != 2:
+    """Assign nuclei to cells by centroid containment, then nearest-cell boundary distance.
+
+    A nucleus whose centroid falls outside all cells is assigned using the distance
+    from its centroid to the nearest cell pixel, not to the nearest cell centroid.
+    """
+    cells = np.asarray(cell_labels)
+    nuclei = np.asarray(nucleus_labels)
+    if cells.ndim != 2 or nuclei.ndim != 2 or cells.shape != nuclei.shape:
         raise ValueError("cell_labels and nucleus_labels must be matching 2-D arrays")
-    cell_ids = np.unique(cells); cell_ids = cell_ids[cell_ids > 0]
+    if not np.issubdtype(cells.dtype, np.integer) or not np.issubdtype(nuclei.dtype, np.integer):
+        raise ValueError("cell_labels and nucleus_labels must contain integer instance IDs")
+    cells = cells.astype(np.int32, copy=False)
+    nuclei = nuclei.astype(np.int32, copy=False)
+    if max_distance_px is not None and (not np.isfinite(max_distance_px) or max_distance_px < 0):
+        raise ValueError("max_distance_px must be a finite non-negative value")
+
+    cell_ids = np.unique(cells)
+    cell_ids = cell_ids[cell_ids > 0]
     rows = []
-    centroids = {}
-    for cid in cell_ids:
-        y, x = np.nonzero(cells == cid)
-        centroids[int(cid)] = (float(x.mean()), float(y.mean())) if len(x) else (np.nan, np.nan)
+    cell_distance_map = None
+    if cell_ids.size:
+        fg = (cells > 0).astype(np.uint8)
+        cell_distance_map = cv2.distanceTransform(1 - fg, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
+
     for nid in np.unique(nuclei):
         if nid <= 0:
             continue
@@ -55,16 +68,23 @@ def assign_nuclei_to_cells(cell_labels: np.ndarray, nucleus_labels: np.ndarray, 
         if not len(x):
             continue
         cx, cy = float(x.mean()), float(y.mean())
-        parent = int(cells[int(round(cy)), int(round(cx))]) if 0 <= int(round(cy)) < cells.shape[0] and 0 <= int(round(cx)) < cells.shape[1] else 0
-        distance = 0.0
-        if parent == 0 and centroids:
-            ids = np.asarray(list(centroids.keys()), dtype=int)
-            pts = np.asarray([centroids[i] for i in ids])
-            d = np.sqrt(((pts - np.array([cx, cy])) ** 2).sum(axis=1))
-            idx = int(np.argmin(d)); distance = float(d[idx]); parent = int(ids[idx])
+        iy = int(np.clip(np.rint(cy), 0, cells.shape[0] - 1))
+        ix = int(np.clip(np.rint(cx), 0, cells.shape[1] - 1))
+        parent = int(cells[iy, ix])
+        distance = 0.0 if parent > 0 else float(cell_distance_map[iy, ix]) if cell_distance_map is not None else np.inf
+        if parent == 0 and cell_ids.size:
+            min_distance = float(np.min(cell_distance_map[y, x])) if cell_distance_map is not None else np.inf
+            if max_distance_px is None or min_distance <= max_distance_px:
+                candidate_pixels = np.argwhere((cell_distance_map == min_distance) & (cells > 0))
+                if candidate_pixels.size:
+                    py, px = candidate_pixels[0]
+                    parent = int(cells[py, px])
+                    distance = min_distance
+            else:
+                distance = min_distance
         if max_distance_px is not None and distance > max_distance_px:
             parent = 0
-        rows.append({"nucleus_label": int(nid), "cell_label": parent, "nucleus_area_px": int(len(x)), "nucleus_centroid_x": cx, "nucleus_centroid_y": cy, "assignment_distance_px": distance})
+        rows.append({"nucleus_label": int(nid), "cell_label": parent, "nucleus_area_px": int(len(x),), "nucleus_centroid_x": cx, "nucleus_centroid_y": cy, "assignment_distance_px": distance})
     return pd.DataFrame(rows)
 
 
@@ -72,14 +92,21 @@ def compartment_features(image: np.ndarray, cell_labels: np.ndarray, nucleus_lab
     """Calculate nucleus/cytoplasm area and intensity features for each assigned cell."""
     arr = np.asarray(image)
     if arr.ndim == 3:
+        if not np.issubdtype(arr.dtype, np.number):
+            raise TypeError("image must contain numeric values")
         if not 0 <= channel < arr.shape[2]:
             raise IndexError("channel outside image range")
         intensity = arr[:, :, channel]
     elif arr.ndim == 2:
+        if not np.issubdtype(arr.dtype, np.number):
+            raise TypeError("image must contain numeric values")
         intensity = arr
     else:
         raise ValueError("image must be 2-D or HxWxC")
-    cells = np.asarray(cell_labels, dtype=np.int32); nuclei = np.asarray(nucleus_labels, dtype=np.int32)
+    cells = np.asarray(cell_labels)
+    nuclei = np.asarray(nucleus_labels)
+    if cells.shape != intensity.shape or nuclei.shape != intensity.shape:
+        raise ValueError("image and label arrays must have identical 2-D spatial shapes")
     assignments = assign_nuclei_to_cells(cells, nuclei)
     rows = []
     for cid in np.unique(cells):
