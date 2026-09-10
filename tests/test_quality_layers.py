@@ -4,6 +4,7 @@ import pytest
 
 from opticell.acceptance import segmentation_acceptance
 from opticell.artifact_quality import acquisition_artifact_metrics, artifact_burden_score
+from ensemble import fov_confidence
 from opticell.robustness import stable_parameter_subset, summarize_sensitivity
 
 
@@ -37,6 +38,15 @@ def test_bright_structure_is_not_counted_as_hot_pixels():
     image[8:17, 8:17] = 255
     metrics = acquisition_artifact_metrics(image)
     assert metrics["hot_pixel_fraction"] == 0.0
+
+
+def test_fov_confidence_counts_distinct_labels():
+    gray = np.zeros((20, 20), dtype=np.uint8)
+    labels = np.zeros((20, 20), dtype=np.int32)
+    labels[2:5, 2:5] = 3
+    labels[10:13, 10:13] = 7
+    confidence = fov_confidence(gray, labels, focus_score=100.0)
+    assert confidence["object_count"] == 2.0
 
 
 def test_segmentation_acceptance_pass_review_fail():
