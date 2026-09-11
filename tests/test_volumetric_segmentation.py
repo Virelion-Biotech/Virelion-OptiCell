@@ -26,7 +26,7 @@ def test_segment_threshold_3d_supports_explicit_normalization_modes():
 def test_segment_threshold_3d_rejects_invalid_normalization():
     with pytest.raises(ValueError, match="normalization"):
         segment_threshold_3d(np.zeros((4, 4, 4), dtype=np.float32), normalization="unknown")
-    with pytest.raises(ValueError, match="values in \[0, 1\]"):
+    with pytest.raises(ValueError, match=r"values in \[0, 1\]"):
         segment_threshold_3d(np.ones((4, 4, 4), dtype=np.float32) * 10, normalization="none")
 
 
