@@ -37,6 +37,18 @@ def test_segment_threshold_3d_rejects_invalid_inputs():
         segment_threshold_3d(np.zeros((4, 4, 4), dtype=np.uint8), voxel_size=(1, 1, 0))
 
 
+def test_segment_threshold_3d_rejects_non_finite_input():
+    volume = np.zeros((4, 4, 4), dtype=np.float32)
+    volume[0, 0, 0] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        segment_threshold_3d(volume)
+
+
+def test_segment_threshold_3d_rejects_non_integer_min_volume():
+    with pytest.raises(ValueError, match="positive integer"):
+        segment_threshold_3d(np.zeros((4, 4, 4), dtype=np.uint8), min_volume_voxels=1.5)
+
+
 def test_segment_threshold_3d_constant_volume_is_empty():
     result = segment_threshold_3d(np.full((8, 8, 8), 50, dtype=np.uint8), min_volume_voxels=2)
     assert result.count == 0
