@@ -16,15 +16,11 @@ from quantitative import (
 
 
 def test_spatial_features_and_summary():
-    features = pd.DataFrame(
-        {
-            "centroid_x": [10.0, 20.0, 80.0],
-            "centroid_y": [10.0, 20.0, 80.0],
-        }
-    )
+    features = pd.DataFrame({"centroid_x": [10.0, 20.0, 80.0], "centroid_y": [10.0, 20.0, 80.0]})
     enriched = add_spatial_features(features, (100, 100))
     assert "nearest_neighbor_distance_px" in enriched.columns
     assert enriched["nearest_neighbor_distance_px"].iloc[0] > 0
+    assert np.isclose(enriched["x_norm"].max(), 80.0 / 99.0)
     summary = summarize_spatial_features(features, (100, 100))
     assert summary["object_count"] == 3.0
     assert np.isclose(summary["density_per_100k_px"], 30.0)
@@ -43,11 +39,19 @@ def test_channel_summary_and_object_intensity():
     assert measured.loc[measured["channel"] == 1, "mean_intensity"].iloc[0] == 100.0
 
 
+def test_object_intensity_preserves_float64_precision():
+    image = np.full((2, 2), 1.234567890123, dtype=np.float64)
+    labels = np.ones((2, 2), dtype=np.int32)
+    measured = object_channel_intensity(image, labels)
+    assert np.isclose(measured.loc[0, "mean_intensity"], 1.234567890123)
+
+
 def test_colocalization_helpers():
     a = np.array([[1, 1], [0, 0]], dtype=np.uint8)
     b = np.array([[1, 0], [0, 0]], dtype=np.uint8)
     assert colocated_fraction(a, b) == 0.5
     assert normalized_colocalization(a, a) > 0.99
+    assert np.isnan(normalized_colocalization(np.ones((2, 2)), np.zeros((2, 2))))
 
 
 def test_background_correction_is_bounded():
