@@ -30,6 +30,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from qc_pipeline import (  # noqa: E402
+    load_image,
     to_grayscale_uint8,
     segment_threshold,
     CellposeSegmenter,
@@ -67,21 +68,22 @@ def iter_images(folder: Path):
         yield from sorted(folder.rglob(ext))
 
 
-def load_gray(path: Path) -> np.ndarray:
-    arr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
-    if arr is None:
-        raise IOError(f"Could not read {path}")
-    if arr.ndim == 3 and arr.shape[2] >= 3:
-        arr = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_BGR2RGB)
-    return to_grayscale_uint8(arr)
+def load_gray(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Return native grayscale pixels plus an 8-bit QC/segmentation copy."""
+    raw = load_image(str(path))
+    if raw.ndim == 2:
+        native_gray = raw
+    else:
+        native_gray = cv2.cvtColor(raw[:, :, :3], cv2.COLOR_RGB2GRAY)
+    gray8 = to_grayscale_uint8(native_gray)
+    return native_gray, gray8
 
 
 def default_phenotype_rules() -> list[Rule]:
-    """Explicit morphology/intensity rules (auditable, not ML)."""
+    """Explicit morphology rules with no bit-depth-dependent intensity cutoff."""
     return [
         Rule(feature="area_px", threshold=50.0, direction=">=", weight=1.0, label="area_ok"),
         Rule(feature="circularity", threshold=0.4, direction=">=", weight=1.0, label="roundish"),
-        Rule(feature="mean_intensity", threshold=40.0, direction=">=", weight=1.0, label="bright_enough"),
     ]
 
 
@@ -107,6 +109,13 @@ def main() -> int:
     parser.add_argument("--track-max-distance", type=float, default=50.0)
     parser.add_argument("--track-max-gap", type=int, default=1)
     args = parser.parse_args()
+
+    if args.max_images < 0:
+        parser.error("--max-images must be >= 0")
+    if args.track_max_gap < 0:
+        parser.error("--track-max-gap must be >= 0")
+    if args.track_max_distance <= 0 or not np.isfinite(args.track_max_distance):
+        parser.error("--track-max-distance must be finite and > 0")
 
     folder = args.images.expanduser().resolve()
     if not folder.is_dir():
@@ -134,11 +143,30 @@ def main() -> int:
     cellpose_seg = None
     if needs_cp:
         if not _HAS_CELLPOSE:
-            print(f"ERROR: Cellpose unavailable: {_CELLPOSE_IMPORT_ERROR}", file=sys.stderr)
-            print("Install: pip install -e '.[cellpose]'  or use --backend threshold", file=sys.stderr)
-            return 5
-        cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=bool(args.gpu))
-        _ = cellpose_seg.model
+            if args.backend == "auto":
+                backend = "threshold"
+                backend_reason = (
+                    "auto: Cellpose is importable but unavailable at runtime; "
+                    f"falling back to threshold ({_CELLPOSE_IMPORT_ERROR or 'initialization failed'})"
+                )
+                print(f"WARNING: {backend_reason}", file=sys.stderr)
+            else:
+                print(f"ERROR: Cellpose unavailable: {_CELLPOSE_IMPORT_ERROR}", file=sys.stderr)
+                print("Install: pip install -e '.[cellpose]'  or use --backend threshold", file=sys.stderr)
+                return 5
+        else:
+            try:
+                cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=bool(args.gpu))
+                _ = cellpose_seg.model
+            except Exception as exc:
+                if args.backend == "auto":
+                    backend = "threshold"
+                    backend_reason = f"auto: Cellpose initialization failed; falling back to threshold ({exc})"
+                    print(f"WARNING: {backend_reason}", file=sys.stderr)
+                    cellpose_seg = None
+                else:
+                    print(f"ERROR: Cellpose initialization failed: {exc}", file=sys.stderr)
+                    return 5
 
     out_dir = args.out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -148,10 +176,11 @@ def main() -> int:
     fov_rows: list[dict] = []
     feature_frames: list[pd.DataFrame] = []
     labels_by_time: list[np.ndarray] = []
+    tracking_complete = True
 
     for i, path in enumerate(paths, 1):
         try:
-            gray = load_gray(path)
+            native_gray, gray = load_gray(path)
             focus = compute_focus_score(gray)
             bright_mean, bright_std = compute_brightness(gray)
             sat = compute_saturation_fraction(gray)
@@ -166,7 +195,7 @@ def main() -> int:
                 seg = hybrid_threshold_cellpose(gray, cellpose_segmenter=cellpose_seg)
 
             conf = fov_confidence(gray, seg.labels, focus_score=focus)
-            feats = extract_object_features(gray, seg.labels)
+            feats = extract_object_features(native_gray, seg.labels)
             if not feats.empty:
                 feats = feats.copy()
                 feats.insert(0, "frame_index", i - 1)
@@ -174,7 +203,11 @@ def main() -> int:
                 feature_frames.append(feats)
 
             mask_path = masks_dir / f"{path.stem}_labels.png"
-            cv2.imwrite(str(mask_path), np.clip(seg.labels, 0, 65535).astype(np.uint16))
+            max_label = int(seg.labels.max()) if seg.labels.size else 0
+            if max_label > 65535:
+                raise ValueError("segmentation produced more than 65535 labels; PNG uint16 export is unsafe")
+            if not cv2.imwrite(str(mask_path), np.clip(seg.labels, 0, 65535).astype(np.uint16)):
+                raise IOError(f"Could not write mask: {mask_path}")
 
             if args.enable_tracking:
                 labels_by_time.append(seg.labels.astype(np.int32))
@@ -203,6 +236,7 @@ def main() -> int:
                 f"flags={conf['flags'] or '-'}"
             )
         except Exception as exc:
+            tracking_complete = False
             print(f"  [{i}/{len(paths)}] FAIL {path.name}: {exc}")
 
     if not fov_rows:
@@ -214,7 +248,7 @@ def main() -> int:
     if not cells_df.empty:
         rules = default_phenotype_rules()
         cells_df = score_cells(cells_df, rules, positive_label="pass_rules", negative_label="fail_rules")
-        phenotype_summary = group_phenotype_summary(cells_df)
+        phenotype_summary = group_phenotype_summary(cells_df, positive_label="pass_rules")
         cells_path = out_dir / "cell_features_phenotype.csv"
         cells_df.to_csv(cells_path, index=False)
         print(f"Wrote {cells_path} ({len(cells_df)} objects)")
@@ -223,7 +257,7 @@ def main() -> int:
 
     tracks_df = None
     track_summary = None
-    if args.enable_tracking and len(labels_by_time) >= 2:
+    if args.enable_tracking and len(labels_by_time) >= 2 and tracking_complete and len(labels_by_time) == len(paths):
         cfg = TrackingConfig(
             max_distance_px=float(args.track_max_distance),
             max_gap=int(args.track_max_gap),
@@ -238,7 +272,8 @@ def main() -> int:
         )
         print("NOTE: tracking assumes filename order is time on ONE field of view.")
     elif args.enable_tracking:
-        print("NOTE: tracking skipped (need >= 2 frames)")
+        reason = "a frame failed" if not tracking_complete else "fewer than 2 successful frames"
+        print(f"NOTE: tracking skipped ({reason}; temporal integrity preserved)", file=sys.stderr)
 
     confs = [r["confidence_score"] for r in fov_rows]
     counts = [r["object_count"] for r in fov_rows]
@@ -260,7 +295,6 @@ def main() -> int:
         summary["phenotype_positive_fraction"] = float(row0.get("positive_fraction", float("nan")))
         summary["phenotype_mean_score"] = float(row0.get("mean_score", float("nan")))
 
-    # Collapse guard (Stage-3): warn if count_cv suggests FP explosion
     if counts and mean_count > 0 and count_cv > 1.0:
         print(
             f"WARNING: count_cv={count_cv:.2f} > 1.0 — possible segmentation collapse. "
@@ -290,7 +324,7 @@ def main() -> int:
         "per_image": fov_rows,
         "note": (
             "Default backend=auto → cellpose if installed else threshold. "
-            "Phenotype = explicit rules. Tracking only with --enable-tracking on ordered TL."
+            "Phenotype = explicit morphology rules. Tracking only with --enable-tracking on ordered TL."
         ),
     }
     out_json = out_dir / "workflow_summary.json"
