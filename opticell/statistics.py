@@ -7,17 +7,8 @@ import numpy as np
 import pandas as pd
 
 
-def summarize_by_replicate(
-    features: pd.DataFrame,
-    replicate_column: str,
-    value_columns: Sequence[str],
-    group_columns: Optional[Sequence[str]] = None,
-) -> pd.DataFrame:
-    """Aggregate cell-level measurements to biological/technical replicates.
-
-    Every row contributing to an estimate must have an explicit replicate ID;
-    missing IDs are rejected rather than silently pooled into one pseudo-replicate.
-    """
+def summarize_by_replicate(features: pd.DataFrame, replicate_column: str, value_columns: Sequence[str], group_columns: Optional[Sequence[str]] = None) -> pd.DataFrame:
+    """Aggregate cell-level measurements to biological/technical replicates."""
     group_columns = list(group_columns or [])
     required = {replicate_column, *value_columns, *group_columns}
     missing = sorted(required - set(features.columns))
@@ -33,12 +24,7 @@ def summarize_by_replicate(
     return agg.reset_index()
 
 
-def group_summary(
-    replicate_df: pd.DataFrame,
-    replicate_column: str,
-    value_columns: Sequence[str],
-    group_column: str,
-) -> pd.DataFrame:
+def group_summary(replicate_df: pd.DataFrame, replicate_column: str, value_columns: Sequence[str], group_column: str) -> pd.DataFrame:
     """Summarize experimental groups using replicate-level observations."""
     required = {replicate_column, group_column, *value_columns}
     missing = sorted(required - set(replicate_df.columns))
@@ -95,12 +81,7 @@ def permutation_pvalue(a: Sequence[float], b: Sequence[float], n_permutations: i
     return float((extreme + 1) / (n_permutations + 1))
 
 
-def paired_permutation_pvalue(
-    a: Sequence[float],
-    b: Sequence[float],
-    n_permutations: int = 10000,
-    seed: int = 0,
-) -> float:
+def paired_permutation_pvalue(a: Sequence[float], b: Sequence[float], n_permutations: int = 10000, seed: int = 0) -> float:
     """Two-sided paired permutation p-value using random sign flips of pair differences."""
     if n_permutations < 100:
         raise ValueError("n_permutations must be >= 100")
@@ -145,48 +126,21 @@ def benjamini_hochberg(pvalues: Sequence[float]) -> np.ndarray:
     return q
 
 
-def compare_two_groups(
-    replicate_df: pd.DataFrame,
-    value_column: str,
-    group_column: str,
-    group_a,
-    group_b,
-    n_permutations: int = 10000,
-    seed: int = 0,
-) -> dict[str, float]:
+def compare_two_groups(replicate_df: pd.DataFrame, value_column: str, group_column: str, group_a, group_b, n_permutations: int = 10000, seed: int = 0) -> dict[str, float]:
     """Return independent replicate-level effect size and permutation p-value."""
     if value_column not in replicate_df or group_column not in replicate_df:
         raise ValueError("value_column and group_column must exist")
+    if group_a == group_b:
+        raise ValueError("group_a and group_b must be distinct")
     a = pd.to_numeric(replicate_df.loc[replicate_df[group_column] == group_a, value_column], errors="coerce")
     b = pd.to_numeric(replicate_df.loc[replicate_df[group_column] == group_b, value_column], errors="coerce")
     a = a[np.isfinite(a)]
     b = b[np.isfinite(b)]
-    return {
-        "n_group_a": float(len(a)),
-        "n_group_b": float(len(b)),
-        "mean_group_a": float(a.mean()) if len(a) else np.nan,
-        "mean_group_b": float(b.mean()) if len(b) else np.nan,
-        "mean_difference": float(a.mean() - b.mean()) if len(a) and len(b) else np.nan,
-        "cohens_d": effect_size_mean_difference(a, b),
-        "permutation_p": permutation_pvalue(a, b, n_permutations=n_permutations, seed=seed),
-    }
+    return {"n_group_a": float(len(a)), "n_group_b": float(len(b)), "mean_group_a": float(a.mean()) if len(a) else np.nan, "mean_group_b": float(b.mean()) if len(b) else np.nan, "mean_difference": float(a.mean() - b.mean()) if len(a) and len(b) else np.nan, "cohens_d": effect_size_mean_difference(a, b), "permutation_p": permutation_pvalue(a, b, n_permutations=n_permutations, seed=seed)}
 
 
-def compare_paired_groups(
-    pair_df: pd.DataFrame,
-    value_column: str,
-    group_column: str,
-    pair_column: str,
-    group_a,
-    group_b,
-    n_permutations: int = 10000,
-    seed: int = 0,
-) -> dict[str, float]:
-    """Compare matched pairs without treating paired observations as independent.
-
-    Each pair ID must occur exactly once in each requested group. Pairs with
-    missing/non-finite measurements are excluded before the paired test.
-    """
+def compare_paired_groups(pair_df: pd.DataFrame, value_column: str, group_column: str, pair_column: str, group_a, group_b, n_permutations: int = 10000, seed: int = 0) -> dict[str, float]:
+    """Compare matched pairs without treating paired observations as independent."""
     required = {value_column, group_column, pair_column}
     missing = sorted(required - set(pair_df.columns))
     if missing:
@@ -195,6 +149,8 @@ def compare_paired_groups(
         raise ValueError(f"{pair_column} contains missing pair IDs")
     if group_a == group_b:
         raise ValueError("group_a and group_b must be distinct")
+    if not pair_df[group_column].isin([group_a, group_b]).any():
+        raise ValueError("requested groups are not present")
     selected = pair_df[pair_df[group_column].isin([group_a, group_b])].copy()
     counts = selected.groupby([pair_column, group_column], dropna=False).size()
     bad = counts[counts != 1]
@@ -202,7 +158,7 @@ def compare_paired_groups(
         raise ValueError("each pair ID must occur exactly once in each requested group")
     pair_ids_a = set(selected.loc[selected[group_column] == group_a, pair_column])
     pair_ids_b = set(selected.loc[selected[group_column] == group_b, pair_column])
-    if pair_ids_a != pair_ids_b:
+    if not pair_ids_a or pair_ids_a != pair_ids_b:
         raise ValueError("each pair ID must occur exactly once in each requested group")
     pivot = selected.pivot(index=pair_column, columns=group_column, values=value_column)
     values_a = pd.to_numeric(pivot[group_a], errors="coerce")
@@ -210,10 +166,4 @@ def compare_paired_groups(
     finite = np.isfinite(values_a.to_numpy(float)) & np.isfinite(values_b.to_numpy(float))
     a = values_a.to_numpy(float)[finite]
     b = values_b.to_numpy(float)[finite]
-    return {
-        "n_pairs": float(len(a)),
-        "mean_group_a": float(a.mean()) if len(a) else np.nan,
-        "mean_group_b": float(b.mean()) if len(b) else np.nan,
-        "mean_difference": float((a - b).mean()) if len(a) else np.nan,
-        "paired_permutation_p": paired_permutation_pvalue(a, b, n_permutations=n_permutations, seed=seed),
-    }
+    return {"n_pairs": float(len(a)), "mean_group_a": float(a.mean()) if len(a) else np.nan, "mean_group_b": float(b.mean()) if len(b) else np.nan, "mean_difference": float((a - b).mean()) if len(a) else np.nan, "paired_permutation_p": paired_permutation_pvalue(a, b, n_permutations=n_permutations, seed=seed)}
