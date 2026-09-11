@@ -26,7 +26,6 @@ def nearest_neighbor_distances(features: pd.DataFrame) -> np.ndarray:
     n = len(points)
     if n < 2:
         return np.full(n, np.nan, dtype=float)
-    # Chunked pairwise distances avoids a single huge NxN allocation.
     nearest = np.full(n, np.inf, dtype=float)
     for start in range(0, n, 1024):
         stop = min(start + 1024, n)
@@ -40,9 +39,10 @@ def nearest_neighbor_distances(features: pd.DataFrame) -> np.ndarray:
 
 def add_spatial_features(features: pd.DataFrame, image_shape: Sequence[int]) -> pd.DataFrame:
     """Add nearest-neighbour, normalized coordinates and density measures."""
-    if len(image_shape) < 2 or image_shape[0] <= 0 or image_shape[1] <= 0:
+    shape = tuple(image_shape)
+    if len(shape) < 2 or shape[0] <= 0 or shape[1] <= 0:
         raise ValueError("image_shape must contain positive height and width")
-    if not np.issubdtype(np.asarray(image_shape).dtype, np.integer):
+    if any(not isinstance(dim, Integral) or isinstance(dim, bool) for dim in shape[:2]):
         raise ValueError("image_shape dimensions must be integers")
     result = features.copy()
     if result.empty:
@@ -51,10 +51,12 @@ def add_spatial_features(features: pd.DataFrame, image_shape: Sequence[int]) -> 
         result["y_norm"] = pd.Series(dtype=float)
         result["cell_density_per_100k_px"] = pd.Series(dtype=float)
         return result
-    h, w = float(image_shape[0]), float(image_shape[1])
+    h, w = float(shape[0]), float(shape[1])
     result["nearest_neighbor_distance_px"] = nearest_neighbor_distances(result)
-    result["x_norm"] = result["centroid_x"] / w
-    result["y_norm"] = result["centroid_y"] / h
+    # Pixel coordinates span 0..w-1 and 0..h-1; use those extents so the
+    # normalized coordinates genuinely map the image bounds to [0, 1].
+    result["x_norm"] = result["centroid_x"] / max(w - 1.0, 1.0)
+    result["y_norm"] = result["centroid_y"] / max(h - 1.0, 1.0)
     result["cell_density_per_100k_px"] = len(result) / (h * w) * 100000.0
     return result
 
@@ -69,7 +71,7 @@ def summarize_spatial_features(features: pd.DataFrame, image_shape: Sequence[int
         "density_per_100k_px": float(len(enriched) / (h * w) * 100000.0),
         "mean_nearest_neighbor_px": float(nn.mean()) if nn.size else float("nan"),
         "median_nearest_neighbor_px": float(np.median(nn)) if nn.size else float("nan"),
-        "nearest_neighbor_cv": float(nn.std(ddof=1) / nn.mean()) if nn.size > 1 and nn.mean() else 0.0,
+        "nearest_neighbor_cv": float(nn.std(ddof=1) / nn.mean()) if nn.size > 1 and nn.mean() else np.nan,
     }
 
 
@@ -90,7 +92,7 @@ def channel_summary(image: np.ndarray) -> pd.DataFrame:
         raise ValueError("image must have a numeric dtype")
     rows = []
     for channel in range(arr.shape[2]):
-        values = arr[:, :, channel].astype(np.float32, copy=False)
+        values = arr[:, :, channel].astype(np.float64, copy=False)
         if not np.isfinite(values).all():
             raise ValueError("image values must be finite")
         lo, hi = np.percentile(values, [1, 99])
@@ -100,19 +102,7 @@ def channel_summary(image: np.ndarray) -> pd.DataFrame:
             high_fraction = float((values >= dtype_info.max).mean())
         else:
             low_fraction = high_fraction = float("nan")
-        rows.append(
-            {
-                "channel": channel,
-                "mean": float(values.mean()),
-                "std": float(values.std()),
-                "min": float(values.min()),
-                "max": float(values.max()),
-                "p01": float(lo),
-                "p99": float(hi),
-                "saturation_low_fraction": low_fraction,
-                "saturation_high_fraction": high_fraction,
-            }
-        )
+        rows.append({"channel": channel, "mean": float(values.mean()), "std": float(values.std()), "min": float(values.min()), "max": float(values.max()), "p01": float(lo), "p99": float(hi), "saturation_low_fraction": low_fraction, "saturation_high_fraction": high_fraction})
     return pd.DataFrame(rows)
 
 
@@ -136,20 +126,10 @@ def object_channel_intensity(image: np.ndarray, labels: np.ndarray) -> pd.DataFr
     for label_id in label_ids:
         mask = lab == label_id
         for channel in range(arr.shape[2]):
-            values = arr[:, :, channel][mask].astype(np.float32, copy=False)
+            values = arr[:, :, channel][mask].astype(np.float64, copy=False)
             if values.size == 0:
                 continue
-            rows.append(
-                {
-                    "label": int(label_id),
-                    "channel": int(channel),
-                    "mean_intensity": float(values.mean()),
-                    "median_intensity": float(np.median(values)),
-                    "std_intensity": float(values.std()),
-                    "max_intensity": float(values.max()),
-                    "integrated_intensity": float(values.sum()),
-                }
-            )
+            rows.append({"label": int(label_id), "channel": int(channel), "mean_intensity": float(values.mean()), "median_intensity": float(np.median(values)), "std_intensity": float(values.std()), "max_intensity": float(values.max()), "integrated_intensity": float(values.sum())})
     return pd.DataFrame(rows)
 
 
@@ -174,7 +154,7 @@ def normalized_colocalization(image_a: np.ndarray, image_b: np.ndarray) -> float
     a_std = a.std()
     b_std = b.std()
     if a_std == 0 or b_std == 0:
-        return 0.0
+        return float("nan")
     return float(np.corrcoef(a, b)[0, 1])
 
 
