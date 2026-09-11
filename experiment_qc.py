@@ -82,7 +82,7 @@ def plate_edge_effect(
 
 
 def plate_qc_summary(df: pd.DataFrame, metrics: Sequence[str], *, control_group: str | None = None, control_value: object | None = None, group_column: str = "condition") -> pd.DataFrame:
-    """Produce a compact plate-level QC table with control-normalized dispersion."""
+    """Produce a compact plate-level QC table with control-reference dispersion and outliers."""
     missing = sorted(set(metrics) - set(df.columns))
     if missing:
         raise ValueError(f"missing metric columns: {missing}")
@@ -92,11 +92,19 @@ def plate_qc_summary(df: pd.DataFrame, metrics: Sequence[str], *, control_group:
     for metric in metrics:
         values = pd.to_numeric(df[metric], errors="coerce").dropna().to_numpy(float)
         row = {"metric": metric, "n": int(values.size), "mean": float(values.mean()) if values.size else np.nan, "median": float(np.median(values)) if values.size else np.nan, "std": float(values.std(ddof=1)) if values.size > 1 else np.nan}
-        if control_group and control_value is not None:
-            controls = df.loc[df[control_group] == control_value, metric]
+        if control_group is not None and control_value is not None:
+            controls = pd.to_numeric(df.loc[df[control_group] == control_value, metric], errors="coerce").dropna().to_numpy(float)
+            if controls.size == 0:
+                raise ValueError(f"no valid control observations found for metric {metric!r}")
+            control_median = float(np.median(controls))
+            control_mad = float(np.median(np.abs(controls - control_median)))
+            control_scale = 1.4826 * control_mad
+            if control_scale == 0 and controls.size > 1:
+                control_std = float(np.std(controls, ddof=1))
+                control_scale = control_std if control_std > 0 else 0.0
             z = robust_zscore(values, controls)
             finite = z[np.isfinite(z)]
-            row["control_robust_sd"] = float(np.std(finite, ddof=1)) if finite.size > 1 else np.nan
+            row["control_robust_sd"] = float(control_scale) if control_scale > 0 else np.nan
             row["control_outlier_fraction_abs_z_gt_3"] = float(np.mean(np.abs(finite) > 3)) if finite.size else np.nan
         else:
             row["control_robust_sd"] = np.nan
