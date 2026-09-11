@@ -92,11 +92,40 @@ def test_object_features_preserve_native_intensity_values():
     assert features.iloc[0]["max_intensity"] == 4095.0
 
 
+def test_object_features_preserve_non_contiguous_instance_ids():
+    image = np.zeros((30, 30), dtype=np.uint16)
+    image[3:8, 4:9] = 100
+    image[20:25, 21:26] = 200
+    labels = np.zeros((30, 30), dtype=np.int32)
+    labels[3:8, 4:9] = 7
+    labels[20:25, 21:26] = 42
+    features = extract_object_features(image, labels)
+    assert list(features["label"]) == [7, 42]
+    assert features["area_px"].tolist() == [25, 25]
+    assert features["mean_intensity"].tolist() == [100.0, 200.0]
+
+
 def test_object_features_reject_shape_mismatch():
     image = np.zeros((20, 20), dtype=np.uint8)
     labels = np.zeros((10, 10), dtype=np.int32)
     with pytest.raises(ValueError, match="identical 2-D shapes"):
         extract_object_features(image, labels)
+
+
+def test_object_features_reject_non_finite_intensity():
+    image = np.zeros((20, 20), dtype=np.float32)
+    image[5:10, 5:10] = np.nan
+    labels = np.zeros((20, 20), dtype=np.int32)
+    labels[5:10, 5:10] = 1
+    with pytest.raises(ValueError, match="finite"):
+        extract_object_features(image, labels)
+
+
+def test_to_grayscale_rejects_non_finite_values():
+    image = np.zeros((20, 20), dtype=np.float32)
+    image[5, 5] = np.inf
+    with pytest.raises(ValueError, match="finite"):
+        to_grayscale_uint8(image)
 
 
 def test_analyze_image_flags_empty_scene(tmp_path):
