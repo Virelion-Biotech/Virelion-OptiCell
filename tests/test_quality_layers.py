@@ -60,6 +60,15 @@ def test_segmentation_acceptance_pass_review_fail():
         segmentation_acceptance(quality_score=float("nan"))
 
 
+def test_segmentation_acceptance_rejects_invalid_thresholds():
+    with pytest.raises(ValueError, match="minimum_quality"):
+        segmentation_acceptance(quality_score=90, minimum_quality=101)
+    with pytest.raises(ValueError, match="maximum_border_fraction"):
+        segmentation_acceptance(quality_score=90, maximum_border_fraction=-0.1)
+    with pytest.raises(ValueError, match="minimum_agreement"):
+        segmentation_acceptance(quality_score=90, minimum_agreement=2.0)
+
+
 def test_robustness_summary_and_subset():
     table = pd.DataFrame({"threshold": [80, 100, 120], "object_count": [100, 102, 98]})
     summary = summarize_sensitivity(table)
