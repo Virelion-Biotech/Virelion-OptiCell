@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Stage-3 orchestration: run multiple backends, score FOV confidence, pick winner.
+"""Stage-3 orchestration: run multiple backends, score FOV signals, pick winner.
 
-Does NOT invent metrics. Writes measured per-backend workflow summaries and an
-auto-select decision table based on explicit rules:
+Selection rule v2 (from measured CTC TRA, Stage-3 report):
 
-  prefer higher mean confidence, then lower count CV, then fewer low-conf FOVs.
+  1. Discard failed backends and count_cv > CV_REJECT (collapse / FP explosion).
+  2. Prefer cellpose, then hybrid, then threshold among survivors
+     (Cellpose won TRA on all 6 CTC sequences in measured runs).
+  3. Tie-break: lower count_cv, then higher mean_confidence, then more frames.
+
+Does NOT invent TRA. FOV confidence alone is often saturated at 100 on clean
+fluorescence — do not rely on it as the primary rank key.
 
 Usage:
   python scripts/run_stage3_orchestrate.py /path/to/frames -o outputs/s3 \\
@@ -23,6 +28,12 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Measured SIM+02 threshold/hybrid had count_cv ~2.3 and TRA=0.
+# Cellpose on same seq had count_cv ~0.58 and TRA~0.50.
+CV_REJECT = 1.0
+
+BACKEND_PRIORITY = {"cellpose": 0, "hybrid": 1, "adaptive": 2, "threshold": 3}
 
 
 def run_backend(
@@ -70,17 +81,34 @@ def run_backend(
     summary_path = out_dir / "workflow_summary.json"
     payload = json.loads(summary_path.read_text())
     s = payload.get("summary", {})
-    fov = pd.read_csv(out_dir / "workflow_summary.csv") if (out_dir / "workflow_summary.csv").is_file() else pd.DataFrame()
-    counts = fov["object_count"].to_numpy(float) if "object_count" in fov.columns else np.array([])
-    confs = fov["confidence_score"].to_numpy(float) if "confidence_score" in fov.columns else np.array([])
-    count_cv = float(np.std(counts) / np.mean(counts)) if len(counts) and np.mean(counts) > 0 else float("inf")
+    fov_path = out_dir / "workflow_summary.csv"
+    fov = pd.read_csv(fov_path) if fov_path.is_file() else pd.DataFrame()
+    counts = (
+        fov["object_count"].to_numpy(float)
+        if "object_count" in fov.columns and len(fov)
+        else np.array([])
+    )
+    confs = (
+        fov["confidence_score"].to_numpy(float)
+        if "confidence_score" in fov.columns and len(fov)
+        else np.array([])
+    )
+    mean_count = float(np.mean(counts)) if len(counts) else 0.0
+    count_cv = (
+        float(np.std(counts) / mean_count)
+        if len(counts) and mean_count > 0
+        else float("inf")
+    )
+    # Fraction of frames with zero objects — strong failure signal
+    zero_frac = float(np.mean(counts == 0)) if len(counts) else 1.0
     return {
         "backend": backend,
         "out_dir": str(out_dir),
         "n_images": int(s.get("n_images", 0)),
         "mean_confidence": float(s.get("mean_confidence", 0)),
-        "mean_object_count": float(s.get("mean_object_count", 0)),
+        "mean_object_count": mean_count,
         "count_cv": count_cv,
+        "zero_object_fraction": zero_frac,
         "n_low_confidence_lt_50": int(s.get("n_low_confidence_lt_50", 0)),
         "n_tracks": int(s.get("n_tracks", 0)),
         "n_objects_total": int(s.get("n_objects_total", 0)),
@@ -88,29 +116,69 @@ def run_backend(
     }
 
 
-def select_backend(rows: list[dict]) -> dict:
-    """Explicit, auditable selection — not a black-box model."""
+def select_backend(rows: list[dict], cv_reject: float = CV_REJECT) -> dict:
+    """Explicit, auditable selection v2 — not a black-box model.
+
+    Measured evidence (Stage-3 CTC):
+      - Cellpose had best TRA on all 6 sequences.
+      - count_cv > 1 tracked threshold/hybrid collapse (SIM+02 TRA=0).
+      - mean_confidence was 100 for every backend — useless as primary key.
+    """
     if not rows:
         raise ValueError("no backend results")
-    # Sort: higher confidence, lower count_cv, fewer low-conf FOVs, higher n_tracks stability proxy
-    ranked = sorted(
-        rows,
-        key=lambda r: (
-            -r["mean_confidence"],
-            r["count_cv"],
-            r["n_low_confidence_lt_50"],
-            -r["n_images"],
-        ),
-    )
+
+    viable: list[dict] = []
+    rejected: list[dict] = []
+    for r in rows:
+        reason = None
+        if r.get("mean_confidence", -1) < 0 or r.get("error"):
+            reason = "run_failed"
+        elif r.get("n_images", 0) <= 0:
+            reason = "no_images"
+        elif r.get("mean_object_count", 0) <= 0:
+            reason = "zero_mean_count"
+        elif float(r.get("count_cv", float("inf"))) > cv_reject:
+            reason = f"count_cv>{cv_reject}"
+        elif float(r.get("zero_object_fraction", 0)) > 0.25:
+            reason = "zero_object_fraction>0.25"
+        if reason:
+            rejected.append({**r, "reject_reason": reason})
+        else:
+            viable.append(r)
+
+    pool = viable if viable else [
+        r for r in rows if r.get("mean_confidence", -1) >= 0 and not r.get("error")
+    ]
+    if not pool:
+        raise ValueError("no viable backends after filters")
+
+    def sort_key(r: dict):
+        pri = BACKEND_PRIORITY.get(str(r.get("backend", "")), 50)
+        return (
+            pri,  # cellpose first among survivors
+            float(r.get("count_cv", float("inf"))),
+            -float(r.get("mean_confidence", 0)),
+            int(r.get("n_low_confidence_lt_50", 0)),
+            -int(r.get("n_images", 0)),
+        )
+
+    ranked = sorted(pool, key=sort_key)
     winner = ranked[0]
     return {
         "selected_backend": winner["backend"],
+        "rule": "v2",
+        "cv_reject": cv_reject,
         "reason": (
-            f"max mean_confidence then min count_cv then min low_conf FOVs; "
-            f"winner={winner['backend']} conf={winner['mean_confidence']:.1f} "
-            f"cv={winner['count_cv']:.3f}"
+            f"v2: reject count_cv>{cv_reject} / zero-count collapse; "
+            f"prefer cellpose>hybrid>threshold; then min count_cv. "
+            f"winner={winner['backend']} cv={float(winner.get('count_cv', float('nan'))):.3f} "
+            f"conf={float(winner.get('mean_confidence', float('nan'))):.1f}"
         ),
         "ranking": [r["backend"] for r in ranked],
+        "rejected": [
+            {"backend": r["backend"], "reason": r.get("reject_reason")}
+            for r in rejected
+        ],
     }
 
 
@@ -129,6 +197,12 @@ def main() -> int:
     p.add_argument("--track-max-gap", type=int, default=1)
     p.add_argument("--max-images", type=int, default=0)
     p.add_argument("--cellpose-model", default="cpsam")
+    p.add_argument(
+        "--cv-reject",
+        type=float,
+        default=CV_REJECT,
+        help="Reject backends with object-count CV above this (default 1.0)",
+    )
     args = p.parse_args()
 
     images = args.images.expanduser().resolve()
@@ -163,6 +237,7 @@ def main() -> int:
                     "error": str(exc),
                     "mean_confidence": -1.0,
                     "count_cv": float("inf"),
+                    "zero_object_fraction": 1.0,
                     "n_low_confidence_lt_50": 10**9,
                     "n_images": 0,
                     "mean_object_count": 0.0,
@@ -172,7 +247,10 @@ def main() -> int:
                 }
             )
 
-    decision = select_backend([r for r in rows if r.get("mean_confidence", -1) >= 0])
+    decision = select_backend(
+        [r for r in rows if True],
+        cv_reject=float(args.cv_reject),
+    )
     payload = {
         "stage": 3,
         "workflow": "multi_backend_orchestrate",
@@ -182,8 +260,9 @@ def main() -> int:
         "per_backend": rows,
         "decision": decision,
         "selection_rule": (
-            "Sort by (-mean_confidence, count_cv, n_low_confidence_lt_50, -n_images). "
-            "Auditable, not learned."
+            "v2: reject count_cv>cv_reject / zero-count; "
+            "prefer cellpose>hybrid>threshold; then min count_cv. "
+            "Auditable, not learned. Derived from measured Stage-3 CTC TRA."
         ),
         "note": "Measured only. TRA must be scored separately against CTC GT.",
     }

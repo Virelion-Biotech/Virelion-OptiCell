@@ -2,25 +2,31 @@
 
 **Intent:** avoid silent failures (e.g. SIM+02 threshold TRA=0) by running multiple segmenters and choosing with **auditable rules**, then reporting measured TRA.
 
+## Selection rule v2
+
+Derived from measured CTC Stage-3 TRA (Cellpose best on 6/6; thr/hybrid collapse when `count_cv > 1`):
+
+1. **Reject** failed runs, zero mean count, `count_cv > 1.0`, or `zero_object_fraction > 0.25`
+2. **Prefer** `cellpose` > `hybrid` > `threshold` among survivors
+3. **Tie-break** lower `count_cv`, higher mean confidence, more frames
+
+Do **not** rank primarily by FOV confidence when it saturates at 100.
+
+Offline check (no GPU):
+
+```bash
+python scripts/validate_stage3_selection.py
+# expects Match rate: 6/6 on outputs/stage3/stage3_tra_by_backend.csv
+```
+
 ## Components
 
 | Piece | Path |
 |-------|------|
 | Orchestrator CLI | `scripts/run_stage3_orchestrate.py` |
+| Selection validator | `scripts/validate_stage3_selection.py` |
 | Colab notebook | `notebooks/Stage3_Orchestration_TRA_Colab.ipynb` |
-| CTC export | `scripts/export_ctc_res.py` |
-
-## Selection rule (explicit)
-
-```
-rank backends by:
-  1. higher mean FOV confidence
-  2. lower object-count CV across frames
-  3. fewer FOVs with confidence < 50
-  4. more frames processed
-```
-
-Not a learned model. Failures remain in the table.
+| Report | `outputs/stage3/STAGE3_REPORT.md` |
 
 ## Colab
 
@@ -28,11 +34,4 @@ Not a learned model. Failures remain in the table.
 https://colab.research.google.com/github/Virelion-Biotech/Virelion-OptiCell/blob/main/notebooks/Stage3_Orchestration_TRA_Colab.ipynb
 ```
 
-Use **GPU**. Mount Drive. Run sequences one-by-one (3 backends \u00d7 TRA each).
-
-## Outputs to commit
-
-- `stage3_tra_by_backend.csv`
-- `stage3_autoselect_vs_best.csv`
-
-Only measured TRA/DET/LNK.
+GPU recommended. Publish only measured TRA tables.
