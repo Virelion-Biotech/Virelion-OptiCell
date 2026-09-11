@@ -15,7 +15,10 @@ def robust_zscore(values: pd.Series | np.ndarray) -> np.ndarray:
     mad = float(np.nanmedian(np.abs(x[finite] - median)))
     scale = 1.4826 * mad
     if scale == 0:
-        scale = float(np.nanstd(x[finite]))
+        # MAD can be zero for a non-constant distribution.  Falling back to SD
+        # is explicit here because otherwise every non-median observation would
+        # receive an artificial infinite score.
+        scale = float(np.std(x[finite], ddof=1)) if finite.sum() > 1 else 0.0
     if scale == 0:
         return np.where(finite, 0.0, np.nan)
     return (x - median) / scale
@@ -61,15 +64,12 @@ def percent_control(
     output_column: str | None = None,
 ) -> pd.DataFrame:
     """Express values as percent of the explicit control median."""
+    column = output_column or f"{value_column}_percent_control"
     normalized = normalize_to_controls(
-        df,
-        value_column,
-        control_column,
-        control_value,
-        method="median",
-        output_column=output_column or f"{value_column}_fraction_control",
+        df, value_column, control_column, control_value,
+        method="median", output_column=column,
     )
-    normalized[output_column or f"{value_column}_fraction_control"] *= 100.0
+    normalized[column] *= 100.0
     return normalized
 
 
@@ -82,6 +82,8 @@ def z_prime_factor(
     pos = pd.to_numeric(pd.Series(positive_values), errors="coerce").dropna().to_numpy(float)
     if len(neg) < 2 or len(pos) < 2:
         raise ValueError("at least two observations per control group are required")
+    if not np.isfinite(neg).all() or not np.isfinite(pos).all():
+        raise ValueError("control values must be finite")
     denom = abs(float(pos.mean() - neg.mean()))
     if denom == 0:
         raise ValueError("control means are identical; Z' is undefined")
@@ -96,6 +98,9 @@ def plate_edge_effect(df: pd.DataFrame, value_column: str, *, well_column: str =
     frame[value_column] = pd.to_numeric(frame[value_column], errors="coerce")
     frame["row"] = frame[well_column].astype(str).str[:1].str.upper()
     frame["col"] = pd.to_numeric(frame[well_column].astype(str).str[1:], errors="coerce")
+    valid_wells = frame["row"].str.match(r"^[A-Z]$") & frame["col"].notna()
+    if not valid_wells.all():
+        raise ValueError("well identifiers must contain a row letter and numeric column")
     edge = frame.loc[frame["row"].isin(list("AH")) | frame["col"].isin([1, 12]), value_column].dropna()
     interior = frame.loc[~(frame["row"].isin(list("AH")) | frame["col"].isin([1, 12])), value_column].dropna()
     edge_median = float(edge.median()) if not edge.empty else np.nan
