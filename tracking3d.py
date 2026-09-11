@@ -19,16 +19,18 @@ class Tracking3DConfig:
     def validate(self) -> None:
         if not np.isfinite(self.max_distance_um) or self.max_distance_um <= 0:
             raise ValueError("max_distance_um must be a finite positive value")
-        if self.max_gap < 0:
-            raise ValueError("max_gap must be >= 0")
-        if not 0 <= self.velocity_smoothing <= 1:
-            raise ValueError("velocity_smoothing must be in [0, 1]")
+        if not isinstance(self.max_gap, (int, np.integer)) or isinstance(self.max_gap, bool) or self.max_gap < 0:
+            raise ValueError("max_gap must be a non-negative integer")
+        if not np.isfinite(self.velocity_smoothing) or not 0 <= self.velocity_smoothing <= 1:
+            raise ValueError("velocity_smoothing must be a finite value in [0, 1]")
 
 
 def _centroids_3d(labels: np.ndarray, voxel_size: Sequence[float]) -> dict[int, np.ndarray]:
     arr = np.asarray(labels)
     if arr.ndim != 3 or not np.issubdtype(arr.dtype, np.integer):
         raise ValueError("labels must be a 3-D integer array")
+    if (arr < 0).any():
+        raise ValueError("labels must contain non-negative instance IDs")
     spacing = np.asarray(tuple(float(value) for value in voxel_size), dtype=float)
     if spacing.shape != (3,) or not np.all(np.isfinite(spacing)) or np.any(spacing <= 0):
         raise ValueError("voxel_size must contain three finite positive values")
@@ -144,7 +146,7 @@ def link_frames_3d(
 
 
 def summarize_tracks_3d(tracks: pd.DataFrame, *, frame_interval: float = 1.0) -> pd.DataFrame:
-    """Summarize 3-D trajectories, including path length, speed, and straightness."""
+    """Summarize 3-D trajectories with explicit per-frame and per-time speeds."""
     if not np.isfinite(frame_interval) or frame_interval <= 0:
         raise ValueError("frame_interval must be a finite positive value")
     required = {"track_id", "frame", "x_um", "y_um", "z_um"}
@@ -168,17 +170,22 @@ def summarize_tracks_3d(tracks: pd.DataFrame, *, frame_interval: float = 1.0) ->
         frame_delta = np.diff(g["frame"].to_numpy(float)) if len(g) > 1 else np.array([], dtype=float)
         if np.any(frame_delta <= 0):
             raise ValueError("frame values must increase strictly within each track")
-        elapsed = frame_delta * frame_interval
+        frame_steps = float(frame_delta.sum())
+        elapsed = frame_steps * frame_interval
         path = float(steps.sum())
         net = float(np.linalg.norm(positions[-1] - positions[0]))
-        duration = max(1, int(g["frame"].iloc[-1] - g["frame"].iloc[0])) * frame_interval
-        mean_speed = float(path / elapsed.sum()) if elapsed.size and elapsed.sum() > 0 else 0.0
+        mean_speed_per_frame = float(path / frame_steps) if frame_steps > 0 else 0.0
+        mean_speed_per_time = float(path / elapsed) if elapsed > 0 else 0.0
+        net_speed_per_frame = float(net / frame_steps) if frame_steps > 0 else 0.0
+        net_speed_per_time = float(net / elapsed) if elapsed > 0 else 0.0
         rows.append({
             "track_id": int(track_id), "frames": len(g),
             "start_frame": int(g["frame"].iloc[0]), "end_frame": int(g["frame"].iloc[-1]),
             "path_length_um": path, "net_displacement_um": net,
-            "mean_speed_um_per_frame": mean_speed,
-            "net_speed_um_per_frame": float(net / duration),
+            "mean_speed_um_per_frame": mean_speed_per_frame,
+            "net_speed_um_per_frame": net_speed_per_frame,
+            "mean_speed_um_per_time": mean_speed_per_time,
+            "net_speed_um_per_time": net_speed_per_time,
             "straightness": float(net / path) if path > 0 else (1.0 if net == 0 else 0.0),
             "max_step_um": float(steps.max()) if len(steps) else 0.0,
             "mean_match_confidence": float(g["match_confidence"].dropna().mean()) if "match_confidence" in g and g["match_confidence"].notna().any() else np.nan,
