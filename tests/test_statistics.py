@@ -95,7 +95,7 @@ def test_constant_groups_do_not_report_zero_cohens_d():
 
 
 def test_benjamini_hochberg_rejects_invalid_finite_pvalues():
-    with pytest.raises(ValueError, match="\[0, 1\]"):
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
         benjamini_hochberg([0.01, 1.2, np.nan])
 
 
