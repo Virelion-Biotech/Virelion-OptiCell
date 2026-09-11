@@ -8,6 +8,7 @@ from quantitative import (
     apply_background_correction,
     channel_summary,
     colocated_fraction,
+    nearest_neighbor_distances,
     normalized_colocalization,
     object_channel_intensity,
     summarize_spatial_features,
@@ -91,3 +92,21 @@ def test_canonicalize_axes():
     canonical = canonicalize_axes(stack)
     assert canonical.axes == "ZCYX"
     assert canonical.data.shape == (2, 3, 4, 5)
+
+
+def test_quantitative_rejects_nonfinite_and_negative_labels():
+    with pytest.raises(ValueError, match="finite"):
+        nearest_neighbor_distances(pd.DataFrame({"centroid_x": [1.0, np.nan], "centroid_y": [1.0, 2.0]}))
+    image = np.ones((3, 3), dtype=np.float32)
+    labels = np.zeros((3, 3), dtype=np.int32)
+    labels[0, 0] = -1
+    with pytest.raises(ValueError, match="non-negative"):
+        object_channel_intensity(image, labels)
+    with pytest.raises(ValueError, match="finite"):
+        normalized_colocalization(np.array([0.0, np.nan]), np.array([0.0, 1.0]))
+
+
+def test_float_channel_summary_does_not_call_zero_saturation():
+    summary = channel_summary(np.array([[0.0, 0.5], [1.0, 2.0]], dtype=np.float32))
+    assert np.isnan(summary.loc[0, "saturation_low_fraction"])
+    assert np.isnan(summary.loc[0, "saturation_high_fraction"])
