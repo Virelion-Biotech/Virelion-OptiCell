@@ -1,0 +1,7 @@
+dataset,sequence,auto_selected_backend,auto_selected_TRA,best_TRA_backend,best_TRA,selection_matched_best_TRA,decision_reason
+Fluo-N2DH-GOWT1,01,cellpose,0.9730032793822067,cellpose,0.9730032793822067,True,max mean_confidence then min count_cv then min low_conf FOVs; winner=cellpose conf=100.0 cv=0.058
+Fluo-N2DH-GOWT1,02,cellpose,0.9180691183599973,cellpose,0.9180691183599973,True,max mean_confidence then min count_cv then min low_conf FOVs; winner=cellpose conf=100.0 cv=0.097
+Fluo-N2DH-SIM+,01,threshold,0.8093662807211001,cellpose,0.9570447596611699,False,max mean_confidence then min count_cv then min low_conf FOVs; winner=threshold conf=100.0 cv=0.102
+Fluo-N2DH-SIM+,02,cellpose,0.5045429906300818,cellpose,0.5045429906300818,True,max mean_confidence then min count_cv then min low_conf FOVs; winner=cellpose conf=100.0 cv=0.577
+Fluo-N2DL-HeLa,01,cellpose,0.9139953442907097,cellpose,0.9139953442907097,True,max mean_confidence then min count_cv then min low_conf FOVs; winner=cellpose conf=100.0 cv=0.352
+Fluo-N2DL-HeLa,02,threshold,0.7150935770263604,cellpose,0.925023634022031,False,max mean_confidence then min count_cv then min low_conf FOVs; winner=threshold conf=100.0 cv=0.241
