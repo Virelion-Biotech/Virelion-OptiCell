@@ -19,7 +19,9 @@ def robust_zscore(values: pd.Series | np.ndarray, reference: pd.Series | np.ndar
     scale = 1.4826 * mad
     if scale == 0:
         std = float(np.std(ref, ddof=1)) if ref.size > 1 else 0.0
-        scale = std if std > 0 else 1.0
+        scale = std if std > 0 else 0.0
+    if scale == 0:
+        return np.where(np.isfinite(x), 0.0, np.nan)
     return (x - median) / scale
 
 
@@ -65,22 +67,31 @@ def plate_edge_effect(
         return {"edge_n": float(edge.size), "interior_n": float(interior.size), "edge_median": np.nan, "interior_median": np.nan, "median_difference": np.nan, "robust_effect": np.nan}
     pooled_median = float(np.median(interior))
     mad = float(np.median(np.abs(interior - pooled_median)))
-    scale = 1.4826 * mad if mad > 0 else float(np.std(interior, ddof=1) or 1.0)
+    scale = 1.4826 * mad
+    if scale == 0 and interior.size > 1:
+        std = float(np.std(interior, ddof=1))
+        scale = std if std > 0 else 0.0
     edge_median = float(np.median(edge))
+    effect = (edge_median - pooled_median) / scale if scale > 0 else np.nan
     return {
         "edge_n": float(edge.size), "interior_n": float(interior.size),
         "edge_median": edge_median, "interior_median": pooled_median,
         "median_difference": edge_median - pooled_median,
-        "robust_effect": (edge_median - pooled_median) / scale,
+        "robust_effect": float(effect) if np.isfinite(effect) else np.nan,
     }
 
 
 def plate_qc_summary(df: pd.DataFrame, metrics: Sequence[str], *, control_group: str | None = None, control_value: object | None = None, group_column: str = "condition") -> pd.DataFrame:
     """Produce a compact plate-level QC table with control-normalized dispersion."""
+    missing = sorted(set(metrics) - set(df.columns))
+    if missing:
+        raise ValueError(f"missing metric columns: {missing}")
+    if control_group is not None and control_group not in df.columns:
+        raise ValueError(f"missing control group column: {control_group}")
     rows = []
     for metric in metrics:
         values = pd.to_numeric(df[metric], errors="coerce").dropna().to_numpy(float)
-        row = {"metric": metric, "n": int(values.size), "mean": float(values.mean()) if values.size else np.nan, "median": float(np.median(values)) if values.size else np.nan, "std": float(values.std(ddof=1)) if values.size > 1 else 0.0}
+        row = {"metric": metric, "n": int(values.size), "mean": float(values.mean()) if values.size else np.nan, "median": float(np.median(values)) if values.size else np.nan, "std": float(values.std(ddof=1)) if values.size > 1 else np.nan}
         if control_group and control_value is not None:
             controls = df.loc[df[control_group] == control_value, metric]
             z = robust_zscore(values, controls)
