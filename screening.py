@@ -87,8 +87,8 @@ def z_prime_factor(
     """Compute the screening Z' factor from negative and positive controls."""
     neg = _strict_numeric(control_values, "control_values")
     pos = _strict_numeric(positive_values, "positive_values")
-    neg = neg[np.isfinite(neg)]
-    pos = pos[np.isfinite(pos)]
+    if not np.isfinite(neg).all() or not np.isfinite(pos).all():
+        raise ValueError("control values must be finite; missing/non-finite controls cannot be silently discarded")
     if len(neg) < 2 or len(pos) < 2:
         raise ValueError("at least two finite observations per control group are required")
     denom = abs(float(pos.mean() - neg.mean()))
