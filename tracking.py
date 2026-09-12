@@ -19,12 +19,12 @@ class TrackingConfig:
     def validate(self) -> None:
         if not np.isfinite(self.max_distance_px) or self.max_distance_px <= 0:
             raise ValueError("max_distance_px must be a finite positive value")
-        if self.max_gap < 0:
-            raise ValueError("max_gap must be >= 0")
-        if not 0 <= self.velocity_smoothing <= 1:
-            raise ValueError("velocity_smoothing must be in [0, 1]")
-        if not 0 <= self.ambiguity_margin_fraction <= 1:
-            raise ValueError("ambiguity_margin_fraction must be in [0, 1]")
+        if not isinstance(self.max_gap, (int, np.integer)) or isinstance(self.max_gap, bool) or self.max_gap < 0:
+            raise ValueError("max_gap must be a non-negative integer")
+        if not np.isfinite(self.velocity_smoothing) or not 0 <= self.velocity_smoothing <= 1:
+            raise ValueError("velocity_smoothing must be a finite value in [0, 1]")
+        if not np.isfinite(self.ambiguity_margin_fraction) or not 0 <= self.ambiguity_margin_fraction <= 1:
+            raise ValueError("ambiguity_margin_fraction must be a finite value in [0, 1]")
 
 
 def _centroids(labels: np.ndarray) -> dict[int, tuple[float, float]]:
@@ -33,6 +33,8 @@ def _centroids(labels: np.ndarray) -> dict[int, tuple[float, float]]:
         raise ValueError("labels must be a 2-D array")
     if not np.issubdtype(arr.dtype, np.integer):
         raise ValueError("labels must contain integer instance IDs")
+    if (arr < 0).any():
+        raise ValueError("labels must contain non-negative instance IDs")
     out: dict[int, tuple[float, float]] = {}
     for label in np.unique(arr):
         if label <= 0:
@@ -50,9 +52,11 @@ def _assignment(cost: np.ndarray, row_limits: np.ndarray) -> list[tuple[int, int
     gated = np.asarray(cost, dtype=float).copy()
     if gated.ndim != 2:
         raise ValueError("cost must be 2-D")
+    if not np.isfinite(gated[~np.isnan(gated)]).all() and np.isfinite(gated).any():
+        raise ValueError("cost must contain finite values or explicit NaN/inf sentinels")
     limits = np.asarray(row_limits, dtype=float).reshape(-1)
-    if limits.shape[0] != gated.shape[0]:
-        raise ValueError("row_limits length must match cost rows")
+    if limits.shape[0] != gated.shape[0] or not np.isfinite(limits).all() or (limits <= 0).any():
+        raise ValueError("row_limits must match cost rows and contain finite positive values")
     gated[gated > limits[:, None]] = np.inf
     finite_mask = np.isfinite(gated)
     if not finite_mask.any():
@@ -205,14 +209,21 @@ def summarize_tracks(
     if tracks.duplicated(["track_id", "frame"]).any():
         raise ValueError("tracks must contain at most one observation per track_id and frame")
     numeric = tracks[["frame", "x", "y"]].apply(pd.to_numeric, errors="coerce")
+    malformed = tracks[["frame", "x", "y"]].notna() & numeric.isna()
+    if malformed.any().any():
+        raise ValueError("frame, x, and y must not contain malformed numeric values")
     if not np.isfinite(numeric.to_numpy(dtype=float)).all():
         raise ValueError("frame, x, and y must contain only finite numeric values")
     if not np.equal(numeric["frame"], np.floor(numeric["frame"])).all():
         raise ValueError("frame values must be integers")
+    if (numeric["frame"] < 0).any():
+        raise ValueError("frame values must be non-negative")
 
     rows = []
     for track_id, group in tracks.sort_values("frame").groupby("track_id"):
         g = group.reset_index(drop=True)
+        if pd.isna(track_id):
+            raise ValueError("track_id must not be missing")
         positions = g[["x", "y"]].to_numpy(float)
         step = np.linalg.norm(np.diff(positions, axis=0), axis=1) if len(g) > 1 else np.array([], dtype=float)
         frame_delta = np.diff(g["frame"].to_numpy(float)) if len(g) > 1 else np.array([], dtype=float)
