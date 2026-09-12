@@ -42,5 +42,5 @@ def test_screening_rejects_malformed_numeric_values():
 
 
 def test_z_prime_rejects_nonfinite_observations():
-    with pytest.raises(ValueError, match="non-numeric"):
+    with pytest.raises(ValueError, match="finite"):
         z_prime_factor([1.0, np.inf], [10.0, 11.0])
