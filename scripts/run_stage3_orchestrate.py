@@ -1,20 +1,5 @@
 #!/usr/bin/env python3
-"""Stage-3 orchestration: run multiple backends, score FOV signals, pick winner.
-
-Selection rule v2 (from measured CTC TRA, Stage-3 report):
-
-  1. Discard failed backends and count_cv > CV_REJECT (collapse / FP explosion).
-  2. Prefer cellpose, then hybrid, then threshold among survivors
-     (Cellpose won TRA on all 6 CTC sequences in measured runs).
-  3. Tie-break: lower count_cv, then higher mean_confidence, then more frames.
-
-Does NOT invent TRA. FOV confidence alone is often saturated at 100 on clean
-fluorescence — do not rely on it as the primary rank key.
-
-Usage:
-  python scripts/run_stage3_orchestrate.py /path/to/frames -o outputs/s3 \\
-      --backends threshold,hybrid,cellpose --gpu --enable-tracking
-"""
+"""Stage-3 orchestration: run multiple backends, score FOV signals, pick winner."""
 from __future__ import annotations
 
 import argparse
@@ -32,7 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 # Measured SIM+02 threshold/hybrid had count_cv ~2.3 and TRA=0.
 # Cellpose on same seq had count_cv ~0.58 and TRA~0.50.
 CV_REJECT = 1.0
-
 BACKEND_PRIORITY = {"cellpose": 0, "hybrid": 1, "adaptive": 2, "threshold": 3}
 
 
@@ -79,17 +63,22 @@ def run_backend(
         raise RuntimeError(f"backend={backend} failed code={r.returncode}")
 
     summary_path = out_dir / "workflow_summary.json"
-    payload = json.loads(summary_path.read_text())
+    if not summary_path.is_file():
+        raise RuntimeError(f"backend={backend} produced no workflow_summary.json")
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
     s = payload.get("summary", {})
+    if not isinstance(s, dict):
+        raise RuntimeError(f"backend={backend} workflow summary is malformed")
+
     fov_path = out_dir / "workflow_summary.csv"
     fov = pd.read_csv(fov_path) if fov_path.is_file() else pd.DataFrame()
     counts = (
-        fov["object_count"].to_numpy(float)
+        fov.loc[fov.get("status", pd.Series("success", index=fov.index)) == "success", "object_count"].to_numpy(float)
         if "object_count" in fov.columns and len(fov)
         else np.array([])
     )
     confs = (
-        fov["confidence_score"].to_numpy(float)
+        fov.loc[fov.get("status", pd.Series("success", index=fov.index)) == "success", "confidence_score"].to_numpy(float)
         if "confidence_score" in fov.columns and len(fov)
         else np.array([])
     )
@@ -99,12 +88,19 @@ def run_backend(
         if len(counts) and mean_count > 0
         else float("inf")
     )
-    # Fraction of frames with zero objects — strong failure signal
     zero_frac = float(np.mean(counts == 0)) if len(counts) else 1.0
+    failed_images = int(s.get("n_failed_images", 0))
+    requested_images = int(s.get("n_requested_images", s.get("n_images", 0)))
+    successful_images = int(s.get("n_successful_images", s.get("n_images", 0)))
+    complete = bool(s.get("complete", failed_images == 0 and successful_images == requested_images))
     return {
         "backend": backend,
         "out_dir": str(out_dir),
-        "n_images": int(s.get("n_images", 0)),
+        "n_images": successful_images,
+        "n_requested_images": requested_images,
+        "n_successful_images": successful_images,
+        "n_failed_images": failed_images,
+        "complete": complete,
         "mean_confidence": float(s.get("mean_confidence", 0)),
         "mean_object_count": mean_count,
         "count_cv": count_cv,
@@ -117,19 +113,11 @@ def run_backend(
 
 
 def select_backend(rows: list[dict], cv_reject: float = CV_REJECT) -> dict:
-    """Explicit, auditable selection v2 — not a black-box model.
-
-    Measured evidence (Stage-3 CTC):
-      - Cellpose had best TRA on all 6 sequences.
-      - count_cv > 1 tracked threshold/hybrid collapse (SIM+02 TRA=0).
-      - mean_confidence was 100 for every backend — useless as primary key.
-
-    Backends rejected by the quality filters are never reintroduced.  A run
-    with no viable backend is a hard failure rather than a silent fallback to
-    a backend that failed the stated acceptance criteria.
-    """
+    """Explicit, auditable selection with hard rejection of incomplete runs."""
     if not rows:
         raise ValueError("no backend results")
+    if not np.isfinite(cv_reject) or cv_reject < 0:
+        raise ValueError("cv_reject must be finite and >= 0")
 
     viable: list[dict] = []
     rejected: list[dict] = []
@@ -137,12 +125,20 @@ def select_backend(rows: list[dict], cv_reject: float = CV_REJECT) -> dict:
         reason = None
         if r.get("mean_confidence", -1) < 0 or r.get("error"):
             reason = "run_failed"
-        elif r.get("n_images", 0) <= 0:
+        elif int(r.get("n_images", 0)) <= 0:
             reason = "no_images"
+        elif not bool(r.get("complete", True)) or int(r.get("n_failed_images", 0)) > 0:
+            reason = "incomplete_run"
+        elif int(r.get("n_successful_images", r.get("n_images", 0))) != int(r.get("n_requested_images", r.get("n_images", 0))):
+            reason = "incomplete_run"
         elif r.get("mean_object_count", 0) <= 0:
             reason = "zero_mean_count"
+        elif not np.isfinite(float(r.get("count_cv", float("inf")))):
+            reason = "invalid_count_cv"
         elif float(r.get("count_cv", float("inf"))) > cv_reject:
             reason = f"count_cv>{cv_reject}"
+        elif not 0 <= float(r.get("zero_object_fraction", 0)) <= 1:
+            reason = "invalid_zero_object_fraction"
         elif float(r.get("zero_object_fraction", 0)) > 0.25:
             reason = "zero_object_fraction>0.25"
         if reason:
@@ -156,7 +152,7 @@ def select_backend(rows: list[dict], cv_reject: float = CV_REJECT) -> dict:
     def sort_key(r: dict):
         pri = BACKEND_PRIORITY.get(str(r.get("backend", "")), 50)
         return (
-            pri,  # cellpose first among survivors
+            pri,
             float(r.get("count_cv", float("inf"))),
             -float(r.get("mean_confidence", 0)),
             int(r.get("n_low_confidence_lt_50", 0)),
@@ -170,8 +166,8 @@ def select_backend(rows: list[dict], cv_reject: float = CV_REJECT) -> dict:
         "rule": "v2",
         "cv_reject": cv_reject,
         "reason": (
-            f"v2: reject count_cv>{cv_reject} / zero-count collapse; "
-            f"prefer cellpose>hybrid>threshold; then min count_cv. "
+            f"v2: reject incomplete/failed runs, count_cv>{cv_reject}, and zero-count collapse; "
+            f"prefer cellpose>hybrid>adaptive>threshold; then min count_cv. "
             f"winner={winner['backend']} cv={float(winner.get('count_cv', float('nan'))):.3f} "
             f"conf={float(winner.get('mean_confidence', float('nan'))):.1f}"
         ),
@@ -187,11 +183,7 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Stage-3 multi-backend orchestration")
     p.add_argument("images", type=Path)
     p.add_argument("-o", "--out-dir", type=Path, required=True)
-    p.add_argument(
-        "--backends",
-        default="threshold,hybrid,cellpose",
-        help="comma-separated",
-    )
+    p.add_argument("--backends", default="threshold,hybrid,cellpose", help="comma-separated")
     p.add_argument("--gpu", action="store_true")
     p.add_argument("--enable-tracking", action="store_true")
     p.add_argument("--track-max-distance", type=float, default=50.0)
@@ -206,10 +198,24 @@ def main() -> int:
     )
     args = p.parse_args()
 
+    if args.track_max_gap < 0:
+        p.error("--track-max-gap must be >= 0")
+    if not np.isfinite(args.track_max_distance) or args.track_max_distance <= 0:
+        p.error("--track-max-distance must be finite and > 0")
+    if args.max_images < 0:
+        p.error("--max-images must be >= 0")
+    if not np.isfinite(args.cv_reject) or args.cv_reject < 0:
+        p.error("--cv-reject must be finite and >= 0")
+
     images = args.images.expanduser().resolve()
     out_root = args.out_dir.expanduser().resolve()
     out_root.mkdir(parents=True, exist_ok=True)
-    backends = [b.strip() for b in args.backends.split(",") if b.strip()]
+    backends = [b.strip().lower() for b in args.backends.split(",") if b.strip()]
+    valid_backends = {"threshold", "adaptive", "cellpose", "hybrid"}
+    if not backends or any(b not in valid_backends for b in backends):
+        p.error(f"--backends must contain only: {', '.join(sorted(valid_backends))}")
+    if len(backends) != len(set(backends)):
+        p.error("--backends must not contain duplicates")
 
     rows = []
     for backend in backends:
@@ -241,6 +247,10 @@ def main() -> int:
                     "zero_object_fraction": 1.0,
                     "n_low_confidence_lt_50": 10**9,
                     "n_images": 0,
+                    "n_requested_images": 0,
+                    "n_successful_images": 0,
+                    "n_failed_images": 0,
+                    "complete": False,
                     "mean_object_count": 0.0,
                     "n_tracks": 0,
                     "n_objects_total": 0,
@@ -248,10 +258,7 @@ def main() -> int:
                 }
             )
 
-    decision = select_backend(
-        rows,
-        cv_reject=float(args.cv_reject),
-    )
+    decision = select_backend(rows, cv_reject=float(args.cv_reject))
     payload = {
         "stage": 3,
         "workflow": "multi_backend_orchestrate",
@@ -261,14 +268,14 @@ def main() -> int:
         "per_backend": rows,
         "decision": decision,
         "selection_rule": (
-            "v2: reject count_cv>cv_reject / zero-count; "
-            "prefer cellpose>hybrid>threshold; then min count_cv. "
+            "v2: reject incomplete/failed runs, count_cv>cv_reject / zero-count; "
+            "prefer cellpose>hybrid>adaptive>threshold; then min count_cv. "
             "Auditable, not learned. Derived from measured Stage-3 CTC TRA."
         ),
         "note": "Measured only. TRA must be scored separately against CTC GT.",
     }
     out_json = out_root / "stage3_decision.json"
-    out_json.write_text(json.dumps(payload, indent=2, default=str))
+    out_json.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
     pd.DataFrame(rows).to_csv(out_root / "stage3_backends.csv", index=False)
     print("\n=== STAGE-3 DECISION ===")
     print(json.dumps(decision, indent=2))
