@@ -22,10 +22,14 @@ class BatchConfig:
     fail_fast: bool = False
 
     def validate(self) -> None:
-        if self.workers < 1:
-            raise ValueError("workers must be >= 1")
-        if self.cell_method not in {"threshold", "cellpose"}:
+        if not isinstance(self.workers, int) or isinstance(self.workers, bool) or self.workers < 1:
+            raise ValueError("workers must be a positive integer")
+        if not isinstance(self.cell_method, str) or self.cell_method.strip().lower() not in {"threshold", "cellpose"}:
             raise ValueError("cell_method must be 'threshold' or 'cellpose'")
+        for name in ("adaptive_qc", "adaptive_threshold", "fail_fast"):
+            if not isinstance(getattr(self, name), bool):
+                raise ValueError(f"{name} must be a boolean")
+
 
 
 def analyze_paths_parallel(
@@ -45,11 +49,13 @@ def analyze_paths_parallel(
     if not normalized:
         return adaptive_dataset_qc(pd.DataFrame()) if config.adaptive_qc else pd.DataFrame()
 
+    method = config.cell_method.strip().lower()
+
     def analyze_one(path: str):
         return analyze_image(
             path,
             thresholds=thresholds,
-            cell_method=config.cell_method,
+            cell_method=method,
             adaptive_threshold=config.adaptive_threshold,
         )
 

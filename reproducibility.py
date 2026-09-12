@@ -32,10 +32,10 @@ def environment_fingerprint() -> dict[str, str]:
     }
 
 
-def _manifest_input_hashes(inputs: Any) -> dict[str, str]:
-    """Normalize legacy mapping and current list-style input manifests."""
+def _manifest_input_hashes(inputs: Any) -> tuple[dict[str, str], set[str]]:
+    """Normalize input manifests and record entries whose SHA-256 is absent."""
     if inputs is None:
-        return {}
+        return {}, set()
     if isinstance(inputs, Mapping):
         items = inputs.items()
     elif isinstance(inputs, Sequence) and not isinstance(inputs, (str, bytes, bytearray)):
@@ -51,13 +51,15 @@ def _manifest_input_hashes(inputs: Any) -> dict[str, str]:
         raise TypeError("manifest 'inputs' must be a mapping or sequence")
 
     hashes: dict[str, str] = {}
+    missing_hashes: set[str] = set()
     for key, value in items:
-        if isinstance(value, Mapping):
-            digest = value.get("sha256", "")
-        else:
-            digest = value
-        hashes[str(key)] = str(digest)
-    return hashes
+        key_str = str(key)
+        digest = value.get("sha256", "") if isinstance(value, Mapping) else value
+        digest_str = str(digest) if digest is not None else ""
+        hashes[key_str] = digest_str
+        if not digest_str:
+            missing_hashes.add(key_str)
+    return hashes, missing_hashes
 
 
 def _manifest_environment(manifest: Mapping[str, Any]) -> Any:
@@ -66,17 +68,12 @@ def _manifest_environment(manifest: Mapping[str, Any]) -> Any:
 
 
 def compare_manifests(reference: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
-    """Compare manifests while tolerating legacy schema differences.
-
-    Timestamps and working directories are intentionally ignored. Input
-    identity is compared by manifest key and SHA-256 digest, and both the
-    historical mapping representation and current list representation are
-    accepted.
-    """
-    ref_hashes = _manifest_input_hashes(reference.get("inputs", {}))
-    cand_hashes = _manifest_input_hashes(candidate.get("inputs", {}))
+    """Compare manifests without treating missing evidence as a match."""
+    ref_hashes, ref_missing = _manifest_input_hashes(reference.get("inputs", {}))
+    cand_hashes, cand_missing = _manifest_input_hashes(candidate.get("inputs", {}))
     changed = sorted(set(ref_hashes) | set(cand_hashes))
     changed = [key for key in changed if ref_hashes.get(key) != cand_hashes.get(key)]
+    unverifiable_inputs = sorted(ref_missing | cand_missing)
 
     ref_params = reference.get("parameters", {})
     cand_params = candidate.get("parameters", {})
@@ -85,12 +82,16 @@ def compare_manifests(reference: Mapping[str, Any], candidate: Mapping[str, Any]
 
     ref_environment = _manifest_environment(reference)
     cand_environment = _manifest_environment(candidate)
+    environment_evaluated = ref_environment is not None and cand_environment is not None
+    environment_match = bool(ref_environment == cand_environment) if environment_evaluated else None
     return {
-        "inputs_match": not changed,
+        "inputs_match": not changed and not unverifiable_inputs,
         "changed_inputs": changed,
+        "unverifiable_inputs": unverifiable_inputs,
         "parameters_match": not parameter_changes,
         "changed_parameters": parameter_changes,
-        "environment_match": ref_environment == cand_environment,
+        "environment_match": environment_match,
+        "environment_evaluated": environment_evaluated,
     }
 
 

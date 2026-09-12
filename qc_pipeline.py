@@ -64,14 +64,18 @@ class QCThresholds:
             raise ValueError("brightness_max must be in [brightness_min, 255]")
         if not 0 <= self.saturation_max_fraction <= 1:
             raise ValueError("saturation_max_fraction must be in [0, 1]")
-        if self.min_cell_area < 1:
-            raise ValueError("min_cell_area must be >= 1")
+        if not isinstance(self.min_cell_area, (int, np.integer)) or isinstance(self.min_cell_area, bool) or self.min_cell_area < 1:
+            raise ValueError("min_cell_area must be a positive integer")
         if not 0 < self.max_cell_area_frac <= 1:
             raise ValueError("max_cell_area_frac must be in (0, 1]")
-        if self.cell_count_low < 0:
-            raise ValueError("cell_count_low must be >= 0")
-        if self.cell_count_high is not None and (self.cell_count_high < self.cell_count_low):
-            raise ValueError("cell_count_high must be >= cell_count_low")
+        if not isinstance(self.cell_count_low, (int, np.integer)) or isinstance(self.cell_count_low, bool) or self.cell_count_low < 0:
+            raise ValueError("cell_count_low must be a non-negative integer")
+        if self.cell_count_high is not None and (
+            not isinstance(self.cell_count_high, (int, np.integer))
+            or isinstance(self.cell_count_high, bool)
+            or self.cell_count_high < self.cell_count_low
+        ):
+            raise ValueError("cell_count_high must be a non-negative integer >= cell_count_low")
 
 
 @dataclass
@@ -122,12 +126,12 @@ class ImageResult:
 
 
 def sha256_file(path: str, chunk_size: int = 1024 * 1024) -> str:
-    if int(chunk_size) <= 0:
-        raise ValueError("chunk_size must be positive")
+    if not isinstance(chunk_size, (int, np.integer)) or isinstance(chunk_size, bool) or chunk_size <= 0:
+        raise ValueError("chunk_size must be a positive integer")
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
         while True:
-            chunk = handle.read(chunk_size)
+            chunk = handle.read(int(chunk_size))
             if not chunk:
                 break
             digest.update(chunk)
@@ -170,7 +174,9 @@ def _rescale_to_uint8(arr: np.ndarray) -> np.ndarray:
     values = np.asarray(arr)
     if not np.issubdtype(values.dtype, np.number):
         raise TypeError("Image array must contain numeric values")
-    work = np.nan_to_num(values.astype(np.float32, copy=False), copy=False)
+    if not np.isfinite(values.astype(np.float64, copy=False)).all():
+        raise ValueError("Image array must contain only finite numeric values")
+    work = values.astype(np.float32, copy=False)
     if work.size == 0:
         return np.zeros(work.shape, dtype=np.uint8)
     flat = work.reshape(-1, work.shape[-1]) if work.ndim == 3 else work.reshape(-1, 1)
@@ -232,6 +238,8 @@ def compute_saturation_fraction(gray: np.ndarray, low: int = 1, high: int = 254)
         raise ValueError("low/high must be finite with low <= high")
     if arr.size == 0:
         return 0.0
+    if not np.isfinite(arr.astype(np.float64, copy=False)).all():
+        raise ValueError("gray must contain finite numeric values")
     return float(((arr <= low) | (arr >= high)).mean())
 
 
@@ -243,32 +251,44 @@ def _safe_cv(values: Sequence[float]) -> float:
     return float(arr.std(ddof=1) / mean) if mean else 0.0
 
 
+def _instance_objects(labels: np.ndarray) -> list[tuple[int, np.ndarray]]:
+    """Return each positive instance mask by its original integer label ID."""
+    values = np.asarray(labels)
+    if values.ndim != 2 or not np.issubdtype(values.dtype, np.integer):
+        raise ValueError("labels must be a 2-D integer array")
+    if (values < 0).any():
+        raise ValueError("labels must be non-negative")
+    unique = np.unique(values)
+    return [(int(label_id), values == label_id) for label_id in unique if label_id > 0]
+
+
 def _segmentation_diagnostics(labels: np.ndarray, image_shape: tuple[int, int], min_area: int, max_area_frac: float) -> tuple[float, float, float, float, float, float, float]:
     label_arr = np.asarray(labels)
     if label_arr.ndim != 2 or label_arr.shape != image_shape:
         raise ValueError("labels must be a 2-D array matching image_shape")
     if min_area < 1 or not np.isfinite(max_area_frac) or not 0 < max_area_frac <= 1:
         raise ValueError("invalid segmentation area limits")
-    num_labels, _, stats, _ = cv2.connectedComponentsWithStats((label_arr > 0).astype(np.uint8), connectivity=8)
-    if num_labels <= 1:
+    objects = _instance_objects(label_arr)
+    if not objects:
         return 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0
-    areas = stats[1:, cv2.CC_STAT_AREA].astype(float)
-    total_pixels = float(image_shape[0] * image_shape[1])
-    foreground_fraction = float(areas.sum() / total_pixels) if total_pixels else 0.0
-    median_area = float(np.median(areas))
-    area_cv = _safe_cv(areas)
+    areas: list[float] = []
     border_count = 0
-    for label_id in range(1, num_labels):
-        x = int(stats[label_id, cv2.CC_STAT_LEFT])
-        y = int(stats[label_id, cv2.CC_STAT_TOP])
-        w = int(stats[label_id, cv2.CC_STAT_WIDTH])
-        h = int(stats[label_id, cv2.CC_STAT_HEIGHT])
-        if x == 0 or y == 0 or x + w >= image_shape[1] or y + h >= image_shape[0]:
+    height, width = image_shape
+    for _, mask in objects:
+        ys, xs = np.nonzero(mask)
+        area = float(len(xs))
+        areas.append(area)
+        if xs.min() == 0 or ys.min() == 0 or xs.max() == width - 1 or ys.max() == height - 1:
             border_count += 1
-    object_count = num_labels - 1
+    areas_arr = np.asarray(areas, dtype=float)
+    total_pixels = float(height * width)
+    foreground_fraction = float(areas_arr.sum() / total_pixels) if total_pixels else 0.0
+    median_area = float(np.median(areas_arr))
+    area_cv = _safe_cv(areas_arr)
+    object_count = len(objects)
     border_fraction = float(border_count / object_count)
-    tiny_fraction = float((areas < max(1, min_area * 2)).mean())
-    merged_fraction = float((areas > total_pixels * max_area_frac).mean()) if areas.size else 0.0
+    tiny_fraction = float((areas_arr < max(1, min_area * 2)).mean())
+    merged_fraction = float((areas_arr > total_pixels * max_area_frac).mean()) if areas_arr.size else 0.0
     quality = 100.0 - min(45.0, border_fraction * 30.0) - min(30.0, tiny_fraction * 30.0) - min(25.0, merged_fraction * 25.0)
     return foreground_fraction, median_area, area_cv, border_fraction, tiny_fraction, merged_fraction, float(np.clip(quality, 0.0, 100.0))
 
@@ -280,6 +300,10 @@ def _build_segmentation_result(labels: np.ndarray, gray: np.ndarray, method: str
         raise ValueError("labels and gray must be matching 2-D arrays")
     if not np.issubdtype(labels_arr.dtype, np.integer):
         raise ValueError("labels must contain integer instance IDs")
+    if (labels_arr < 0).any():
+        raise ValueError("labels must be non-negative")
+    if labels_arr.size and int(labels_arr.max()) > np.iinfo(np.int32).max:
+        raise ValueError("labels contain an instance ID outside int32 range")
     positive_labels = labels_arr[labels_arr > 0]
     count = int(np.unique(positive_labels).size) if positive_labels.size else 0
     d = _segmentation_diagnostics(labels_arr, gray_arr.shape, min_area, max_area_frac)
@@ -324,6 +348,8 @@ class CellposeSegmenter:
     def __init__(self, model_type: str = "cpsam", gpu: bool | None = None, diameter: Optional[float] = None) -> None:
         if not _HAS_CELLPOSE:
             raise RuntimeError(f"Cellpose is not available: {_CELLPOSE_IMPORT_ERROR or 'unknown error'}. Install with: pip install cellpose")
+        if not isinstance(model_type, str) or not model_type.strip():
+            raise ValueError("model_type must be a non-empty string")
         if diameter is not None and (not np.isfinite(diameter) or diameter <= 0):
             raise ValueError("diameter must be a finite positive value")
         self.model_type, self.gpu, self.default_diameter, self._model = model_type, gpu, diameter, None
@@ -355,7 +381,9 @@ class CellposeSegmenter:
         diam = diameter if diameter is not None else self.default_diameter
         if diam is not None and (not np.isfinite(diam) or diam <= 0):
             raise ValueError("diameter must be a finite positive value")
-        if min_area < 1 or not np.isfinite(max_area_frac) or not 0 < max_area_frac <= 1:
+        if not isinstance(min_area, (int, np.integer)) or isinstance(min_area, bool) or min_area < 1:
+            raise ValueError("min_area must be a positive integer")
+        if not np.isfinite(max_area_frac) or not 0 < max_area_frac <= 1:
             raise ValueError("invalid segmentation area limits")
         eval_kwargs = {"diameter": diam} if diam is not None else {}
         masks, last_err = None, None
@@ -379,27 +407,30 @@ def extract_object_features(gray: np.ndarray, labels: np.ndarray) -> pd.DataFram
     values_img = np.asarray(gray)
     if values_img.ndim != 2:
         raise ValueError(f"extract_object_features expects a 2-D grayscale image, got shape {values_img.shape}")
-    labels = np.asarray(labels)
-    if labels.ndim != 2 or labels.shape != values_img.shape:
+    if not np.issubdtype(values_img.dtype, np.number) or not np.isfinite(values_img.astype(np.float64, copy=False)).all():
+        raise ValueError("gray must contain finite numeric values")
+    labels_arr = np.asarray(labels)
+    if labels_arr.ndim != 2 or labels_arr.shape != values_img.shape:
         raise ValueError("gray and labels must have identical 2-D shapes")
-    if not np.issubdtype(labels.dtype, np.integer):
+    if not np.issubdtype(labels_arr.dtype, np.integer):
         raise ValueError("labels must contain integer instance IDs")
-    labels = labels.astype(np.int32, copy=False)
-    num_labels, _, stats, centroids = cv2.connectedComponentsWithStats((labels > 0).astype(np.uint8), connectivity=8)
-    for label_id in range(1, num_labels):
-        mask = labels == label_id
+    labels_arr = labels_arr.astype(np.int32, copy=False)
+    if (labels_arr < 0).any():
+        raise ValueError("labels must be non-negative")
+    if labels_arr.size and int(labels_arr.max()) > np.iinfo(np.int32).max:
+        raise ValueError("labels contain an instance ID outside int32 range")
+    for label_id, mask in _instance_objects(labels_arr):
         area = int(mask.sum())
-        if area <= 0:
-            continue
         contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         perimeter = float(cv2.arcLength(contours[0], True)) if contours else 0.0
         circularity = float((4 * np.pi * area) / (perimeter * perimeter)) if perimeter else 0.0
-        x, y = int(stats[label_id, cv2.CC_STAT_LEFT]), int(stats[label_id, cv2.CC_STAT_TOP])
-        w, h = int(stats[label_id, cv2.CC_STAT_WIDTH]), int(stats[label_id, cv2.CC_STAT_HEIGHT])
+        ys, xs = np.nonzero(mask)
+        x, y = int(xs.min()), int(ys.min())
+        w, h = int(xs.max() - x + 1), int(ys.max() - y + 1)
         object_values = values_img[mask]
         rows.append({"label": label_id, "area_px": area, "perimeter_px": perimeter, "circularity": float(np.clip(circularity, 0, 1)),
                      "bbox_x": x, "bbox_y": y, "bbox_width": w, "bbox_height": h, "aspect_ratio": float(w / h) if h else 0.0,
-                     "centroid_x": float(centroids[label_id][0]), "centroid_y": float(centroids[label_id][1]),
+                     "centroid_x": float(xs.mean()), "centroid_y": float(ys.mean()),
                      "mean_intensity": float(object_values.mean()), "std_intensity": float(object_values.std()), "max_intensity": float(object_values.max())})
     return pd.DataFrame(rows)
 

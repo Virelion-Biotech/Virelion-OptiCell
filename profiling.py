@@ -31,16 +31,38 @@ class ProfileRecord:
         }
 
 
+class ProfiledOperationError(RuntimeError):
+    """Raised for a failed profiled operation while retaining its profile record."""
+
+    def __init__(self, message: str, record: ProfileRecord, *, cause: Exception | None = None) -> None:
+        super().__init__(message)
+        self.record = record
+        self.__cause__ = cause
+
+
 def profile_call(operation: str, callable_: Callable[..., Any], *args: Any, items: int = 1, **kwargs: Any) -> tuple[Any, ProfileRecord]:
-    """Time one callable and return its result plus a structured profile record."""
+    """Time one callable and return its result plus a structured profile record.
+
+    Failures still propagate, but the raised exception exposes the failed
+    ``ProfileRecord`` so callers can retain structured profiling evidence.
+    """
+    if not isinstance(operation, str) or not operation.strip():
+        raise ValueError("operation must be a non-empty string")
+    if not isinstance(items, int) or isinstance(items, bool) or items < 0:
+        raise ValueError("items must be a non-negative integer")
     started = perf_counter()
     try:
         result = callable_(*args, **kwargs)
     except Exception as exc:
         elapsed = perf_counter() - started
-        raise RuntimeError(f"profiled operation {operation!r} failed after {elapsed:.6f}s") from exc
+        record = ProfileRecord(operation, elapsed, items=int(items), status="error", error=f"{type(exc).__name__}: {exc}")
+        raise ProfiledOperationError(
+            f"profiled operation {operation!r} failed after {elapsed:.6f}s",
+            record,
+            cause=exc,
+        )
     elapsed = perf_counter() - started
-    return result, ProfileRecord(operation, elapsed, int(items))
+    return result, ProfileRecord(operation, elapsed, int(items), status="success", error=None)
 
 
 def profile_records(records: list[ProfileRecord]) -> pd.DataFrame:
@@ -61,4 +83,4 @@ def summarize_profile(records: list[ProfileRecord]) -> dict[str, float]:
     }
 
 
-__all__ = ["ProfileRecord", "profile_call", "profile_records", "summarize_profile"]
+__all__ = ["ProfileRecord", "ProfiledOperationError", "profile_call", "profile_records", "summarize_profile"]

@@ -42,8 +42,10 @@ def test_tracking3d_summary_accounts_for_missing_frames():
     summary = summarize_tracks_3d(tracks, frame_interval=2.0)
     assert summary.iloc[0]["path_length_um"] == 10.0
     assert summary.iloc[0]["net_displacement_um"] == 10.0
-    assert summary.iloc[0]["mean_speed_um_per_frame"] == 2.5
-    assert summary.iloc[0]["net_speed_um_per_frame"] == 2.5
+    assert summary.iloc[0]["mean_speed_um_per_frame"] == 5.0
+    assert summary.iloc[0]["net_speed_um_per_frame"] == 5.0
+    assert summary.iloc[0]["mean_speed_um_per_time"] == 2.5
+    assert summary.iloc[0]["net_speed_um_per_time"] == 2.5
 
 
 def test_tracking3d_summary_reports_straightness():
@@ -56,12 +58,14 @@ def test_tracking3d_summary_reports_straightness():
 
 
 def test_tracking3d_rejects_invalid_configuration():
-    try:
-        Tracking3DConfig(max_distance_um=0).validate()
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("Invalid configuration should fail")
+    invalid = [Tracking3DConfig(max_distance_um=0), Tracking3DConfig(max_gap=1.5), Tracking3DConfig(velocity_smoothing=np.nan)]
+    for config in invalid:
+        try:
+            config.validate()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Invalid configuration should fail")
 
 
 def test_tracking3d_rejects_mismatched_volume_shapes():

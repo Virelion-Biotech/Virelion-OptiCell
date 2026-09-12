@@ -26,6 +26,8 @@ def _validate_volume(volume: np.ndarray) -> np.ndarray:
         raise TypeError("volume must contain numeric values")
     if arr.size == 0:
         raise ValueError("volume cannot be empty")
+    if not np.isfinite(arr.astype(np.float64, copy=False)).all():
+        raise ValueError("volume must contain only finite values")
     return arr
 
 
@@ -76,16 +78,16 @@ def segment_threshold_3d(
     """Segment a 3-D volume with an explicit intensity normalization mode."""
     arr = _validate_volume(volume)
     spacing = tuple(float(v) for v in voxel_size)
-    if len(spacing) != 3 or any(v <= 0 for v in spacing):
-        raise ValueError("voxel_size must contain three positive values")
-    if min_volume_voxels < 1:
-        raise ValueError("min_volume_voxels must be >= 1")
+    if len(spacing) != 3 or any(not np.isfinite(v) or v <= 0 for v in spacing):
+        raise ValueError("voxel_size must contain three finite positive values")
+    if not isinstance(min_volume_voxels, (int, np.integer)) or isinstance(min_volume_voxels, bool) or min_volume_voxels < 1:
+        raise ValueError("min_volume_voxels must be a positive integer")
     if connectivity not in {1, 2, 3}:
         raise ValueError("connectivity must be 1, 2, or 3")
     if normalization not in {"percentile", "minmax", "none"}:
         raise ValueError("normalization must be 'percentile', 'minmax', or 'none'")
 
-    work = np.nan_to_num(arr.astype(np.float32, copy=False), nan=0.0, posinf=0.0, neginf=0.0)
+    work = arr.astype(np.float32, copy=False)
     scaled = _normalize_volume(work, normalization)
     if not np.any(scaled):
         labels = np.zeros(work.shape, dtype=np.int32)
