@@ -174,6 +174,7 @@ def main() -> int:
     masks_dir.mkdir(exist_ok=True)
 
     fov_rows: list[dict] = []
+    failed_rows: list[dict] = []
     feature_frames: list[pd.DataFrame] = []
     labels_by_time: list[np.ndarray] = []
     tracking_complete = True
@@ -214,6 +215,7 @@ def main() -> int:
 
             row = {
                 "index": i,
+                "status": "success",
                 "image": str(path),
                 "backend": backend,
                 "backend_requested": args.backend,
@@ -228,6 +230,7 @@ def main() -> int:
                 "foreground_fraction": float(seg.foreground_fraction),
                 "quality_score": float(seg.quality_score) if seg.quality_score is not None else None,
                 "mask": str(mask_path),
+                "error": None,
             }
             fov_rows.append(row)
             print(
@@ -237,6 +240,16 @@ def main() -> int:
             )
         except Exception as exc:
             tracking_complete = False
+            failed = {
+                "index": i,
+                "status": "failed",
+                "image": str(path),
+                "backend": backend,
+                "backend_requested": args.backend,
+                "object_count": None,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+            failed_rows.append(failed)
             print(f"  [{i}/{len(paths)}] FAIL {path.name}: {exc}")
 
     if not fov_rows:
@@ -279,8 +292,16 @@ def main() -> int:
     counts = [r["object_count"] for r in fov_rows]
     mean_count = float(np.mean(counts)) if counts else 0.0
     count_cv = float(np.std(counts) / mean_count) if counts and mean_count > 0 else float("nan")
+    failed_count = len(failed_rows)
+    requested_count = len(paths)
+    successful_count = len(fov_rows)
+    complete = failed_count == 0 and successful_count == requested_count
     summary = {
-        "n_images": len(fov_rows),
+        "n_images": successful_count,
+        "n_requested_images": requested_count,
+        "n_successful_images": successful_count,
+        "n_failed_images": failed_count,
+        "complete": complete,
         "mean_confidence": float(np.mean(confs)),
         "mean_object_count": mean_count,
         "count_cv": count_cv,
@@ -302,6 +323,8 @@ def main() -> int:
             file=sys.stderr,
         )
 
+    per_image = fov_rows + failed_rows
+    per_image.sort(key=lambda row: int(row["index"]))
     payload = {
         "workflow": "qc_segment_features_phenotype"
         + ("_tracking" if summary["tracking_enabled"] else ""),
@@ -321,16 +344,18 @@ def main() -> int:
             }
             for r in default_phenotype_rules()
         ],
-        "per_image": fov_rows,
+        "per_image": per_image,
+        "failed_images": failed_rows,
         "note": (
             "Default backend=auto → cellpose if installed else threshold. "
-            "Phenotype = explicit morphology rules. Tracking only with --enable-tracking on ordered TL."
+            "Phenotype = explicit morphology rules. Tracking only with --enable-tracking on ordered TL. "
+            "Runs with failed images are explicitly marked incomplete and must not be treated as complete datasets."
         ),
     }
     out_json = out_dir / "workflow_summary.json"
     out_json.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
 
-    fov_df = pd.DataFrame(fov_rows)
+    fov_df = pd.DataFrame(per_image)
     fov_df.to_csv(out_dir / "workflow_summary.csv", index=False)
     if phenotype_summary is not None:
         phenotype_summary.to_csv(out_dir / "phenotype_summary.csv", index=False)
