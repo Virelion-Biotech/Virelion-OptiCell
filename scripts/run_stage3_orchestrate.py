@@ -123,6 +123,10 @@ def select_backend(rows: list[dict], cv_reject: float = CV_REJECT) -> dict:
       - Cellpose had best TRA on all 6 sequences.
       - count_cv > 1 tracked threshold/hybrid collapse (SIM+02 TRA=0).
       - mean_confidence was 100 for every backend — useless as primary key.
+
+    Backends rejected by the quality filters are never reintroduced.  A run
+    with no viable backend is a hard failure rather than a silent fallback to
+    a backend that failed the stated acceptance criteria.
     """
     if not rows:
         raise ValueError("no backend results")
@@ -146,10 +150,7 @@ def select_backend(rows: list[dict], cv_reject: float = CV_REJECT) -> dict:
         else:
             viable.append(r)
 
-    pool = viable if viable else [
-        r for r in rows if r.get("mean_confidence", -1) >= 0 and not r.get("error")
-    ]
-    if not pool:
+    if not viable:
         raise ValueError("no viable backends after filters")
 
     def sort_key(r: dict):
@@ -162,7 +163,7 @@ def select_backend(rows: list[dict], cv_reject: float = CV_REJECT) -> dict:
             -int(r.get("n_images", 0)),
         )
 
-    ranked = sorted(pool, key=sort_key)
+    ranked = sorted(viable, key=sort_key)
     winner = ranked[0]
     return {
         "selected_backend": winner["backend"],
@@ -248,7 +249,7 @@ def main() -> int:
             )
 
     decision = select_backend(
-        [r for r in rows if True],
+        rows,
         cv_reject=float(args.cv_reject),
     )
     payload = {
