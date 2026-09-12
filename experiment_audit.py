@@ -37,7 +37,12 @@ def audit_experiment(
     review_threshold: float = 70.0,
     pass_threshold: float = 85.0,
 ) -> ExperimentAudit:
-    """Combine QC and reproducibility checks without hiding component evidence."""
+    """Combine QC and reproducibility checks without hiding component evidence.
+
+    A PASS requires an actual reference/candidate manifest comparison. Without
+    both manifests, reproducibility is unevaluated and the audit remains REVIEW
+    even when the component QC scores pass.
+    """
     gate: ExperimentQualityGate = experiment_quality_gate(
         artifact_score=artifact_score,
         segmentation_score=segmentation_score,
@@ -52,21 +57,27 @@ def audit_experiment(
     environment_match: bool | None = None
     reasons = list(gate.reasons)
     status = gate.status
-    if reference_manifest is not None and candidate_manifest is not None:
-        diff = compare_manifests(reference_manifest, candidate_manifest)
-        inputs_match = bool(diff["inputs_match"])
-        parameters_match = bool(diff["parameters_match"])
-        environment_match = bool(diff["environment_match"])
-        if not inputs_match:
-            reasons.append("input manifest differs from reference")
-        if not parameters_match:
-            reasons.append("analysis parameters differ from reference")
-        if not environment_match:
-            reasons.append("runtime environment differs from reference")
-        if not inputs_match or not parameters_match:
-            status = "FAIL"
-        elif not environment_match and status == "PASS":
+
+    if reference_manifest is None or candidate_manifest is None:
+        reasons.append("reproducibility comparison not evaluated")
+        if status == "PASS":
             status = "REVIEW"
+        return ExperimentAudit(status, gate.score, fingerprint, inputs_match, parameters_match, environment_match, tuple(reasons))
+
+    diff = compare_manifests(reference_manifest, candidate_manifest)
+    inputs_match = bool(diff["inputs_match"])
+    parameters_match = bool(diff["parameters_match"])
+    environment_match = bool(diff["environment_match"])
+    if not inputs_match:
+        reasons.append("input manifest differs from reference")
+    if not parameters_match:
+        reasons.append("analysis parameters differ from reference")
+    if not environment_match:
+        reasons.append("runtime environment differs from reference")
+    if not inputs_match or not parameters_match:
+        status = "FAIL"
+    elif not environment_match and status == "PASS":
+        status = "REVIEW"
     return ExperimentAudit(status, gate.score, fingerprint, inputs_match, parameters_match, environment_match, tuple(reasons))
 
 
