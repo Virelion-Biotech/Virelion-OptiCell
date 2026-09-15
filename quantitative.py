@@ -53,10 +53,10 @@ def add_spatial_features(features: pd.DataFrame, image_shape: Sequence[int]) -> 
         return result
     h, w = float(shape[0]), float(shape[1])
     result["nearest_neighbor_distance_px"] = nearest_neighbor_distances(result)
-    # Pixel coordinates span 0..w-1 and 0..h-1; use those extents so the
-    # normalized coordinates genuinely map the image bounds to [0, 1].
     result["x_norm"] = result["centroid_x"] / max(w - 1.0, 1.0)
     result["y_norm"] = result["centroid_y"] / max(h - 1.0, 1.0)
+    if not np.isfinite(result[["x_norm", "y_norm"]].to_numpy(dtype=float)).all():
+        raise ValueError("centroid coordinates must be finite")
     result["cell_density_per_100k_px"] = len(result) / (h * w) * 100000.0
     return result
 
@@ -112,8 +112,8 @@ def object_channel_intensity(image: np.ndarray, labels: np.ndarray) -> pd.DataFr
     lab = np.asarray(labels)
     if arr.ndim == 2:
         arr = arr[:, :, None]
-    if arr.ndim != 3 or lab.shape != arr.shape[:2]:
-        raise ValueError("image must be HxW or HxWxC and labels must match HxW")
+    if arr.ndim != 3 or 0 in arr.shape or lab.shape != arr.shape[:2]:
+        raise ValueError("image must be a non-empty HxW or HxWxC array and labels must match HxW")
     if not np.issubdtype(arr.dtype, np.number) or not np.isfinite(arr).all():
         raise ValueError("image must have a finite numeric dtype")
     if lab.ndim != 2 or not np.issubdtype(lab.dtype, np.integer):
@@ -137,20 +137,22 @@ def colocated_fraction(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
     """Fraction of A's positive pixels overlapping B's positive pixels."""
     a = np.asarray(mask_a, dtype=bool)
     b = np.asarray(mask_b, dtype=bool)
-    if a.shape != b.shape:
-        raise ValueError("Masks must have identical shapes")
+    if a.shape != b.shape or a.ndim == 0 or a.size == 0:
+        raise ValueError("Masks must have identical, non-empty shapes")
     total = int(a.sum())
     return float((a & b).sum() / total) if total else 0.0
 
 
 def normalized_colocalization(image_a: np.ndarray, image_b: np.ndarray) -> float:
-    """Return Pearson correlation between two finite, same-sized channels."""
-    a = np.asarray(image_a, dtype=np.float64).ravel()
-    b = np.asarray(image_b, dtype=np.float64).ravel()
-    if a.size != b.size or a.size == 0:
-        raise ValueError("Images must contain the same non-zero number of pixels")
+    """Return Pearson correlation between two finite, same-shaped channels."""
+    raw_a = np.asarray(image_a)
+    raw_b = np.asarray(image_b)
+    if raw_a.shape != raw_b.shape or raw_a.size == 0:
+        raise ValueError("Images must have identical, non-zero shapes")
+    a = raw_a.astype(np.float64, copy=False).ravel()
+    b = raw_b.astype(np.float64, copy=False).ravel()
     if not np.isfinite(a).all() or not np.isfinite(b).all():
-        raise ValueError("Images must contain only finite values")
+        raise ValueError("Images must contain only finite numeric values")
     a_std = a.std()
     b_std = b.std()
     if a_std == 0 or b_std == 0:
@@ -159,7 +161,12 @@ def normalized_colocalization(image_a: np.ndarray, image_b: np.ndarray) -> float
 
 
 def apply_background_correction(gray: np.ndarray, radius: int = 25) -> np.ndarray:
-    """Subtract a smooth morphological background while retaining uint8 output."""
+    """Subtract a smooth morphological background while retaining uint8 output.
+
+    This is an image-preprocessing operation, not calibrated quantitative
+    intensity correction; native quantitative measurements should use the raw
+    image and an explicitly defined background model instead.
+    """
     values = np.asarray(gray)
     if values.ndim != 2 or values.dtype != np.uint8 or values.size == 0:
         raise ValueError("apply_background_correction expects a non-empty 2-D uint8 image")
