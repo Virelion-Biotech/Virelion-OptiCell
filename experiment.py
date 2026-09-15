@@ -110,7 +110,7 @@ def plate_heatmap(df: pd.DataFrame, metric: str, value: str = "mean") -> pd.Data
     vals = getattr(agg, value)()
     matrix = pd.DataFrame(index=list("ABCDEFGH"), columns=range(1, 13), dtype=float)
     for well, val in vals.items():
-        if not isinstance(well, str) or not re.fullmatch(r"[A-Ha-h](?:[1-9]|1[0-2])", well):
+        if not isinstance(well, str) or not re.fullmatch(r"[A-Ha-h](?:0?[1-9]|1[0-2])", well):
             raise ValueError(f"invalid well identifier: {well!r}")
         row = well[0].upper()
         col = int(well[1:])
