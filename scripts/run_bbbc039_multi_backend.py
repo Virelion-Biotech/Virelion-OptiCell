@@ -95,7 +95,7 @@ def write_report(rows: list[dict], out_md: Path, max_images: int) -> None:
         "- Same FOV list order as `scripts/run_bbbc039_validation.py` (basename sort).",
         "- Policy: no fabricated metrics.",
         "",
-        "| Backend | n | IoU | Dice | Instance F1 | \|count err\| | rel count err | GPU |",
+        r"| Backend | n | IoU | Dice | Instance F1 | \|count err\| | rel count err | GPU |",
         "|---------|--:|----:|-----:|------------:|-------------:|--------------:|:---:|",
     ]
     for r in rows:
