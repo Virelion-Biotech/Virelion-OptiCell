@@ -12,7 +12,10 @@ def _strict_numeric(values: pd.Series | np.ndarray, name: str) -> np.ndarray:
     if malformed.any():
         examples = series.loc[malformed].astype(str).head(3).tolist()
         raise ValueError(f"{name} contains non-numeric values: {examples}")
-    return numeric.to_numpy(float)
+    result = numeric.to_numpy(float)
+    if np.isinf(result).any():
+        raise ValueError(f"{name} contains infinite values")
+    return result
 
 
 def b_score(
@@ -66,11 +69,7 @@ def ssmd(
     control_values: pd.Series | np.ndarray,
     treatment_values: pd.Series | np.ndarray,
 ) -> float:
-    """Return the strictly standardized mean difference for two independent groups.
-
-    SSMD uses sqrt(var_control + var_treatment) as its denominator. This is
-    distinct from Cohen's d, which uses a pooled standard deviation.
-    """
+    """Return the strictly standardized mean difference for two independent groups."""
     a = _strict_numeric(control_values, "control_values")
     b = _strict_numeric(treatment_values, "treatment_values")
     a = a[np.isfinite(a)]
@@ -84,8 +83,14 @@ def ssmd(
 
 
 def plate_uniformity(values: pd.Series | np.ndarray) -> dict[str, float]:
-    """Summarize robust plate dispersion using median, MAD, and robust CV."""
+    """Summarize robust plate dispersion using median, MAD, and robust CV.
+
+    Missing values (NaN) are treated as missing observations; infinities are
+    invalid measurements and are rejected rather than silently discarded.
+    """
     x = _strict_numeric(values, "plate values")
+    if np.isinf(x).any():
+        raise ValueError("plate values must be finite; infinite values cannot be silently discarded")
     x = x[np.isfinite(x)]
     if x.size == 0:
         return {"n": 0.0, "median": np.nan, "mad": np.nan, "robust_cv": np.nan}
