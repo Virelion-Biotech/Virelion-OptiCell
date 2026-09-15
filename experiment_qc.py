@@ -14,7 +14,10 @@ def _strict_numeric(values: pd.Series | np.ndarray, name: str) -> np.ndarray:
     if malformed.any():
         examples = series.loc[malformed].astype(str).head(3).tolist()
         raise ValueError(f"{name} contains non-numeric values: {examples}")
-    return numeric.to_numpy(float)
+    result = numeric.to_numpy(float)
+    if np.isinf(result).any():
+        raise ValueError(f"{name} contains infinite values")
+    return result
 
 
 def robust_zscore(values: pd.Series | np.ndarray, reference: pd.Series | np.ndarray) -> np.ndarray:
@@ -28,8 +31,9 @@ def robust_zscore(values: pd.Series | np.ndarray, reference: pd.Series | np.ndar
     mad = float(np.median(np.abs(ref - median)))
     scale = 1.4826 * mad
     if scale == 0:
-        std = float(np.std(ref, ddof=1)) if ref.size > 1 else 0.0
-        scale = std if std > 0 else 0.0
+        scale = float(np.std(ref, ddof=1)) if ref.size > 1 else 0.0
+        if scale < 0 or not np.isfinite(scale):
+            scale = 0.0
     if scale == 0:
         return np.where(np.isfinite(x), 0.0, np.nan)
     return (x - median) / scale
