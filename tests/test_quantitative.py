@@ -114,3 +114,15 @@ def test_float_channel_summary_does_not_call_zero_saturation():
     summary = channel_summary(np.array([[0.0, 0.5], [1.0, 2.0]], dtype=np.float32))
     assert np.isnan(summary.loc[0, "saturation_low_fraction"])
     assert np.isnan(summary.loc[0, "saturation_high_fraction"])
+
+
+def test_normalized_colocalization_requires_identical_shape():
+    with pytest.raises(ValueError, match="identical"):
+        normalized_colocalization(np.zeros((2, 2)), np.zeros((4,)))
+
+
+def test_quantitative_rejects_empty_arrays():
+    with pytest.raises(ValueError, match="non-empty"):
+        object_channel_intensity(np.empty((0, 2), dtype=np.uint8), np.empty((0, 2), dtype=np.int32))
+    with pytest.raises(ValueError, match="non-empty"):
+        colocated_fraction(np.empty((0, 2), dtype=bool), np.empty((0, 2), dtype=bool))
