@@ -74,7 +74,7 @@ def percent_control(
     output_column: str | None = None,
 ) -> pd.DataFrame:
     """Express values as percent of the explicit control median."""
-    column = output_column or f"{value_column}_percent_control"
+    column = output_column or f"{value_column}_fraction_control"
     normalized = normalize_to_controls(
         df, value_column, control_column, control_value,
         method="median", output_column=column,
