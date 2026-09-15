@@ -7,6 +7,16 @@ import numpy as np
 import pandas as pd
 
 
+def _strict_numeric(values: pd.Series, name: str) -> pd.Series:
+    """Convert numeric data while rejecting non-null malformed values."""
+    numeric = pd.to_numeric(values, errors="coerce")
+    malformed = values.notna() & numeric.isna()
+    if malformed.any():
+        examples = values.loc[malformed].astype(str).head(3).tolist()
+        raise ValueError(f"{name} contains non-numeric values: {examples}")
+    return numeric
+
+
 def summarize_by_replicate(features: pd.DataFrame, replicate_column: str, value_columns: Sequence[str], group_columns: Optional[Sequence[str]] = None) -> pd.DataFrame:
     """Aggregate cell-level measurements to biological/technical replicates."""
     group_columns = list(group_columns or [])
@@ -16,9 +26,17 @@ def summarize_by_replicate(features: pd.DataFrame, replicate_column: str, value_
         raise ValueError(f"missing required columns: {missing}")
     if features[replicate_column].isna().any():
         raise ValueError(f"{replicate_column} contains missing replicate IDs")
+    if not value_columns:
+        raise ValueError("value_columns must not be empty")
     keys = group_columns + [replicate_column]
-    numeric = features[list(value_columns)].apply(pd.to_numeric, errors="coerce")
-    frame = pd.concat([features[keys].reset_index(drop=True), numeric.reset_index(drop=True)], axis=1)
+    numeric = {
+        column: _strict_numeric(features[column], column)
+        for column in value_columns
+    }
+    frame = pd.concat(
+        [features[keys].reset_index(drop=True), pd.DataFrame(numeric).reset_index(drop=True)],
+        axis=1,
+    )
     agg = frame.groupby(keys, dropna=False)[list(value_columns)].agg(["mean", "median", "std", "count"])
     agg.columns = [f"{col}_{stat}" for col, stat in agg.columns]
     return agg.reset_index()
@@ -32,11 +50,13 @@ def group_summary(replicate_df: pd.DataFrame, replicate_column: str, value_colum
         raise ValueError(f"missing required columns: {missing}")
     if replicate_df[replicate_column].isna().any():
         raise ValueError(f"{replicate_column} contains missing replicate IDs")
+    if not value_columns:
+        raise ValueError("value_columns must not be empty")
     rows = []
     for group, frame in replicate_df.groupby(group_column, dropna=False):
         row = {group_column: group, "replicates": int(frame[replicate_column].nunique())}
         for col in value_columns:
-            values = pd.to_numeric(frame[col], errors="coerce").dropna().to_numpy(dtype=float)
+            values = _strict_numeric(frame[col], col).dropna().to_numpy(dtype=float)
             row[f"{col}_mean"] = float(values.mean()) if values.size else np.nan
             row[f"{col}_median"] = float(np.median(values)) if values.size else np.nan
             row[f"{col}_std"] = float(values.std(ddof=1)) if values.size > 1 else np.nan
@@ -126,14 +146,32 @@ def benjamini_hochberg(pvalues: Sequence[float]) -> np.ndarray:
     return q
 
 
-def compare_two_groups(replicate_df: pd.DataFrame, value_column: str, group_column: str, group_a, group_b, n_permutations: int = 10000, seed: int = 0) -> dict[str, float]:
-    """Return independent replicate-level effect size and permutation p-value."""
-    if value_column not in replicate_df or group_column not in replicate_df:
-        raise ValueError("value_column and group_column must exist")
+def compare_two_groups(
+    replicate_df: pd.DataFrame,
+    value_column: str,
+    group_column: str,
+    group_a,
+    group_b,
+    n_permutations: int = 10000,
+    seed: int = 0,
+    *,
+    replicate_column: str = "replicate",
+) -> dict[str, float]:
+    """Compare two groups using exactly one row per replicate."""
+    required = {value_column, group_column, replicate_column}
+    missing = sorted(required - set(replicate_df.columns))
+    if missing:
+        raise ValueError(f"missing required columns: {missing}")
     if group_a == group_b:
         raise ValueError("group_a and group_b must be distinct")
-    a = pd.to_numeric(replicate_df.loc[replicate_df[group_column] == group_a, value_column], errors="coerce")
-    b = pd.to_numeric(replicate_df.loc[replicate_df[group_column] == group_b, value_column], errors="coerce")
+    if replicate_df[replicate_column].isna().any():
+        raise ValueError(f"{replicate_column} contains missing replicate IDs")
+    selected = replicate_df[replicate_df[group_column].isin([group_a, group_b])].copy()
+    duplicate = selected.duplicated(subset=[replicate_column], keep=False)
+    if duplicate.any():
+        raise ValueError("compare_two_groups requires one row per replicate")
+    a = _strict_numeric(selected.loc[selected[group_column] == group_a, value_column], value_column)
+    b = _strict_numeric(selected.loc[selected[group_column] == group_b, value_column], value_column)
     a = a[np.isfinite(a)]
     b = b[np.isfinite(b)]
     return {"n_group_a": float(len(a)), "n_group_b": float(len(b)), "mean_group_a": float(a.mean()) if len(a) else np.nan, "mean_group_b": float(b.mean()) if len(b) else np.nan, "mean_difference": float(a.mean() - b.mean()) if len(a) and len(b) else np.nan, "cohens_d": effect_size_mean_difference(a, b), "permutation_p": permutation_pvalue(a, b, n_permutations=n_permutations, seed=seed)}
@@ -161,8 +199,8 @@ def compare_paired_groups(pair_df: pd.DataFrame, value_column: str, group_column
     if not pair_ids_a or pair_ids_a != pair_ids_b:
         raise ValueError("each pair ID must occur exactly once in each requested group")
     pivot = selected.pivot(index=pair_column, columns=group_column, values=value_column)
-    values_a = pd.to_numeric(pivot[group_a], errors="coerce")
-    values_b = pd.to_numeric(pivot[group_b], errors="coerce")
+    values_a = _strict_numeric(pivot[group_a], value_column)
+    values_b = _strict_numeric(pivot[group_b], value_column)
     finite = np.isfinite(values_a.to_numpy(float)) & np.isfinite(values_b.to_numpy(float))
     a = values_a.to_numpy(float)[finite]
     b = values_b.to_numpy(float)[finite]

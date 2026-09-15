@@ -7,11 +7,18 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-# Require a non-letter boundary for wells so the 'e2' in 'Plate2' cannot be mistaken for a well.
 _WELL = re.compile(r"(?<![A-Za-z])([A-Ha-h])([0-9]{1,2})(?![0-9])")
-# Accept common separators but also compact filename forms such as A07t3.
 _TIME = re.compile(r"(?:^|[_-])(?:t|time|tp)([0-9]+)(?=[_.-]|$)|(?<=[A-Za-z0-9])(?:t|time|tp)([0-9]+)(?=[_.-]|$)", re.I)
 _PLATE = re.compile(r"(?:^|[_-])(?:plate|p)([0-9]+)(?:[_-]|$)", re.I)
+
+
+def _strict_numeric(values: pd.Series, name: str) -> pd.Series:
+    numeric = pd.to_numeric(values, errors="coerce")
+    malformed = values.notna() & numeric.isna()
+    if malformed.any():
+        examples = values.loc[malformed].astype(str).head(3).tolist()
+        raise ValueError(f"{name} contains non-numeric values: {examples}")
+    return numeric
 
 
 def _timepoint(match: re.Match[str] | None) -> int | None:
@@ -62,6 +69,8 @@ def summarize_groups(df: pd.DataFrame, group_by: list[str], metrics: list[str]) 
     missing = (set(group_by) | set(metrics)) - set(df.columns)
     if missing:
         raise ValueError(f"missing columns: {sorted(missing)}")
+    for metric in metrics:
+        _strict_numeric(df[metric], metric)
     grouped = df.groupby(group_by, dropna=False)
     aggregations = {m: ["count", "mean", "median", "std"] for m in metrics}
     out = grouped.agg(aggregations)
@@ -73,16 +82,17 @@ def compare_groups(df: pd.DataFrame, group_column: str, metric: str) -> pd.DataF
     """Descriptive group comparison; no hidden inferential assumptions."""
     if group_column not in df or metric not in df:
         raise ValueError("group_column and metric must exist")
+    values = _strict_numeric(df[metric], metric)
     groups = [g for g in df[group_column].dropna().unique()]
     rows = []
     for g in groups:
-        values = pd.to_numeric(df.loc[df[group_column] == g, metric], errors="coerce").dropna().to_numpy(float)
+        group_values = values.loc[df[group_column] == g].dropna().to_numpy(float)
         rows.append({
             "group": g,
-            "n": int(len(values)),
-            "mean": float(values.mean()) if len(values) else np.nan,
-            "median": float(np.median(values)) if len(values) else np.nan,
-            "std": float(values.std(ddof=1)) if len(values) > 1 else np.nan,
+            "n": int(len(group_values)),
+            "mean": float(group_values.mean()) if len(group_values) else np.nan,
+            "median": float(np.median(group_values)) if len(group_values) else np.nan,
+            "std": float(group_values.std(ddof=1)) if len(group_values) > 1 else np.nan,
         })
     return pd.DataFrame(rows)
 
@@ -95,7 +105,7 @@ def plate_heatmap(df: pd.DataFrame, metric: str, value: str = "mean") -> pd.Data
     if value not in {"mean", "median", "max", "min"}:
         raise ValueError("value must be one of: mean, median, max, min")
     tmp = df.copy()
-    tmp[metric] = pd.to_numeric(tmp[metric], errors="coerce")
+    tmp[metric] = _strict_numeric(tmp[metric], metric)
     agg = tmp.groupby("well", dropna=True)[metric]
     vals = getattr(agg, value)()
     matrix = pd.DataFrame(index=list("ABCDEFGH"), columns=range(1, 13), dtype=float)

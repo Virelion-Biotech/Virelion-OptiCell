@@ -4,7 +4,7 @@ title: "Virelion-OptiCell"
 version: "2.16.0"
 date-released: "2026-08-18"
 type: software
-license: MIT
+license: AGPL-3.0-or-later
 repository-code: "https://github.com/Virelion-Biotech/Virelion-OptiCell"
 url: "https://github.com/Virelion-Biotech/Virelion-OptiCell"
 authors:

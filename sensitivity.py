@@ -14,9 +14,10 @@ def threshold_sensitivity(
 ) -> pd.DataFrame:
     """Measure segmentation count stability across threshold parameters.
 
-    ``segmenter`` must return a labelled mask where 0 is background. The function
-    intentionally evaluates only count and foreground-fraction stability; it does
-    not imply that a stable count is a correct segmentation.
+    ``segmenter`` must return a labelled mask where 0 is background and all
+    other instance IDs are non-negative integers. The function intentionally
+    evaluates only count and foreground-fraction stability; it does not imply
+    that a stable count is a correct segmentation.
     """
     array = np.asarray(image)
     if array.ndim == 0 or array.size == 0:
@@ -37,6 +38,8 @@ def threshold_sensitivity(
             raise ValueError("segmenter output shape must match image shape")
         if not np.issubdtype(labels.dtype, np.integer):
             raise ValueError("segmenter output must contain integer instance IDs")
+        if (labels < 0).any():
+            raise ValueError("segmenter output must contain non-negative instance IDs")
         foreground = labels > 0
         count = int(np.unique(labels[foreground]).size) if foreground.any() else 0
         rows.append(

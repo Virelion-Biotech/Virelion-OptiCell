@@ -35,6 +35,40 @@ def _parse_bool(value: object, *, default: bool) -> bool:
     raise ValueError("boolean parameters must be bool, 0/1, or a recognized boolean string")
 
 
+def _parse_float(params: dict, key: str, default: float) -> float:
+    value = params.get(key, default)
+    if isinstance(value, bool):
+        raise ValueError(f"{key} must be numeric, not boolean")
+    parsed = float(value)
+    if not np.isfinite(parsed):
+        raise ValueError(f"{key} must be finite")
+    return parsed
+
+
+def _parse_int(params: dict, key: str, default: int) -> int | None:
+    value = params.get(key, default)
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{key} must be an integer, not boolean")
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError(f"{key} must be an integer")
+        try:
+            parsed_float = float(stripped)
+        except ValueError as exc:
+            raise ValueError(f"{key} must be an integer") from exc
+        if not parsed_float.is_integer():
+            raise ValueError(f"{key} must be an integer; refusing lossy coercion")
+        parsed = int(parsed_float)
+    else:
+        parsed = int(value) if isinstance(value, (int, np.integer)) else value
+        if not isinstance(parsed, int):
+            raise ValueError(f"{key} must be an integer; refusing lossy coercion")
+    return parsed
+
+
 def _jsonable(value):
     if isinstance(value, pd.DataFrame):
         records = value.astype(object).where(pd.notna(value), None).to_dict(orient="records")
@@ -61,28 +95,33 @@ def main() -> int:
         payload = json.loads(raw)
         input_path, params = _find_input(payload)
         thresholds = QCThresholds(
-            focus_min=float(params.get("focus_min", 100.0)),
-            brightness_min=float(params.get("brightness_min", 25.0)),
-            brightness_max=float(params.get("brightness_max", 230.0)),
-            saturation_max_fraction=float(params.get("saturation_max_fraction", 0.02)),
-            min_cell_area=int(params.get("min_cell_area", 15)),
-            max_cell_area_frac=float(params.get("max_cell_area_frac", 0.25)),
-            cell_count_low=int(params.get("cell_count_low", 1)),
-            cell_count_high=(int(params["cell_count_high"]) if params.get("cell_count_high") is not None else None),
+            focus_min=_parse_float(params, "focus_min", 100.0),
+            brightness_min=_parse_float(params, "brightness_min", 25.0),
+            brightness_max=_parse_float(params, "brightness_max", 230.0),
+            saturation_max_fraction=_parse_float(params, "saturation_max_fraction", 0.02),
+            min_cell_area=_parse_int(params, "min_cell_area", 15),
+            max_cell_area_frac=_parse_float(params, "max_cell_area_frac", 0.25),
+            cell_count_low=_parse_int(params, "cell_count_low", 1),
+            cell_count_high=_parse_int(params, "cell_count_high", None),
         )
         thresholds.validate()
-        method = str(params.get("cell_method", "threshold"))
+        method = str(params.get("cell_method", "threshold")).strip().lower()
+        if method not in {"threshold", "cellpose"}:
+            raise ValueError("cell_method must be 'threshold' or 'cellpose'")
         path = Path(input_path)
         if not path.exists():
             raise FileNotFoundError(f"Input path does not exist: {path}")
         adaptive_qc = _parse_bool(params.get("adaptive_qc"), default=True)
+        adaptive_threshold = _parse_bool(params.get("adaptive_threshold"), default=False)
         if path.is_dir():
             result = analyze_folder(
-                str(path), thresholds=thresholds, cell_method=method, adaptive_qc=adaptive_qc
+                str(path), thresholds=thresholds, cell_method=method,
+                adaptive_qc=adaptive_qc, adaptive_threshold=adaptive_threshold,
             )
         else:
             result = analyze_paths(
-                [str(path)], thresholds=thresholds, cell_method=method, adaptive_qc=adaptive_qc
+                [str(path)], thresholds=thresholds, cell_method=method,
+                adaptive_qc=adaptive_qc, adaptive_threshold=adaptive_threshold,
             )
         output = {
             "entity_id": payload.get("entity_id"),

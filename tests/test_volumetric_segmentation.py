@@ -26,7 +26,7 @@ def test_segment_threshold_3d_supports_explicit_normalization_modes():
 def test_segment_threshold_3d_rejects_invalid_normalization():
     with pytest.raises(ValueError, match="normalization"):
         segment_threshold_3d(np.zeros((4, 4, 4), dtype=np.float32), normalization="unknown")
-    with pytest.raises(ValueError, match="values in \[0, 1\]"):
+    with pytest.raises(ValueError, match=r"values in \[0, 1\]"):
         segment_threshold_3d(np.ones((4, 4, 4), dtype=np.float32) * 10, normalization="none")
 
 
@@ -35,6 +35,18 @@ def test_segment_threshold_3d_rejects_invalid_inputs():
         segment_threshold_3d(np.zeros((10, 10), dtype=np.uint8))
     with pytest.raises(ValueError):
         segment_threshold_3d(np.zeros((4, 4, 4), dtype=np.uint8), voxel_size=(1, 1, 0))
+
+
+def test_segment_threshold_3d_rejects_non_finite_input():
+    volume = np.zeros((4, 4, 4), dtype=np.float32)
+    volume[0, 0, 0] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        segment_threshold_3d(volume)
+
+
+def test_segment_threshold_3d_rejects_non_integer_min_volume():
+    with pytest.raises(ValueError, match="positive integer"):
+        segment_threshold_3d(np.zeros((4, 4, 4), dtype=np.uint8), min_volume_voxels=1.5)
 
 
 def test_segment_threshold_3d_constant_volume_is_empty():

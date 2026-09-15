@@ -6,6 +6,23 @@ import numpy as np
 import pandas as pd
 
 
+def _strict_numeric(values: pd.Series, name: str) -> pd.Series:
+    """Convert numeric data while rejecting non-null malformed values."""
+    numeric = pd.to_numeric(values, errors="coerce")
+    malformed = values.notna() & numeric.isna()
+    if malformed.any():
+        examples = values.loc[malformed].astype(str).head(3).tolist()
+        raise ValueError(f"{name} contains non-numeric values: {examples}")
+    return numeric
+
+
+def _validate_replicate_groups(frame: pd.DataFrame, replicate_column: str, group_column: str) -> None:
+    """Require each replicate ID to belong to a single experimental group."""
+    groups_per_replicate = frame.groupby(replicate_column, dropna=False)[group_column].nunique(dropna=False)
+    if (groups_per_replicate > 1).any():
+        raise ValueError(f"{replicate_column} is assigned to multiple {group_column} values")
+
+
 def _replicate_values(frame: pd.DataFrame, value_column: str, group_column: str, replicate_column: str, group) -> np.ndarray:
     required = {value_column, group_column, replicate_column}
     missing = sorted(required - set(frame.columns))
@@ -13,8 +30,9 @@ def _replicate_values(frame: pd.DataFrame, value_column: str, group_column: str,
         raise ValueError(f"missing required columns: {missing}")
     if frame[replicate_column].isna().any():
         raise ValueError(f"{replicate_column} contains missing replicate IDs")
+    _validate_replicate_groups(frame, replicate_column, group_column)
     subset = frame.loc[frame[group_column] == group, [replicate_column, value_column]].copy()
-    subset[value_column] = pd.to_numeric(subset[value_column], errors="coerce")
+    subset[value_column] = _strict_numeric(subset[value_column], value_column)
     subset = subset.dropna(subset=[value_column])
     if subset.empty:
         return np.asarray([], dtype=float)
@@ -54,13 +72,14 @@ def replicate_effect_summary(frame: pd.DataFrame, value_column: str, group_colum
 def summarize_experiment(frame: pd.DataFrame, *, replicate_column: str, group_column: str, value_columns: Sequence[str]) -> pd.DataFrame:
     """Aggregate cell/image rows to replicate level, then produce group-level means and CIs."""
     from opticell.statistics import summarize_by_replicate
+    _validate_replicate_groups(frame, replicate_column, group_column)
     replicate = summarize_by_replicate(frame, replicate_column, value_columns, [group_column])
     rows = []
     for group, group_frame in replicate.groupby(group_column, dropna=False):
         row: dict[str, object] = {group_column: group, "replicates": int(group_frame[replicate_column].nunique())}
         for value in value_columns:
             mean_col = f"{value}_mean"
-            values = pd.to_numeric(group_frame[mean_col], errors="coerce").to_numpy(float)
+            values = _strict_numeric(group_frame[mean_col], mean_col).dropna().to_numpy(float)
             values = values[np.isfinite(values)]
             lo, hi = bootstrap_ci(values)
             row[f"{value}_mean"] = float(values.mean()) if values.size else float("nan")
