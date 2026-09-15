@@ -12,7 +12,10 @@ def _strict_numeric(values: pd.Series | np.ndarray, name: str) -> np.ndarray:
     if malformed.any():
         examples = series.loc[malformed].astype(str).head(3).tolist()
         raise ValueError(f"{name} contains non-numeric values: {examples}")
-    return numeric.to_numpy(float)
+    result = numeric.to_numpy(float)
+    if np.isinf(result).any():
+        raise ValueError(f"{name} contains infinite values")
+    return result
 
 
 def robust_zscore(values: pd.Series | np.ndarray) -> np.ndarray:
