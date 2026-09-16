@@ -74,6 +74,22 @@ python scripts/run_bbbc039_validation.py --backend cellpose --gpu --max-images 2
 python scripts/validate_stage3_selection.py   # offline 6/6 selection check
 ```
 
+## Measured baseline — BBBC038 (Kaggle 2018 Data Science Bowl nuclei)
+
+Public dataset: [BBBC038](https://bbbc.broadinstitute.org/BBBC038) · 200 requested FOVs from `stage1_train` (only split shipping masks).
+
+| Backend | n | Dice | Instance F1 | Mean \|count err\| | Rel. count err. |
+|---------|---|------|--------------|---------------------|------------------|
+| **Threshold (Otsu)** | 200 | 0.846 | 0.807 | 14.1 | 0.231 |
+
+- 0 image(s) with zero ground-truth nuclei excluded from n (see `outputs/bbbc038_validation/`).
+- Ground truth decoded from one binary PNG per nucleus (non-overlapping), unlike BBBC039's single color-coded mask file.
+- Generated 2026-09-16 via `scripts/run_bbbc038_validation.py`.
+
+```bash
+python scripts/run_bbbc038_validation.py --max-images 200 --backend threshold
+```
+
 ## Roadmap
 
 [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md) — Stages 1–3 measured; UI / ugly-data next.

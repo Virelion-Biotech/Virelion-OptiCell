@@ -3,6 +3,7 @@
 All notable OptiCell changes are documented here.
 
 ## Unreleased
+- Added a measured BBBC038 baseline (threshold, n=200) via scripts/run_bbbc038_validation.py (2026-09-16).
 
 ### Documentation
 
