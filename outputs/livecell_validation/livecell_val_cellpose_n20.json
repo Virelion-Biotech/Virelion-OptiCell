@@ -1,0 +1,40 @@
+{
+  "dataset": "LIVECell",
+  "source": "https://github.com/sartorius-research/LIVECell",
+  "license": "CC BY-NC 4.0 (non-commercial)",
+  "split": "val",
+  "backend": "cellpose",
+  "cellpose_model": "cpsam",
+  "gpu": true,
+  "n_requested": 20,
+  "n_scored": 20,
+  "n_missing_files": 0,
+  "mean_truth_instances_per_image": 197.6,
+  "max_truth_instances_per_image": 425,
+  "timestamp_utc": "2026-09-17T14:56:47.143618+00:00",
+  "software": {
+    "script": "scripts/run_livecell_validation.py",
+    "repo": "Virelion-Biotech/Virelion-OptiCell"
+  },
+  "summary": {
+    "n_images": 20.0,
+    "pixel_iou_mean": 0.8694464802873305,
+    "pixel_dice_mean": 0.9298826220614119,
+    "pixel_precision_mean": 0.9825841647605882,
+    "pixel_recall_mean": 0.8834723661630882,
+    "instance_precision_mean": 0.9440043293106453,
+    "instance_recall_mean": 0.8729764191111824,
+    "instance_f1_mean": 0.9041807724590433,
+    "absolute_count_error_mean": 25.65,
+    "relative_count_error_mean": 0.10453491416902123,
+    "iou": 0.8694464802873305,
+    "dice": 0.9298826220614119,
+    "precision": 0.9440043293106453,
+    "recall": 0.8729764191111824,
+    "f1": 0.9041807724590433,
+    "absolute_count_error": 25.65,
+    "relative_count_error": 0.10453491416902123
+  },
+  "per_image": "see livecell_val_cellpose_n20.csv",
+  "note": "Measured only. Dense phase-contrast. Per-image rows in companion CSV. CC BY-NC 4.0 non-commercial."
+}
