@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opticell"
-version = "2.16.0"
+version = "2.18.0"
 description = "Quantitative microscopy quality control and cell analysis engine"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 cellpose = ["cellpose"]
+ui = ["streamlit>=1.28"]
 dev = [
   "pytest>=8",
   "ruff>=0.6",
