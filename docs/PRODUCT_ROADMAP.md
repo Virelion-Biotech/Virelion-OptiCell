@@ -15,35 +15,21 @@ Policy: publish only measured metrics.
 | **3 Multi-backend orchestration + TRA** | **Done** |
 | **3b Ship default path** | **Done** |
 | **4 Easy UI** | **Started** — `app_streamlit.py` |
-| **5 Ugly real data** | **In progress** — LIVECell cellpose n=20 measured |
+| **5 Ugly real data** | **Measured** — LIVECell cellpose vs threshold n=20 |
 
 ---
 
-## Stage 5 — LIVECell (measured, cellpose n=20)
+## Stage 5 takeaway (LIVECell, same 20 FOVs)
 
-| Metric | Value |
-|--------|------:|
-| Dice | 0.930 |
-| Instance F1 | 0.904 |
-| Mean \|count err\| | 25.65 |
-| Mean GT cells / image | 197.6 (max 425) |
+| Backend | Dice | F1 | \|count err\| |
+|---------|-----:|---:|-------------:|
+| cellpose | 0.930 | 0.904 | 25.7 |
+| threshold | 0.054 | 0.435 | 87.5 |
 
-Report: `outputs/livecell_validation/LIVECELL_CELLPOSE_N20_REPORT.md`.
-
-Still useful: threshold baseline on same 20 FOVs for comparison.
-
----
-
-## Stage 4 — Easy UI
-
-```bash
-pip install -e '.[ui]'
-streamlit run app_streamlit.py
-```
+Threshold is **not** a viable default on dense phase-contrast. Keep it for fluorescent nuclei (BBBC039). Production `auto` → Cellpose when installed is justified by this result as well as CTC TRA.
 
 ---
 
 ## Next
 
-1. Optional: LIVECell threshold n=20 on same FOVs → side-by-side table.
-2. UI polish only after real usage feedback.
+UI polish from real usage, or more LIVECell cell types / larger n — only if needed for a claim.
