@@ -57,17 +57,20 @@ Cellpose TRA best on **all six** sequences. See [`outputs/stage3/STAGE3_REPORT.m
 |---------|---|------|--------------|---------------------|------------------|
 | **Threshold (Otsu)** | 200 | 0.846 | 0.807 | 14.1 | 0.231 |
 
+### LIVECell (dense phase-contrast, val, measured)
+
+Public: [LIVECell](https://github.com/sartorius-research/LIVECell) · CC BY-NC 4.0 (non-commercial) · mean **197.6** GT cells/image (max 425).
+
+| Backend | n | Dice | Instance F1 | Mean \|count err\| | Rel. count err. |
+|---------|---|------|--------------|---------------------|------------------|
+| **Cellpose-SAM (GPU)** | 20 | **0.930** | **0.904** | 25.7 | 0.105 |
+
+- Dense FOVs often flag `DENSE_FG`; worst |count| error on truth=425 (pred=286).
+- Full report: [`outputs/livecell_validation/LIVECELL_CELLPOSE_N20_REPORT.md`](outputs/livecell_validation/LIVECELL_CELLPOSE_N20_REPORT.md).
+
 ```bash
-python scripts/run_bbbc038_validation.py --max-images 200 --backend threshold
+python scripts/run_livecell_validation.py --max-images 20 --backend cellpose --gpu
 ```
-
-### LIVECell (dense phase-contrast) — adapter ready
-
-```bash
-python scripts/run_livecell_validation.py --max-images 20 --backend threshold
-```
-
-CC BY-NC 4.0 (non-commercial). ~1.3GB download on first run. **No measured README table until you run it and commit the JSON.**
 
 ---
 
