@@ -133,7 +133,7 @@ def _rle_to_mask(rle: dict, height: int, width: int) -> np.ndarray:
             "This annotation uses compressed COCO RLE segmentation, which needs "
             "pycocotools to decode correctly (pip install pycocotools). Not "
             "reimplemented here from scratch to avoid a subtly-wrong codec."
-        ) from exp
+        ) from exc
     return np.asarray(mask_utils.decode(rle), dtype=np.uint8)
 
 
