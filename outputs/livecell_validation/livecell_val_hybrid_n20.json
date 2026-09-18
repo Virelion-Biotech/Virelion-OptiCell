@@ -1,0 +1,40 @@
+{
+  "dataset": "LIVECell",
+  "source": "https://github.com/sartorius-research/LIVECell",
+  "license": "CC BY-NC 4.0 (non-commercial)",
+  "split": "val",
+  "backend": "hybrid",
+  "cellpose_model": "cpsam",
+  "gpu": true,
+  "n_requested": 20,
+  "n_scored": 20,
+  "n_missing_files": 0,
+  "mean_truth_instances_per_image": 197.6,
+  "max_truth_instances_per_image": 425,
+  "timestamp_utc": "2026-09-18T13:08:23.222251+00:00",
+  "software": {
+    "script": "scripts/run_livecell_validation.py",
+    "repo": "Virelion-Biotech/Virelion-OptiCell"
+  },
+  "summary": {
+    "n_images": 20.0,
+    "pixel_iou_mean": 0.5711488162236142,
+    "pixel_dice_mean": 0.6224753419890192,
+    "pixel_precision_mean": 0.9863869460569955,
+    "pixel_recall_mean": 0.5811023103412469,
+    "instance_precision_mean": 0.8163758794350733,
+    "instance_recall_mean": 0.7338202226717285,
+    "instance_f1_mean": 0.7671550844891903,
+    "absolute_count_error_mean": 37.05,
+    "relative_count_error_mean": 0.15783482798853488,
+    "iou": 0.5711488162236142,
+    "dice": 0.6224753419890192,
+    "precision": 0.8163758794350733,
+    "recall": 0.7338202226717285,
+    "f1": 0.7671550844891903,
+    "absolute_count_error": 37.05,
+    "relative_count_error": 0.15783482798853488
+  },
+  "per_image": "see livecell_val_hybrid_n20.csv",
+  "note": "Measured only. Hybrid chose Cellpose on 13/20 FOVs (5 via threshold_collapsed). On 7/20 fell back to threshold with near-zero Dice. Pure cellpose remains best on this modality."
+}
