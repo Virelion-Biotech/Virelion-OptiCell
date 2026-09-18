@@ -145,11 +145,16 @@ def hybrid_threshold_cellpose(
     max_area_frac: float = 0.25,
     count_tol_frac: float = 0.12,
     count_tol_abs: int = 8,
+    threshold_collapse_fg_frac: float = 0.005,
 ) -> SegmentationResult:
-    """Count-gated hybrid: Cellpose when counts agree with threshold, else threshold.
+    """Count-gated hybrid: Cellpose when counts agree with threshold, else threshold —
+    unless threshold has collapsed (near-zero foreground or zero objects), in which case
+    Cellpose is preferred.
 
-    Measured BBBC039 n=50: threshold F1≈0.96 / count≈6; cellpose Dice≈0.97 / count≈15.
-    n=200: hybrid Dice 0.929, F1 0.924, |count|≈9 — count-safe default, not dual-axis SOTA.
+    Measured LIVECell n=20: threshold alone collapses (Dice 0.054, 4/20 zero-object FOVs)
+    while Cellpose holds (Dice 0.930). Old logic fell back to threshold on large count
+    disagreement — backwards when threshold found nothing. Collapse check uses the same
+    fg_frac / zero-object signal as fov_confidence SPARSE_FG / ZERO_OBJECTS.
     """
     thr = segment_threshold(
         gray, min_area=min_area, max_area_frac=max_area_frac, adaptive=False
@@ -173,16 +178,26 @@ def hybrid_threshold_cellpose(
     cp = cellpose_segmenter.segment(
         gray, min_area=min_area, max_area_frac=max_area_frac
     )
-    tol = max(count_tol_abs, int(round(count_tol_frac * max(thr.count, 1))))
-    count_delta = abs(int(cp.count) - int(thr.count))
-    agree_iou = _iou_by_mask(cp.labels, thr.labels)
 
-    if count_delta <= tol:
+    threshold_collapsed = thr.count == 0 or thr.foreground_fraction < threshold_collapse_fg_frac
+
+    if threshold_collapsed:
         chosen = cp
-        tag = f"hybrid:cellpose(delta={count_delta},iou={agree_iou:.2f})"
+        tag = (
+            f"hybrid:cellpose(threshold_collapsed,fg_frac={thr.foreground_fraction:.4f},"
+            f"thr_count={thr.count})"
+        )
     else:
-        chosen = thr
-        tag = f"hybrid:threshold(delta={count_delta},iou={agree_iou:.2f})"
+        tol = max(count_tol_abs, int(round(count_tol_frac * max(thr.count, 1))))
+        count_delta = abs(int(cp.count) - int(thr.count))
+        agree_iou = _iou_by_mask(cp.labels, thr.labels)
+
+        if count_delta <= tol:
+            chosen = cp
+            tag = f"hybrid:cellpose(delta={count_delta},iou={agree_iou:.2f})"
+        else:
+            chosen = thr
+            tag = f"hybrid:threshold(delta={count_delta},iou={agree_iou:.2f})"
 
     return SegmentationResult(
         count=chosen.count,
