@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opticell"
-version = "2.18.0"
+dynamic = ["version"]
 description = "Quantitative microscopy quality control and cell analysis engine"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {file = "LICENSE"}
+license = "AGPL-3.0-or-later"
 dependencies = [
   "numpy>=1.26,<3",
   "opencv-python-headless>=4.9,<5",
@@ -24,11 +24,15 @@ dev = [
   "pytest>=8",
   "ruff>=0.6",
   "build>=1.2",
+  "streamlit>=1.28,<2",
 ]
 
 [project.scripts]
 opticell = "qc_pipeline:_main"
 opticell-hearttwin = "opticell.hearttwin_adapter:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "opticell.__version__"}
 
 [tool.setuptools]
 py-modules = [
