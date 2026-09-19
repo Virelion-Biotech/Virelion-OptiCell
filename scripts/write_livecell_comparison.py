@@ -38,11 +38,12 @@ def main() -> int:
         "|---|---:|---:|---:|",
     ]
     for backend, summary in rows:
-        lines.append(
-            f"| {backend} | {summary.get('dice', float("nan")):.3f} | "
-            f"{summary.get('f1', float("nan")):.3f} | "
-            f"{summary.get('absolute_count_error', float("nan")):.1f} |"
-        )
+        dice = float(summary.get("dice", float("nan")))
+        f1 = float(summary.get("f1", float("nan")))
+        count_error = float(summary.get("absolute_count_error", float("nan")))
+        lines.append("| {} | {:.3f} | {:.3f} | {:.1f} |".format(
+            backend, dice, f1, count_error
+        ))
 
     lines += [
         "",
