@@ -115,6 +115,8 @@ def build_review_queue(rows: list[dict], decisions_path: Path | None = None) -> 
         queue["review_status"] = np.where(queue["decision"].eq(""), "PENDING", "COMPLETED")
         queue = queue[review_columns]
     return queue
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="OptiCell killer workflow (default backend=auto)")
     parser.add_argument("images", type=Path)
