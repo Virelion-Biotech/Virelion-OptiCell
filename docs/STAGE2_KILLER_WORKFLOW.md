@@ -56,7 +56,6 @@ Default rules in `run_killer_workflow.py`:
 |---------|------|
 | `area_px` | ≥ 50 |
 | `circularity` | ≥ 0.4 |
-| `mean_intensity` | ≥ 40 |
 
 Edit rules in code or fork `phenotype.Rule` / `score_cells` for assay-specific cutoffs. No black-box classifier.
 
@@ -73,7 +72,7 @@ Stage 2 uses the **same** segmentation backends to produce **assay-facing tables
 | Object features | Done |
 | Rule phenotype | Done |
 | Tracking (optional TL) | Done (needs real TL data to evaluate) |
-| HITL / auto backend | Stage 3 |
+| HITL review queue / auto backend | Shipped |
 
 ---
 
