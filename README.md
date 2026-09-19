@@ -72,6 +72,12 @@ pip install -e '.[cellpose]'
 pip install -e '.[ui]'
 ```
 
+## Validation and release
+
+- Current LIVECell n=20 measurements: [`outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md`](outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md)
+- Release notes: [`docs/RELEASE_NOTES_v2.18.0.md`](docs/RELEASE_NOTES_v2.18.0.md)
+- Optional HITL review: run the killer workflow with `--write-review-queue`, then record decisions with `--review-decisions reviewed.csv`.
+
 ## Roadmap
 
 [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md)
