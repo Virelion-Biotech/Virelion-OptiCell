@@ -39,9 +39,9 @@ def main() -> int:
     ]
     for backend, summary in rows:
         lines.append(
-            f"| {backend} | {summary.get("dice", float("nan")):.3f} | "
-            f"{summary.get("f1", float("nan")):.3f} | "
-            f"{summary.get("absolute_count_error", float("nan")):.1f} |"
+            f"| {backend} | {summary.get('dice', float("nan")):.3f} | "
+            f"{summary.get('f1', float("nan")):.3f} | "
+            f"{summary.get('absolute_count_error', float("nan")):.1f} |"
         )
 
     lines += [
