@@ -53,7 +53,11 @@ Open `outputs/demo_run/workflow_summary.json` and `cell_features_phenotype.csv`.
 
 **Product line:** *Given raw microscopy data, OptiCell produces measurements with explicit QC gates — and defaults to Cellpose when the data looks low-contrast / phase-like.*
 
-## 5. If something fails
+## 5. Human review (optional)
+
+For a batch run, add `--write-review-queue`. Open `review_queue.csv`, record `accept`, `reject`, or `rerun` plus reviewer/notes, then rerun with `--review-decisions reviewed.csv` to preserve the decision trail.
+
+## 6. If something fails
 
 | Symptom | Fix |
 |---------|-----|
