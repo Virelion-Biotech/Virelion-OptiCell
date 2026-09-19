@@ -1,3 +1,5 @@
+from pathlib import Path
+
 """Automated Streamlit UI smoke tests.
 
 These tests launch the real app with Streamlit's in-process AppTest harness.
@@ -6,7 +8,8 @@ These tests launch the real app with Streamlit's in-process AppTest harness.
 def test_streamlit_app_starts_without_runtime_errors():
     from streamlit.testing.v1 import AppTest
 
-    at = AppTest.from_file("app_streamlit.py").run(timeout=60)
+    app_path = Path(__file__).resolve().parents[1] / "app_streamlit.py"
+    at = AppTest.from_file(app_path).run(timeout=60)
 
     assert not at.exception
     assert at.title
