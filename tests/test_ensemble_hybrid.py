@@ -1,18 +1,11 @@
-"""Tests for ensemble.hybrid_threshold_cellpose threshold-collapse handling.
-
-Regression for LIVECell validation: original count-gated hybrid fell back to
-threshold when counts disagreed sharply. Backwards once threshold collapsed
-(fg_frac < 0.005 or zero objects). See ensemble.hybrid_threshold_cellpose.
-"""
+"""Tests for ensemble.hybrid_threshold_cellpose threshold-collapse + low-contrast."""
 import numpy as np
 
-from ensemble import hybrid_threshold_cellpose
+from ensemble import hybrid_threshold_cellpose, image_looks_low_contrast, suggest_backend
 from qc_pipeline import SegmentationResult, segment_threshold
 
 
 class _FakeCellposeSegmenter:
-    """Returns a pre-built result; no real Cellpose install required."""
-
     def __init__(self, result: SegmentationResult):
         self._result = result
 
@@ -58,7 +51,6 @@ def _fake_cellpose_result(shape, n_objects, seed=0):
 
 
 def _low_contrast_image(shape=(96, 96), seed=1):
-    """Objects with <8 gray levels contrast — segment_threshold collapses."""
     rng = np.random.default_rng(seed)
     img = rng.normal(120, 2, shape).clip(0, 255).astype(np.uint8)
     h, w = shape
@@ -71,7 +63,6 @@ def _low_contrast_image(shape=(96, 96), seed=1):
 
 
 def _high_contrast_image(shape=(96, 96), seed=2):
-    """Easily thresholdable blobs — threshold must NOT collapse."""
     rng = np.random.default_rng(seed)
     img = rng.normal(30, 5, shape).clip(0, 255).astype(np.uint8)
     occupied = np.zeros(shape, dtype=bool)
@@ -97,12 +88,25 @@ def test_hybrid_prefers_cellpose_when_threshold_collapses():
         img, cellpose_segmenter=_FakeCellposeSegmenter(fake_cp_result)
     )
     assert result.count == 40
-    assert "threshold_collapsed" in result.method
+    assert "cellpose" in result.method
     assert np.array_equal(result.labels, fake_cp_result.labels)
+
+
+def test_hybrid_prefers_cellpose_on_low_contrast_even_if_threshold_has_blobs():
+    """Phase-safe path: low-contrast images should not fall back to threshold."""
+    img = _low_contrast_image(seed=3)
+    assert image_looks_low_contrast(img)
+    fake_cp_result = _fake_cellpose_result(img.shape, n_objects=40, seed=9)
+    result = hybrid_threshold_cellpose(
+        img, cellpose_segmenter=_FakeCellposeSegmenter(fake_cp_result)
+    )
+    assert result.count == 40
+    assert "low_contrast" in result.method or "threshold_collapsed" in result.method
 
 
 def test_hybrid_still_prefers_threshold_when_not_collapsed_and_counts_disagree():
     img = _high_contrast_image()
+    assert not image_looks_low_contrast(img)
     fake_cp_result = _fake_cellpose_result(img.shape, n_objects=200, seed=6)
     result = hybrid_threshold_cellpose(
         img, cellpose_segmenter=_FakeCellposeSegmenter(fake_cp_result)
@@ -125,3 +129,11 @@ def test_hybrid_falls_back_to_threshold_only_without_a_segmenter():
     img = _high_contrast_image()
     result = hybrid_threshold_cellpose(img, cellpose_segmenter=None)
     assert result.method == "hybrid:threshold_only"
+
+
+def test_suggest_backend_prefers_cellpose_when_available():
+    img = _high_contrast_image()
+    b, reason = suggest_backend(img, cellpose_available=True)
+    assert b == "cellpose"
+    b2, _ = suggest_backend(img, cellpose_available=False)
+    assert b2 == "threshold"
