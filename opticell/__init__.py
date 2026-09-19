@@ -57,4 +57,4 @@ __all__ = [
     "summarize_volume", "threshold_sensitivity", "track_fragmentation", "track_gap_rate", "track_purity", "two_group_sample_size", "volume_features", "write_dataframe", "write_manifest", "write_report", "z_prime_factor",
 ]
 
-__version__ = "2.16.0"
+__version__ = "2.18.0"
