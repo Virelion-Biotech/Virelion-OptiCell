@@ -157,7 +157,6 @@ def _main() -> None:
         st.error("Could not decode this file as an image.")
         st.stop()
 
-    # Pre-resolve auto so we know whether to load Cellpose before running
     gray_probe = to_grayscale_uint8(raw)
     if backend == "auto":
         resolved_probe, _ = suggest_backend(gray_probe, cellpose_available=_HAS_CELLPOSE)
@@ -214,12 +213,11 @@ def _main() -> None:
             width="stretch",
         )
 
-    # Overlay download (PNG bytes)
     ok, png = cv2.imencode(".png", cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
     if ok:
         st.download_button(
             "Download overlay PNG",
-            data=buf.tobytes(),
+            data=png.tobytes(),
             file_name="opticell_overlay.png",
             mime="image/png",
         )
