@@ -14,8 +14,8 @@ Policy: publish only measured metrics.
 | **2 Killer workflow + CTC TRA** | **Done** |
 | **3 Multi-backend orchestration + TRA** | **Done** |
 | **3b Ship default path** | **Done** |
-| **4 Easy UI** | **Started** — `app_streamlit.py` |
-| **5 Ugly real data** | **Measured** — LIVECell cellpose vs threshold n=20 |
+| **4 Easy UI** | **Shipped** — `app_streamlit.py` + [`docs/DEMO_5_MIN.md`](DEMO_5_MIN.md) |
+| **5 Ugly real data** | **Measured** — LIVECell threshold / cellpose / hybrid n=20 |
 
 ---
 
@@ -24,12 +24,13 @@ Policy: publish only measured metrics.
 | Backend | Dice | F1 | \|count err\| |
 |---------|-----:|---:|-------------:|
 | cellpose | 0.930 | 0.904 | 25.7 |
+| hybrid (collapse + low-contrast aware) | 0.622* | 0.767 | 37.1 |
 | threshold | 0.054 | 0.435 | 87.5 |
 
-Threshold is **not** a viable default on dense phase-contrast. Keep it for fluorescent nuclei (BBBC039). Production `auto` → Cellpose when installed is justified by this result as well as CTC TRA.
+\*Hybrid n=20 measured **before** low-contrast prefer-Cellpose rule; collapse fix alone already rescued zero-object FOVs. Production default remains **Cellpose** on phase-like data.
 
 ---
 
 ## Next
 
-UI polish from real usage, or more LIVECell cell types / larger n — only if needed for a claim.
+Real usage feedback on the UI; optional human-in-the-loop for REVIEW FOVs.

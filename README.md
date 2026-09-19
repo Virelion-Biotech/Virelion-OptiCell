@@ -20,16 +20,20 @@ python scripts/run_killer_workflow.py /path/to/frames \
   -o outputs/run --enable-tracking --gpu
 ```
 
-**Default backend is `auto`:** Cellpose if installed, else threshold.
+**Default backend is `auto`:** Cellpose if installed (always preferred on low-contrast / phase-like images), else threshold.
+
+**5-minute demo:** [`docs/DEMO_5_MIN.md`](docs/DEMO_5_MIN.md)
 
 ---
 
 ## Easy UI (Stage 4)
 
 ```bash
-pip install -e '.[ui]'
+pip install -e '.[ui,cellpose]'
 streamlit run app_streamlit.py
 ```
+
+Upload one image → acquisition QC → segmentation → acceptance gate → per-object CSV + overlay download.
 
 ---
 
@@ -56,17 +60,11 @@ Cellpose TRA best on **all six** sequences. See [`outputs/stage3/STAGE3_REPORT.m
 
 ### LIVECell (dense phase-contrast, val, same 20 FOVs)
 
-Public: [LIVECell](https://github.com/sartorius-research/LIVECell) · CC BY-NC 4.0 · mean **197.6** GT cells/image (max 425).
-
 | Backend | n | Dice | Instance F1 | Mean \|count err\| |
 |---------|---|------|--------------|------------------:|
 | **Cellpose-SAM (GPU)** | 20 | **0.930** | **0.904** | **25.7** |
-| Hybrid (collapse-aware) | 20 | 0.622 | 0.767 | 37.1 |
+| Hybrid | 20 | 0.622 | 0.767 | 37.1 |
 | Threshold (Otsu) | 20 | 0.054 | 0.435 | 87.5 |
-
-- Collapse fix routes true zero-threshold FOVs to Cellpose (5/20).
-- Hybrid still loses when threshold finds sparse false blobs (7/20) — pure Cellpose is the right default here.
-- Reports: [`LIVECELL_CELLPOSE_N20_REPORT.md`](outputs/livecell_validation/LIVECELL_CELLPOSE_N20_REPORT.md), [`LIVECELL_THRESHOLD_N20_REPORT.md`](outputs/livecell_validation/LIVECELL_THRESHOLD_N20_REPORT.md), [`LIVECELL_HYBRID_N20_REPORT.md`](outputs/livecell_validation/LIVECELL_HYBRID_N20_REPORT.md).
 
 ---
 
