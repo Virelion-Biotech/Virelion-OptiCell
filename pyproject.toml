@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cellpose = ["cellpose"]
+cellpose = ["cellpose", "packaging>=24"]
 ui = ["streamlit>=1.28"]
 dev = [
   "pytest>=8",
