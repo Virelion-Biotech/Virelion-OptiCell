@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 """Stage-2 killer workflow: QC → segment → features → phenotype [+ optional tracking].
 
-Product default (Stage-3 evidence):
-  --backend auto  →  cellpose if installed, else threshold.
-  Cellpose won CTC TRA on all 6 measured sequences; threshold remains the
-  CPU-only / count-oriented path (strong on BBBC039 instance F1).
+Product default:
+  --backend auto  →  cellpose if installed (always on low-contrast / phase-like), else threshold.
 
 Usage:
-  # Recommended one-liner (auto backend)
-  python scripts/run_killer_workflow.py /path/to/frames -o outputs/run --enable-tracking
-
-  # Force CPU threshold
-  python scripts/run_killer_workflow.py /path/to/images -o out --backend threshold
+  python scripts/run_killer_workflow.py /path/to/frames -o outputs/run --enable-tracking --gpu
 """
 from __future__ import annotations
 
@@ -41,25 +35,18 @@ from qc_pipeline import (  # noqa: E402
     _HAS_CELLPOSE,
     _CELLPOSE_IMPORT_ERROR,
 )
-from ensemble import hybrid_threshold_cellpose, fov_confidence  # noqa: E402
+from ensemble import hybrid_threshold_cellpose, fov_confidence, suggest_backend  # noqa: E402
 from tracking import TrackingConfig, link_frames, summarize_tracks  # noqa: E402
 from phenotype import Rule, score_cells, group_phenotype_summary  # noqa: E402
 
 
-def resolve_backend(requested: str, *, gpu: bool) -> tuple[str, str]:
+def resolve_backend(requested: str, *, gpu: bool, gray: np.ndarray | None = None) -> tuple[str, str]:
     """Map 'auto' to a concrete backend. Returns (backend, reason)."""
     req = (requested or "auto").strip().lower()
     if req != "auto":
         return req, f"user requested {req}"
-    if _HAS_CELLPOSE:
-        return "cellpose", (
-            "auto: cellpose available "
-            f"(gpu={bool(gpu)}); measured Stage-3 TRA winner on CTC"
-        )
-    return "threshold", (
-        "auto: cellpose not installed → threshold "
-        f"(import error: {_CELLPOSE_IMPORT_ERROR})"
-    )
+    backend, reason = suggest_backend(gray, cellpose_available=_HAS_CELLPOSE)
+    return backend, f"{reason} (gpu={bool(gpu)})"
 
 
 def iter_images(folder: Path):
@@ -95,7 +82,7 @@ def main() -> int:
         "--backend",
         choices=("auto", "threshold", "adaptive", "cellpose", "hybrid"),
         default="auto",
-        help="auto = cellpose if installed else threshold (default)",
+        help="auto = cellpose if installed (phase-like always cellpose) else threshold",
     )
     parser.add_argument("--gpu", action="store_true", help="Cellpose GPU when backend is cellpose/hybrid/auto")
     parser.add_argument("--cellpose-model", default="cpsam")
@@ -122,9 +109,6 @@ def main() -> int:
         print(f"ERROR: not a directory: {folder}", file=sys.stderr)
         return 2
 
-    backend, backend_reason = resolve_backend(args.backend, gpu=bool(args.gpu))
-    print(f"[backend] {backend} ({backend_reason})")
-
     paths: list[Path] = []
     seen: set[Path] = set()
     for p in iter_images(folder):
@@ -139,6 +123,16 @@ def main() -> int:
         print("ERROR: no images found", file=sys.stderr)
         return 3
 
+    # Resolve auto using first frame contrast when possible
+    probe_gray = None
+    try:
+        _, probe_gray = load_gray(paths[0])
+    except Exception:
+        probe_gray = None
+
+    backend, backend_reason = resolve_backend(args.backend, gpu=bool(args.gpu), gray=probe_gray)
+    print(f"[backend] {backend} ({backend_reason})")
+
     needs_cp = backend in ("cellpose", "hybrid")
     cellpose_seg = None
     if needs_cp:
@@ -146,7 +140,7 @@ def main() -> int:
             if args.backend == "auto":
                 backend = "threshold"
                 backend_reason = (
-                    "auto: Cellpose is importable but unavailable at runtime; "
+                    "auto: Cellpose unavailable at runtime; "
                     f"falling back to threshold ({_CELLPOSE_IMPORT_ERROR or 'initialization failed'})"
                 )
                 print(f"WARNING: {backend_reason}", file=sys.stderr)
@@ -347,9 +341,8 @@ def main() -> int:
         "per_image": per_image,
         "failed_images": failed_rows,
         "note": (
-            "Default backend=auto → cellpose if installed else threshold. "
-            "Phenotype = explicit morphology rules. Tracking only with --enable-tracking on ordered TL. "
-            "Runs with failed images are explicitly marked incomplete and must not be treated as complete datasets."
+            "Default backend=auto → cellpose if installed (phase-like always cellpose) else threshold. "
+            "Phenotype = explicit morphology rules. Tracking only with --enable-tracking on ordered TL."
         ),
     }
     out_json = out_dir / "workflow_summary.json"
