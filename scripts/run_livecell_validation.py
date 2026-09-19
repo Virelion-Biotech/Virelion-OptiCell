@@ -231,10 +231,17 @@ def main() -> int:
                 return 5
             print(f"[auto] Cellpose unavailable; auto will use threshold. Detail: {_CELLPOSE_IMPORT_ERROR}")
         else:
-            print(f"[cellpose] loading model={args.cellpose_model!r} gpu={args.gpu} (once)...")
-            cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=bool(args.gpu))
-            _ = cellpose_seg.model
-            print("[cellpose] model ready")
+            try:
+                print(f"[cellpose] loading model={args.cellpose_model!r} gpu={args.gpu} (once)...")
+                cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=bool(args.gpu))
+                _ = cellpose_seg.model
+                print("[cellpose] model ready")
+            except Exception as exc:
+                if needs_cellpose:
+                    print(f"ERROR: Cellpose initialization failed: {exc}", file=sys.stderr)
+                    return 5
+                print(f"[auto] Cellpose initialization failed; auto will use threshold: {exc}")
+                cellpose_seg = None
 
     pred_labels: list = []
     truth_labels: list = []
