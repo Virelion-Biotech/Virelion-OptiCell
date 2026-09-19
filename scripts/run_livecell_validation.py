@@ -55,7 +55,7 @@ from qc_pipeline import (  # noqa: E402
     _HAS_CELLPOSE,
     _CELLPOSE_IMPORT_ERROR,
 )
-from ensemble import hybrid_threshold_cellpose, fov_confidence  # noqa: E402
+from ensemble import hybrid_threshold_cellpose, fov_confidence, suggest_backend  # noqa: E402
 
 LIVECELL_IMAGES_URL = "http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/images.zip"
 LIVECELL_ANNOTATIONS = {
@@ -176,7 +176,7 @@ def main() -> int:
     parser.add_argument("--split", choices=("train", "val", "test"), default="val")
     parser.add_argument("--max-images", type=int, default=20)
     parser.add_argument(
-        "--backend", choices=("threshold", "adaptive", "cellpose", "hybrid"), default="threshold"
+        "--backend", choices=("auto", "threshold", "adaptive", "cellpose", "hybrid"), default="threshold"
     )
     parser.add_argument("--out-dir", type=Path, default=Path("outputs/livecell_validation"))
     parser.add_argument("--skip-download", action="store_true")
@@ -221,7 +221,7 @@ def main() -> int:
     print(f"[run] backend={args.backend} n_images={len(ordered_image_ids)} split={args.split} gpu={args.gpu}")
     print(f"[env] cellpose_available={_HAS_CELLPOSE} import_error={_CELLPOSE_IMPORT_ERROR!r}")
 
-    needs_cellpose = args.backend in ("cellpose", "hybrid")
+    needs_cellpose = args.backend in ("cellpose", "hybrid", "auto")
     cellpose_seg: CellposeSegmenter | None = None
     if needs_cellpose:
         if not _HAS_CELLPOSE:
@@ -261,13 +261,22 @@ def main() -> int:
             truth_count = int(truth.max())
             truth_instance_counts.append(truth_count)
 
-            if args.backend == "threshold":
+            backend_for_image = args.backend
+            backend_reason = f"user requested {args.backend}"
+            if args.backend == "auto":
+                backend_for_image, backend_reason = suggest_backend(
+                    gray, cellpose_available=cellpose_seg is not None
+                )
+            if backend_for_image == "threshold":
                 seg = segment_threshold(gray)
-            elif args.backend == "adaptive":
+            elif backend_for_image == "adaptive":
                 seg = segment_threshold(gray, adaptive=True)
-            elif args.backend == "cellpose":
-                assert cellpose_seg is not None
-                seg = cellpose_seg.segment(gray)
+            elif backend_for_image == "cellpose":
+                if cellpose_seg is None:
+                    seg = segment_threshold(gray)
+                    backend_reason = "auto: Cellpose unavailable → threshold"
+                else:
+                    seg = cellpose_seg.segment(gray)
             else:
                 seg = hybrid_threshold_cellpose(gray, cellpose_segmenter=cellpose_seg)
 
@@ -280,6 +289,9 @@ def main() -> int:
                 "cell_type": file_name.split("_")[0] if "_" in file_name else "",
                 "pred_count": int(seg.count),
                 "truth_count": truth_count,
+                "backend_requested": args.backend,
+                "backend_resolved": backend_for_image,
+                "backend_reason": backend_reason,
                 "method": seg.method,
                 "confidence_score": float(conf["confidence_score"]),
                 "confidence_flags": str(conf["flags"]),
