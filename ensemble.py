@@ -32,6 +32,37 @@ def _positive_label_count(labels: np.ndarray) -> int:
     return int(np.unique(positive).size) if positive.size else 0
 
 
+def image_looks_low_contrast(
+    gray: np.ndarray,
+    *,
+    range_thresh: float = 40.0,
+    std_thresh: float = 15.0,
+) -> bool:
+    """Cheap heuristic for phase-like / low-contrast frames.
+
+    Not a calibrated modality classifier. Tuned so high-contrast fluorescent nuclei
+    (BBBC039-like) typically return False while dense phase-contrast (LIVECell-like)
+    often returns True. Used to prefer Cellpose over threshold when both are available.
+    """
+    g = np.asarray(gray, dtype=np.float64)
+    if g.size == 0:
+        return True
+    return float(g.max() - g.min()) < range_thresh or float(g.std()) < std_thresh
+
+
+def suggest_backend(
+    gray: np.ndarray | None = None,
+    *,
+    cellpose_available: bool,
+) -> tuple[str, str]:
+    """Resolve `auto` to a concrete backend with an explicit reason string."""
+    if not cellpose_available:
+        return "threshold", "auto: cellpose not installed → threshold"
+    if gray is not None and image_looks_low_contrast(gray):
+        return "cellpose", "auto: low-contrast / phase-like → cellpose"
+    return "cellpose", "auto: cellpose available (default; Stage-3 TRA + LIVECell winner)"
+
+
 def threshold_ensemble(
     gray: np.ndarray, min_area: int = 15, max_area_frac: float = 0.25
 ) -> EnsembleResult:
@@ -147,14 +178,14 @@ def hybrid_threshold_cellpose(
     count_tol_abs: int = 8,
     threshold_collapse_fg_frac: float = 0.005,
 ) -> SegmentationResult:
-    """Count-gated hybrid: Cellpose when counts agree with threshold, else threshold —
-    unless threshold has collapsed (near-zero foreground or zero objects), in which case
-    Cellpose is preferred.
+    """Count-gated hybrid with phase-safe overrides.
 
-    Measured LIVECell n=20: threshold alone collapses (Dice 0.054, 4/20 zero-object FOVs)
-    while Cellpose holds (Dice 0.930). Old logic fell back to threshold on large count
-    disagreement — backwards when threshold found nothing. Collapse check uses the same
-    fg_frac / zero-object signal as fov_confidence SPARSE_FG / ZERO_OBJECTS.
+    Prefer Cellpose when:
+    - threshold collapsed (zero objects or near-zero foreground), or
+    - the image looks low-contrast / phase-like (LIVECell-style),
+    - or counts agree within tolerance.
+
+    Otherwise keep threshold as the conservative high-contrast path (BBBC039-like).
     """
     thr = segment_threshold(
         gray, min_area=min_area, max_area_frac=max_area_frac, adaptive=False
@@ -180,12 +211,20 @@ def hybrid_threshold_cellpose(
     )
 
     threshold_collapsed = thr.count == 0 or thr.foreground_fraction < threshold_collapse_fg_frac
+    low_contrast = image_looks_low_contrast(gray)
 
     if threshold_collapsed:
         chosen = cp
         tag = (
             f"hybrid:cellpose(threshold_collapsed,fg_frac={thr.foreground_fraction:.4f},"
             f"thr_count={thr.count})"
+        )
+    elif low_contrast:
+        chosen = cp
+        tag = (
+            f"hybrid:cellpose(low_contrast,"
+            f"range={float(np.asarray(gray).max()) - float(np.asarray(gray).min()):.1f},"
+            f"std={float(np.asarray(gray, dtype=np.float64).std()):.1f})"
         )
     else:
         tol = max(count_tol_abs, int(round(count_tol_frac * max(thr.count, 1))))
