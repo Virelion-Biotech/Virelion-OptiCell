@@ -2,10 +2,6 @@
 
 **Headless Python toolkit** for microscopy QC, segmentation, tracking, phenotyping, and experiment-level quantitative analysis.
 
-**Product thesis:** trustworthy measurements with explicit QC — not another black-box segmenter.
-
-**Measured numbers only.** No fabricated benchmarks.
-
 ---
 
 ## Quickstart (recommended)
