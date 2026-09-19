@@ -38,6 +38,7 @@ from qc_pipeline import (  # noqa: E402
 from ensemble import hybrid_threshold_cellpose, fov_confidence, suggest_backend  # noqa: E402
 from tracking import TrackingConfig, link_frames, summarize_tracks  # noqa: E402
 from phenotype import Rule, score_cells, group_phenotype_summary  # noqa: E402
+from acceptance import segmentation_acceptance  # noqa: E402
 
 
 def resolve_backend(requested: str, *, gpu: bool, gray: np.ndarray | None = None) -> tuple[str, str]:
@@ -74,6 +75,46 @@ def default_phenotype_rules() -> list[Rule]:
     ]
 
 
+def build_review_queue(rows: list[dict], decisions_path: Path | None = None) -> pd.DataFrame:
+    """Build an auditable HITL queue from REVIEW/FAIL or flagged FOVs."""
+    review_columns = [
+        "index", "image", "status", "backend", "method", "object_count",
+        "acceptance_status", "acceptance_reason", "confidence_score",
+        "confidence_flags", "error", "review_status", "decision", "reviewer", "notes",
+    ]
+    queued = []
+    for row in rows:
+        if row.get("review_required"):
+            queued.append({**row, "review_status": "PENDING", "decision": "", "reviewer": "", "notes": ""})
+    queue = pd.DataFrame(queued, columns=review_columns)
+
+    if decisions_path is not None:
+        decisions = pd.read_csv(decisions_path)
+        required = {"image", "decision"}
+        missing = required - set(decisions.columns)
+        if missing:
+            raise ValueError(f"review decisions missing required columns: {sorted(missing)}")
+        if decisions["image"].duplicated().any():
+            raise ValueError("review decisions contain duplicate image entries")
+        keep = [c for c in ("image", "decision", "reviewer", "notes") if c in decisions.columns]
+        decisions = decisions[keep].copy()
+        decisions["decision"] = decisions["decision"].fillna("").astype(str).str.strip().str.lower()
+        allowed = {"", "accept", "reject", "rerun"}
+        invalid = sorted(set(decisions.loc[~decisions["decision"].isin(allowed), "decision"]))
+        if invalid:
+            raise ValueError(f"unsupported review decisions: {invalid}; use accept/reject/rerun")
+        queue = queue.drop(columns=["decision", "reviewer", "notes"], errors="ignore")
+        queue = queue.merge(decisions, on="image", how="left")
+        queue["decision"] = queue["decision"].fillna("")
+        if "reviewer" not in queue:
+            queue["reviewer"] = ""
+        if "notes" not in queue:
+            queue["notes"] = ""
+        queue["reviewer"] = queue["reviewer"].fillna("")
+        queue["notes"] = queue["notes"].fillna("")
+        queue["review_status"] = np.where(queue["decision"].eq(""), "PENDING", "COMPLETED")
+        queue = queue[review_columns]
+    return queue
 def main() -> int:
     parser = argparse.ArgumentParser(description="OptiCell killer workflow (default backend=auto)")
     parser.add_argument("images", type=Path)
@@ -95,6 +136,10 @@ def main() -> int:
     )
     parser.add_argument("--track-max-distance", type=float, default=50.0)
     parser.add_argument("--track-max-gap", type=int, default=1)
+    parser.add_argument("--write-review-queue", action="store_true",
+                        help="Write an auditable CSV containing FOVs needing human review.")
+    parser.add_argument("--review-decisions", type=Path, default=None,
+                        help="CSV with image, decision[, reviewer, notes] to complete a prior review queue.")
     args = parser.parse_args()
 
     if args.max_images < 0:
@@ -103,6 +148,8 @@ def main() -> int:
         parser.error("--track-max-gap must be >= 0")
     if args.track_max_distance <= 0 or not np.isfinite(args.track_max_distance):
         parser.error("--track-max-distance must be finite and > 0")
+    if args.review_decisions is not None and not args.review_decisions.expanduser().is_file():
+        parser.error(f"--review-decisions file not found: {args.review_decisions}")
 
     folder = args.images.expanduser().resolve()
     if not folder.is_dir():
@@ -190,6 +237,21 @@ def main() -> int:
                 seg = hybrid_threshold_cellpose(gray, cellpose_segmenter=cellpose_seg)
 
             conf = fov_confidence(gray, seg.labels, focus_score=focus)
+            acceptance = (
+                segmentation_acceptance(
+                    quality_score=seg.quality_score,
+                    border_fraction=seg.border_fraction,
+                    tiny_object_fraction=seg.tiny_object_fraction,
+                    merged_object_fraction=seg.merged_object_fraction,
+                )
+                if seg.error is None
+                else None
+            )
+            review_required = (
+                acceptance is None
+                or acceptance.status != "PASS"
+                or bool(conf["flags"])
+            )
             feats = extract_object_features(native_gray, seg.labels)
             if not feats.empty:
                 feats = feats.copy()
@@ -224,6 +286,9 @@ def main() -> int:
                 "foreground_fraction": float(seg.foreground_fraction),
                 "quality_score": float(seg.quality_score) if seg.quality_score is not None else None,
                 "mask": str(mask_path),
+                "acceptance_status": acceptance.status if acceptance is not None else None,
+                "acceptance_reason": acceptance.reason if acceptance is not None else None,
+                "review_required": bool(review_required),
                 "error": None,
             }
             fov_rows.append(row)
@@ -241,8 +306,10 @@ def main() -> int:
                 "backend": backend,
                 "backend_requested": args.backend,
                 "object_count": None,
-                "error": f"{type(exc).__name__}: {exc}",
-            }
+                "acceptance_status": None,
+                "acceptance_reason": None,
+                "review_required": True,
+                "error": f"{type(exc).__name__}: {exc}",            }
             failed_rows.append(failed)
             print(f"  [{i}/{len(paths)}] FAIL {path.name}: {exc}")
 
@@ -287,6 +354,15 @@ def main() -> int:
     mean_count = float(np.mean(counts)) if counts else 0.0
     count_cv = float(np.std(counts) / mean_count) if counts and mean_count > 0 else float("nan")
     failed_count = len(failed_rows)
+    review_queue = None
+    if args.write_review_queue or args.review_decisions is not None:
+        review_queue = build_review_queue(
+            fov_rows + failed_rows,
+            args.review_decisions.expanduser() if args.review_decisions is not None else None,
+        )
+        review_path = out_dir / "review_queue.csv"
+        review_queue.to_csv(review_path, index=False)
+        print(f"Wrote {review_path} ({len(review_queue)} FOVs)")
     requested_count = len(paths)
     successful_count = len(fov_rows)
     complete = failed_count == 0 and successful_count == requested_count
@@ -301,6 +377,7 @@ def main() -> int:
         "count_cv": count_cv,
         "mean_focus": float(np.mean([r["focus_score"] for r in fov_rows])),
         "n_low_confidence_lt_50": int(sum(c < 50 for c in confs)),
+        "n_review_required": int(sum(bool(r.get("review_required")) for r in fov_rows + failed_rows)),
         "n_objects_total": int(len(cells_df)) if cells_df is not None and not cells_df.empty else 0,
         "tracking_enabled": bool(args.enable_tracking and tracks_df is not None),
         "n_tracks": int(track_summary["track_id"].nunique()) if track_summary is not None and len(track_summary) else 0,
@@ -340,9 +417,10 @@ def main() -> int:
         ],
         "per_image": per_image,
         "failed_images": failed_rows,
+        "review_queue_written": bool(review_queue is not None),
         "note": (
             "Default backend=auto → cellpose if installed (phase-like always cellpose) else threshold. "
-            "Phenotype = explicit morphology rules. Tracking only with --enable-tracking on ordered TL."
+            "Phenotype = explicit morphology rules. Tracking only with --enable-tracking on ordered TL. Review queue includes failed, non-PASS, or flagged FOVs when requested."
         ),
     }
     out_json = out_dir / "workflow_summary.json"
@@ -358,6 +436,8 @@ def main() -> int:
     for k, v in summary.items():
         print(f"  {k}: {v}")
     print(f"Wrote {out_json}")
+    if review_queue is not None:
+        print("HITL: fill review_queue.csv and re-run with --review-decisions to record accept/reject/rerun decisions.")
     return 0
 
 
