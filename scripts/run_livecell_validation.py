@@ -221,16 +221,20 @@ def main() -> int:
     print(f"[run] backend={args.backend} n_images={len(ordered_image_ids)} split={args.split} gpu={args.gpu}")
     print(f"[env] cellpose_available={_HAS_CELLPOSE} import_error={_CELLPOSE_IMPORT_ERROR!r}")
 
-    needs_cellpose = args.backend in ("cellpose", "hybrid", "auto")
+    needs_cellpose = args.backend in ("cellpose", "hybrid")
+    wants_optional_cellpose = args.backend == "auto"
     cellpose_seg: CellposeSegmenter | None = None
-    if needs_cellpose:
+    if needs_cellpose or wants_optional_cellpose:
         if not _HAS_CELLPOSE:
-            print(f"ERROR: Cellpose not importable. Detail: {_CELLPOSE_IMPORT_ERROR}", file=sys.stderr)
-            return 5
-        print(f"[cellpose] loading model={args.cellpose_model!r} gpu={args.gpu} (once)...")
-        cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=bool(args.gpu))
-        _ = cellpose_seg.model
-        print("[cellpose] model ready")
+            if needs_cellpose:
+                print(f"ERROR: Cellpose not importable. Detail: {_CELLPOSE_IMPORT_ERROR}", file=sys.stderr)
+                return 5
+            print(f"[auto] Cellpose unavailable; auto will use threshold. Detail: {_CELLPOSE_IMPORT_ERROR}")
+        else:
+            print(f"[cellpose] loading model={args.cellpose_model!r} gpu={args.gpu} (once)...")
+            cellpose_seg = CellposeSegmenter(model_type=args.cellpose_model, gpu=bool(args.gpu))
+            _ = cellpose_seg.model
+            print("[cellpose] model ready")
 
     pred_labels: list = []
     truth_labels: list = []
@@ -324,7 +328,7 @@ def main() -> int:
         "license": "CC BY-NC 4.0 (non-commercial)",
         "split": args.split,
         "backend": args.backend,
-        "cellpose_model": args.cellpose_model if needs_cellpose else None,
+        "cellpose_model": args.cellpose_model if cellpose_seg is not None else None,
         "gpu": bool(args.gpu),
         "n_requested": len(ordered_image_ids),
         "n_scored": len(pred_labels),
