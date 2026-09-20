@@ -3,6 +3,17 @@
 All notable OptiCell changes are documented here.
 
 ## Unreleased
+
+## 2.18.0 — 2026-09-20
+
+### Added
+
+- Phase/low-contrast-aware automatic backend selection on the production segmentation path.
+- Streamlit AppTest smoke coverage and end-to-end killer-workflow regression coverage.
+- Optional HITL review queue with auditable accept/reject/rerun decisions.
+- Single-source package versioning, SPDX licensing, and dependency/security release checks.
+- Current T4 LIVECell n=20 evidence for Cellpose, hybrid, auto, and threshold paths.
+
 - Added a measured BBBC038 baseline (threshold, n=200) via scripts/run_bbbc038_validation.py (2026-09-16).
 
 ### Documentation
