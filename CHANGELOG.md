@@ -14,8 +14,6 @@ All notable OptiCell changes are documented here.
 - Single-source package versioning, SPDX licensing, and dependency/security release checks.
 - Current T4 LIVECell n=20 evidence for Cellpose, hybrid, auto, and threshold paths.
 
-- Added a measured BBBC038 baseline (threshold, n=200) via scripts/run_bbbc038_validation.py (2026-09-16).
-
 ### Documentation
 
 - Added `DATASETS_AND_VALIDATION_REPORT.md`: catalogue of real large-scale public microscopy datasets (LIVECell, TissueNet, BBBC focus/QC sets, Cell Painting collections, etc.) suitable for OptiCell validation and future training, plus an explicit no-hallucination policy. No training metrics are claimed; full-scale training requires data + compute outside the present environment.
