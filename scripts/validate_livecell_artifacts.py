@@ -81,9 +81,9 @@ def validate() -> None:
                 raise AssertionError(f"{backend}: summary.{key}={observed} != CSV mean {value}")
 
         if "pixel_iou_mean" in summary:
-            assert math.isclose(float(summary["pixel_iou_mean"]), expected["iou"], rel_tol=1e-10, abs_tol=1e-10)
+            _require(math.isclose(float(summary["pixel_iou_mean"]), expected["iou"], rel_tol=1e-10, abs_tol=1e-10), f"{backend}: pixel_iou_mean mismatch")
         if "pixel_dice_mean" in summary:
-            assert math.isclose(float(summary["pixel_dice_mean"]), expected["dice"], rel_tol=1e-10, abs_tol=1e-10)
+            _require(math.isclose(float(summary["pixel_dice_mean"]), expected["dice"], rel_tol=1e-10, abs_tol=1e-10), f"{backend}: pixel_dice_mean mismatch")
 
     reference = name_sets["cellpose"]
     for backend, names in name_sets.items():
