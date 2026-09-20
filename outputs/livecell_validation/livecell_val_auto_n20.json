@@ -3,7 +3,7 @@
   "source": "https://github.com/sartorius-research/LIVECell",
   "license": "CC BY-NC 4.0 (non-commercial)",
   "split": "val",
-  "backend": "hybrid",
+  "backend": "auto",
   "cellpose_model": "cpsam",
   "gpu": true,
   "n_requested": 20,
@@ -11,7 +11,7 @@
   "n_missing_files": 0,
   "mean_truth_instances_per_image": 197.6,
   "max_truth_instances_per_image": 425,
-  "timestamp_utc": "2026-09-19T18:03:17.456558+00:00",
+  "timestamp_utc": "2026-09-19T18:05:42.279721+00:00",
   "software": {
     "script": "scripts/run_livecell_validation.py",
     "repo": "Virelion-Biotech/Virelion-OptiCell"
@@ -35,6 +35,6 @@
     "absolute_count_error": 25.65,
     "relative_count_error": 0.10453491416902123
   },
-  "per_image": "see livecell_val_hybrid_n20.csv",
+  "per_image": "see livecell_val_auto_n20.csv",
   "note": "Measured only. Dense, real phase-contrast data -- ground truth decoded from COCO polygons (or RLE via pycocotools if present), painted in listed order at any overlap, unlike BBBC038's guaranteed non-overlapping masks. CC BY-NC 4.0: non-commercial use only."
 }
