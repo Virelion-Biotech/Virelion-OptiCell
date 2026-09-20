@@ -1,6 +1,6 @@
 # OptiCell v2.18.0 release notes
 
-Release date: 2026-09-19
+Release date: 2026-09-20
 
 ## Highlights
 
