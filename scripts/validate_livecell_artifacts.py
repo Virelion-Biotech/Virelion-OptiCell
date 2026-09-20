@@ -14,6 +14,11 @@ OUT = ROOT / "outputs" / "livecell_validation"
 SPECS = {"cellpose": True, "hybrid": True, "auto": True, "threshold": False}
 
 
+def _require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
 def _mean(rows: list[dict[str, str]], key: str) -> float:
     return sum(float(row[key]) for row in rows) / len(rows)
 
@@ -48,15 +53,15 @@ def validate() -> None:
         rows = _load_csv(backend)
         data = _load_json(backend)
 
-        assert data["dataset"] == "LIVECell"
-        assert data["split"] == "val"
-        assert data["n_requested"] == 20
-        assert data["n_scored"] == 20
-        assert data["n_missing_files"] == 0
-        assert data["gpu"] is gpu_expected
+        _require(data["dataset"] == "LIVECell", f"{backend}: incorrect dataset")
+        _require(data["split"] == "val", f"{backend}: incorrect split")
+        _require(data["n_requested"] == 20, f"{backend}: incorrect requested count")
+        _require(data["n_scored"] == 20, f"{backend}: incorrect scored count")
+        _require(data["n_missing_files"] == 0, f"{backend}: missing files recorded")
+        _require(data["gpu"] is gpu_expected, f"{backend}: GPU flag mismatch")
 
         names = [row["file_name"] for row in rows]
-        assert len(set(names)) == 20, f"{backend}: duplicate FOV names"
+        _require(len(set(names)) == 20, f"{backend}: duplicate FOV names")
         name_sets[backend] = names
 
         summary = data["summary"]
@@ -82,11 +87,11 @@ def validate() -> None:
 
     reference = name_sets["cellpose"]
     for backend, names in name_sets.items():
-        assert names == reference, f"{backend}: FOV ordering differs from Cellpose baseline"
+        _require(names == reference, f"{backend}: FOV ordering differs from Cellpose baseline")
 
     report = (OUT / "LIVECELL_CURRENT_N20_REPORT.md").read_text(encoding="utf-8")
     for token in ("Cellpose", "Hybrid", "Auto", "Threshold", "0.930", "0.054"):
-        assert token in report, f"current report missing expected token: {token}"
+        _require(token in report, f"current report missing expected token: {token}")
 
     print("LIVECell committed artifacts: OK")
     print("20 FOVs verified across:", ", ".join(SPECS))
