@@ -33,4 +33,4 @@ The killer workflow can emit `review_queue.csv` for failed, non-PASS, or flagged
 
 ## Next
 
-Real usage feedback on the UI; expand benchmark coverage beyond the current n=20 validation slice.
+Real usage feedback on the UI; expand benchmark coverage beyond the current n=20 validation slice. GPU inference is intentionally kept outside ordinary CI; the committed benchmark artifacts are checked by `.github/workflows/livecell_current.yml`.
