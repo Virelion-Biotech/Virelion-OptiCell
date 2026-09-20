@@ -54,13 +54,16 @@ Cellpose TRA best on **all six** sequences. See [`outputs/stage3/STAGE3_REPORT.m
 |---------|---|------|--------------|------------------:|
 | Threshold (Otsu) | 200 | 0.846 | 0.807 | 14.1 |
 
-### LIVECell (dense phase-contrast, val, same 20 FOVs)
+### LIVECell (dense phase-contrast, validation, same 20 FOVs)
 
 | Backend | n | Dice | Instance F1 | Mean \|count err\| |
 |---------|---|------|--------------|------------------:|
-| **Cellpose-SAM (GPU)** | 20 | **0.930** | **0.904** | **25.7** |
-| Hybrid | 20 | 0.622 | 0.767 | 37.1 |
-| Threshold (Otsu) | 20 | 0.054 | 0.435 | 87.5 |
+| Cellpose-SAM (GPU) | 20 | **0.930** | **0.904** | **25.7** |
+| Hybrid (GPU) | 20 | **0.930** | **0.904** | **25.7** |
+| Auto (GPU) | 20 | **0.930** | **0.904** | **25.7** |
+| Threshold (CPU) | 20 | 0.054 | 0.435 | 87.5 |
+
+The current hybrid/auto measurements supersede the historical pre-routing-rule hybrid result; see [the current n=20 report](outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md).
 
 ---
 
