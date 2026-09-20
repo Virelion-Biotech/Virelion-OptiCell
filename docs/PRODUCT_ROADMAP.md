@@ -23,7 +23,12 @@ Policy: publish only measured metrics.
 
 | Backend | Dice | F1 | \|count err\| |
 |---------|-----:|---:|-------------:|
-Current measured values are generated into [`outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md`](../outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md) by the reproducible benchmark workflow. The historical hybrid 0.622 Dice result is retained there only as a pre-rule reference.
+| Cellpose (GPU) | 0.930 | 0.904 | 25.7 |
+| Hybrid (GPU) | 0.930 | 0.904 | 25.7 |
+| Auto (GPU) | 0.930 | 0.904 | 25.7 |
+| Threshold (CPU) | 0.054 | 0.435 | 87.5 |
+
+Current measured values are recorded in [`outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md`](../outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md) by the reproducible benchmark workflow. The historical hybrid 0.622 Dice result is retained there only as a pre-rule reference.
 
 ---
 
