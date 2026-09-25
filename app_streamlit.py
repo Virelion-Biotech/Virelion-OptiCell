@@ -114,41 +114,73 @@ def overlay_labels(gray: np.ndarray, labels: np.ndarray) -> np.ndarray:
 def _main() -> None:
     import streamlit as st
 
-    st.set_page_config(page_title="OptiCell — Easy UI", layout="wide")
-    st.title("OptiCell — Easy UI")
-    st.caption(
-        "Upload an image, run a real backend, see every QC signal OptiCell already computes. "
-        "Nothing on this page is invented. Demo checklist: docs/DEMO_5_MIN.md"
+    st.set_page_config(page_title="OptiCell — Easy UI", page_icon="🔬", layout="wide")
+    st.markdown(
+        """
+        <style>
+        .stApp { background:#f6f8fb; }
+        .block-container { max-width:1500px; padding-top:2rem; padding-bottom:3rem; }
+        .hero { padding:1.35rem 1.5rem; border-radius:18px;
+          background:linear-gradient(135deg,#102a43,#174a5b 58%,#1f6f78);
+          color:white; margin-bottom:1.25rem; }
+        .hero h1 { margin:0; font-size:2rem; letter-spacing:-.03em; }
+        .hero p { margin:.4rem 0 0; opacity:.82; }
+        .eyebrow { text-transform:uppercase; font-size:.72rem; letter-spacing:.12em; font-weight:700; opacity:.72; }
+        .status { display:inline-flex; gap:.45rem; padding:.35rem .65rem; border-radius:999px;
+          background:rgba(255,255,255,.12); font-size:.8rem; }
+        .dot { width:8px; height:8px; border-radius:50%; background:#66e3a4; display:inline-block; }
+        .pill { display:inline-block; padding:.22rem .55rem; border-radius:999px;
+          background:#e8eef5; color:#35546f; font-size:.75rem; font-weight:650; margin-right:.25rem; }
+        div[data-testid="stMetric"] { background:white; border:1px solid #e5eaf0; border-radius:14px; padding:.65rem .8rem; }
+        div[data-testid="stFileUploader"] { background:white; border:1px dashed #b9c6d4; border-radius:14px; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+        <div class="hero">
+          <div class="eyebrow">Virelion Biotech · Quantitative Microscopy</div>
+          <h1>OptiCell Research Workbench</h1>
+          <p>From raw microscopy to segmentation, quality gates, and reproducible measurements.</p>
+          <div style="margin-top:.8rem"><span class="status"><span class="dot"></span> Analysis engine ready</span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     with st.sidebar:
-        st.header("Backend")
+        st.markdown("### Analysis setup")
         backend = st.selectbox(
             "Segmentation backend",
             BACKENDS,
             index=0,
-            help=(
-                "auto → Cellpose if installed (always on low-contrast / phase-like). "
-                "threshold/adaptive need no extra install. cellpose/hybrid need "
-                "`pip install -e '.[cellpose]'."
-            ),
+            help="Auto uses OptiCell's existing routing logic.",
         )
-        gpu = st.checkbox("Use GPU (cellpose/hybrid/auto)", value=_HAS_CELLPOSE)
-        needs_cellpose = backend in ("cellpose", "hybrid", "auto")
-        if needs_cellpose and not _HAS_CELLPOSE and backend != "auto":
-            st.error(f"Cellpose not installed: {_CELLPOSE_IMPORT_ERROR}")
-        elif not _HAS_CELLPOSE:
-            st.info("Cellpose not installed — auto will use threshold. `pip install -e '.[cellpose]'`")
+        gpu = st.checkbox("Use GPU", value=_HAS_CELLPOSE, disabled=not _HAS_CELLPOSE)
+        if not _HAS_CELLPOSE:
+            st.info("Cellpose is unavailable. Auto will use a non-Cellpose backend.")
+            st.caption("Install with: pip install -e '.[cellpose]'")
+        st.divider()
+        st.markdown("**Workflow**")
+        st.caption("01 · Upload\n\n02 · QC\n\n03 · Segment\n\n04 · Review\n\n05 · Export")
 
     uploaded = st.file_uploader(
-        "Upload a microscopy image",
+        "Drop a microscopy image here",
         type=["png", "jpg", "jpeg", "tif", "tiff", "bmp"],
+        help="PNG/JPEG/TIFF/BMP are supported.",
     )
     if uploaded is None:
-        st.info("Upload an image to get started. Prefer backend **auto** for unknown modalities.")
-        st.markdown(
-            "**Quick checklist:** [docs/DEMO_5_MIN.md](https://github.com/Virelion-Biotech/Virelion-OptiCell/blob/main/docs/DEMO_5_MIN.md)"
-        )
+        a, b = st.columns([1.5, 1])
+        with a:
+            st.subheader("Start with one field of view")
+            st.caption(
+                "OptiCell checks acquisition quality before segmentation, then exposes "
+                "the backend decision, confidence, acceptance gate, and measurements."
+            )
+        with b:
+            st.info("Tip: choose auto for an unknown microscopy modality.")
         st.stop()
 
     file_bytes = np.frombuffer(uploaded.getvalue(), dtype=np.uint8)
@@ -159,110 +191,143 @@ def _main() -> None:
 
     gray_probe = to_grayscale_uint8(raw)
     if backend == "auto":
-        resolved_probe, _ = suggest_backend(gray_probe, cellpose_available=_HAS_CELLPOSE)
+        resolved_probe, probe_reason = suggest_backend(gray_probe, cellpose_available=_HAS_CELLPOSE)
     else:
-        resolved_probe = backend
+        resolved_probe, probe_reason = backend, "user requested " + backend
 
     cellpose_segmenter = None
-    if resolved_probe in ("cellpose", "hybrid") or backend in ("cellpose", "hybrid"):
+    if resolved_probe in ("cellpose", "hybrid"):
         if not _HAS_CELLPOSE:
-            if backend != "auto":
-                st.error(f"Cellpose required: {_CELLPOSE_IMPORT_ERROR}")
-                st.stop()
-        else:
+            st.error("Cellpose required: " + str(_CELLPOSE_IMPORT_ERROR))
+            st.stop()
 
-            @st.cache_resource
-            def _get_segmenter(model_type: str, use_gpu: bool) -> CellposeSegmenter:
-                return CellposeSegmenter(model_type=model_type, gpu=use_gpu)
+        @st.cache_resource
+        def _get_segmenter(model_type: str, use_gpu: bool) -> CellposeSegmenter:
+            return CellposeSegmenter(model_type=model_type, gpu=use_gpu)
 
-            with st.spinner("Loading Cellpose model (cached after first run)..."):
-                cellpose_segmenter = _get_segmenter("cpsam", gpu)
+        with st.spinner("Preparing Cellpose model…"):
+            cellpose_segmenter = _get_segmenter("cpsam", gpu)
 
-    with st.spinner(f"Running {backend}..."):
+    with st.spinner("Running OptiCell analysis…"):
         result = run_pipeline(raw, backend, cellpose_segmenter=cellpose_segmenter)
 
     seg: SegmentationResult = result["seg"]
-
-    st.info(
-        f"**Backend:** `{result['backend_resolved']}` — {result['backend_reason']}  \n"
-        f"Low-contrast heuristic: **{result['low_contrast']}**"
-    )
-
-    st.subheader("1. Acquisition QC (raw image, before any segmentation)")
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        st.metric("Acquisition quality", f"{result['acq_score']:.0f} / 100")
-    with c2:
-        st.dataframe(
-            pd.DataFrame([result["acq_metrics"]]).T.rename(columns={0: "value"}),
-            width="stretch",
-        )
-
-    st.subheader("2. Segmentation")
     if seg.error:
-        st.error(f"Segmentation failed: {seg.error}")
+        st.error("Segmentation failed: " + str(seg.error))
         st.stop()
-    col_img1, col_img2 = st.columns(2)
-    overlay = overlay_labels(result["gray"], seg.labels)
-    with col_img1:
-        st.image(result["gray"], caption="Input (grayscale)", width="stretch", clamp=True)
-    with col_img2:
-        st.image(
-            overlay,
-            caption=f"{seg.method}: {seg.count} objects",
-            width="stretch",
-        )
 
-    ok, png = cv2.imencode(".png", cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
-    if ok:
-        st.download_button(
-            "Download overlay PNG",
-            data=png.tobytes(),
-            file_name="opticell_overlay.png",
-            mime="image/png",
-        )
-
-    st.subheader("3. Segmentation QC")
     accept = result["accept"]
     conf = result["conf"]
-    if accept is not None:
-        msg = f"Acceptance gate: {accept.status} — {accept.reason}"
+    overlay = overlay_labels(result["gray"], seg.labels)
+
+    st.markdown(
+        '<span class="pill">File · ' + uploaded.name + '</span>'
+        '<span class="pill">Backend · ' + str(result["backend_resolved"]) + '</span>'
+        '<span class="pill">Image · ' + str(raw.shape[1]) + ' × ' + str(raw.shape[0]) + '</span>'
+        '<span class="pill">Low contrast · ' + str(result["low_contrast"]) + '</span>',
+        unsafe_allow_html=True,
+    )
+
+    st.subheader("Run summary")
+    q1, q2, q3, q4, q5 = st.columns(5)
+    q1.metric("Objects", seg.count)
+    q2.metric("Segmentation quality", f"{seg.quality_score:.0f}")
+    q3.metric("Confidence", f"{conf['confidence_score']:.0f}")
+    q4.metric("Acquisition quality", f"{result['acq_score']:.0f}")
+    q5.metric("Gate", accept.status if accept else "N/A")
+
+    if accept:
+        gate_text = "**" + accept.status + "** · " + accept.reason
         if accept.status == "PASS":
-            st.success(msg)
+            st.success(gate_text)
         elif accept.status == "REVIEW":
-            st.warning(msg)
+            st.warning(gate_text)
         else:
-            st.error(msg)
+            st.error(gate_text)
 
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Count", seg.count)
-    m2.metric("Quality score", f"{seg.quality_score:.0f}")
-    m3.metric("Confidence", f"{conf['confidence_score']:.0f}")
-    m4.metric("Border frac.", f"{seg.border_fraction:.2f}")
-    m5.metric("Tiny-object frac.", f"{seg.tiny_object_fraction:.2f}")
-    if conf["flags"]:
-        st.warning(f"Confidence flags: {conf['flags']}")
+    tabs = st.tabs(["🔬 Field of view", "📊 QC & measurements", "⚙️ Run details"])
 
-    st.subheader("4. Per-object measurements")
-    obj_df = result["obj_df"]
-    if not obj_df.empty:
-        st.dataframe(obj_df, width="stretch", height=300)
-        st.download_button(
-            "Download per-object CSV",
-            obj_df.to_csv(index=False),
-            file_name="opticell_objects.csv",
-        )
-        if "mean_intensity" in obj_df.columns and "label" in obj_df.columns:
-            st.bar_chart(obj_df.set_index("label")["mean_intensity"])
-    else:
-        st.info("No objects detected.")
+    with tabs[0]:
+        c1, c2 = st.columns(2, gap="large")
+        with c1:
+            st.markdown("**Input**")
+            st.image(result["gray"], width="stretch", clamp=True)
+        with c2:
+            st.markdown("**Segmentation · " + str(seg.method) + " · " + str(seg.count) + " objects**")
+            st.image(overlay, width="stretch")
+        ok, png = cv2.imencode(".png", cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
+        if ok:
+            st.download_button(
+                "Download overlay PNG",
+                data=png.tobytes(),
+                file_name="opticell_overlay.png",
+                mime="image/png",
+            )
 
-    with st.expander("Raw SegmentationResult"):
-        st.json(
-            {k: v for k, v in seg.__dict__.items() if k != "labels"}
-            | {"labels_shape": list(seg.labels.shape)}
-        )
+    with tabs[1]:
+        c1, c2 = st.columns([1, 1.25], gap="large")
+        with c1:
+            st.markdown("**Segmentation QC**")
+            qc_df = pd.DataFrame({
+                "Signal": ["Quality score", "Confidence", "Border fraction",
+                           "Tiny-object fraction", "Merged-object fraction"],
+                "Value": [
+                    f"{seg.quality_score:.2f}",
+                    f"{conf['confidence_score']:.2f}",
+                    f"{seg.border_fraction:.3f}",
+                    f"{seg.tiny_object_fraction:.3f}",
+                    f"{seg.merged_object_fraction:.3f}",
+                ],
+            })
+            st.dataframe(qc_df, hide_index=True, width="stretch")
+            if conf["flags"]:
+                st.warning("Confidence flags: " + ", ".join(conf["flags"]))
+        with c2:
+            st.markdown("**Acquisition QC**")
+            acq_df = pd.DataFrame([
+                {"Signal": k.replace("_", " ").title(), "Value": v}
+                for k, v in result["acq_metrics"].items()
+            ])
+            st.dataframe(acq_df, hide_index=True, width="stretch")
 
+        st.markdown("**Per-object measurements**")
+        obj_df = result["obj_df"]
+        if obj_df.empty:
+            st.info("No objects detected.")
+        else:
+            st.dataframe(obj_df, width="stretch", height=320)
+            if "mean_intensity" in obj_df.columns and "label" in obj_df.columns:
+                st.line_chart(obj_df.set_index("label")["mean_intensity"])
+            st.download_button(
+                "Download per-object CSV",
+                obj_df.to_csv(index=False),
+                file_name="opticell_objects.csv",
+                mime="text/csv",
+            )
+
+    with tabs[2]:
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Backend decision**")
+            st.write("Resolved backend: " + str(result["backend_resolved"]))
+            st.write(result["backend_reason"])
+            st.caption("Routing probe: " + probe_reason)
+            st.write("GPU requested: " + str(gpu))
+        with c2:
+            st.markdown("**Reproducibility**")
+            st.write("Input: " + uploaded.name)
+            st.write("Shape: " + str(raw.shape))
+            st.write("dtype: " + str(raw.dtype))
+            st.write("Cellpose available: " + str(_HAS_CELLPOSE))
+        with st.expander("Raw segmentation metadata"):
+            st.json(
+                {k: v for k, v in seg.__dict__.items() if k != "labels"}
+                | {"labels_shape": list(seg.labels.shape)}
+            )
+
+    st.caption(
+        "OptiCell reports computed QC and segmentation outputs; acceptance is a review aid, not a clinical decision."
+    )
 
 if __name__ == "__main__":
     _main()
