@@ -17,6 +17,10 @@ class SegmentationConfig:
     min_area: int = 15
     max_area_frac: float = 0.25
     adaptive_threshold: bool = False
+    minimum_quality: float = 70.0
+    maximum_border_fraction: float = 0.35
+    maximum_tiny_fraction: float = 0.50
+    maximum_merged_fraction: float = 0.25
     checkpoint_sha256: str | None = None
 
     def validate(self) -> None:
@@ -30,6 +34,11 @@ class SegmentationConfig:
             raise ValueError("max_area_frac must be in (0,1]")
         if not self.cellpose_model.strip():
             raise ValueError("cellpose_model must not be empty")
+        if not 0 <= self.minimum_quality <= 100:
+            raise ValueError("minimum_quality must be in [0,100]")
+        for name in ("maximum_border_fraction", "maximum_tiny_fraction", "maximum_merged_fraction"):
+            if not 0 <= getattr(self, name) <= 1:
+                raise ValueError(f"{name} must be in [0,1]")
 
     def to_dict(self) -> dict[str, Any]:
         self.validate()
