@@ -19,18 +19,18 @@ GPU optional but recommended for Cellpose.
 streamlit run app_streamlit.py
 ```
 
-Browser opens to **OptiCell — Easy UI**.
+Browser opens to the **OptiCell Research Workbench**.
 
 ## 2. Run one image (1 min)
 
 1. Sidebar → backend **`auto`** (Cellpose if installed; prefers Cellpose on low-contrast / phase-like images).
 2. Enable **GPU** if you have CUDA.
 3. Upload a `.tif` / `.png` microscopy frame.
-4. Read the four blocks:
-   - **Acquisition QC** (focus / artifact burden)
-   - **Segmentation** overlay + object count + which backend `auto` picked
-   - **Segmentation QC** (PASS / REVIEW / FAIL + confidence flags)
-   - **Per-object CSV** + optional overlay PNG download
+4. Review the workbench:
+   - **Run summary** — object count, segmentation quality, confidence, acquisition quality, and acceptance gate
+   - **Field of view** — grayscale input, segmentation overlay, and overlay PNG export
+   - **QC & measurements** — acquisition/segmentation QC, confidence flags, per-object table, and CSV export
+   - **Run details** — requested/resolved backend, routing reason, input SHA-256, and reproducibility JSON export
 
 Nothing on the page is invented — numbers come from `qc_pipeline` / `ensemble` / `acceptance`.
 
@@ -69,5 +69,5 @@ For a batch run, add `--write-review-queue`. Open `review_queue.csv`, record `ac
 
 - [ ] UI opens and runs one image end-to-end
 - [ ] Acceptance + confidence visible
-- [ ] CSV / overlay download works
+- [ ] CSV / overlay / run-summary JSON downloads work
 - [ ] You can state the LIVECell / BBBC039 contrast without reading the full README
