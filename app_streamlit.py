@@ -12,6 +12,7 @@ See docs/DEMO_5_MIN.md for the 5-minute checklist.
 from __future__ import annotations
 
 import sys
+from html import escape
 from pathlib import Path
 
 import cv2
@@ -144,7 +145,7 @@ def _main() -> None:
           <div class="eyebrow">Virelion Biotech · Quantitative Microscopy</div>
           <h1>OptiCell Research Workbench</h1>
           <p>From raw microscopy to segmentation, quality gates, and reproducible measurements.</p>
-          <div style="margin-top:.8rem"><span class="status"><span class="dot"></span> Analysis engine ready</span></div>
+          <div style="margin-top:.8rem"><span class="status"><span class="dot"></span> Workbench loaded</span></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -220,9 +221,10 @@ def _main() -> None:
     conf = result["conf"]
     overlay = overlay_labels(result["gray"], seg.labels)
 
+    safe_filename = escape(uploaded.name, quote=True)
     st.markdown(
-        '<span class="pill">File · ' + uploaded.name + '</span>'
-        '<span class="pill">Backend · ' + str(result["backend_resolved"]) + '</span>'
+        '<span class="pill">File · ' + safe_filename + '</span>'
+        '<span class="pill">Backend · ' + escape(str(result["backend_resolved"]), quote=True) + '</span>'
         '<span class="pill">Image · ' + str(raw.shape[1]) + ' × ' + str(raw.shape[0]) + '</span>'
         '<span class="pill">Low contrast · ' + str(result["low_contrast"]) + '</span>',
         unsafe_allow_html=True,
@@ -281,7 +283,7 @@ def _main() -> None:
             })
             st.dataframe(qc_df, hide_index=True, width="stretch")
             if conf["flags"]:
-                st.warning("Confidence flags: " + ", ".join(conf["flags"]))
+                st.warning("Confidence flags: " + conf["flags"].replace(";", ", "))
         with c2:
             st.markdown("**Acquisition QC**")
             acq_df = pd.DataFrame([
@@ -297,7 +299,7 @@ def _main() -> None:
         else:
             st.dataframe(obj_df, width="stretch", height=320)
             if "mean_intensity" in obj_df.columns and "label" in obj_df.columns:
-                st.line_chart(obj_df.set_index("label")["mean_intensity"])
+                st.bar_chart(obj_df.set_index("label")["mean_intensity"])
             st.download_button(
                 "Download per-object CSV",
                 obj_df.to_csv(index=False),
