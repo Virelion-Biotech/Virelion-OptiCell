@@ -5,7 +5,7 @@ from qc_pipeline import SegmentationResult
 
 
 class _FakeCellpose:
-    def segment(self, gray):
+    def segment(self, gray, **kwargs):
         labels = np.zeros_like(gray, dtype=np.int32)
         labels[10:30, 10:30] = 1
         return SegmentationResult(
