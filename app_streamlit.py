@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Virelion-OptiCell — Easy UI (Stage 4).
+"""Virelion-OptiCell Research Workbench (Stage 4).
 
 Upload a microscopy image → acquisition QC → segment → acceptance → CSV/overlay.
 
@@ -32,6 +32,7 @@ from qc_pipeline import (  # noqa: E402
     SegmentationResult,
     _HAS_CELLPOSE,
     _CELLPOSE_IMPORT_ERROR,
+    PIPELINE_VERSION,
 )
 from ensemble import (  # noqa: E402
     hybrid_threshold_cellpose,
@@ -122,7 +123,7 @@ def _format_confidence_flags(flags: str) -> str:
 def _main() -> None:
     import streamlit as st
 
-    st.set_page_config(page_title="OptiCell — Easy UI", page_icon="🔬", layout="wide")
+    st.set_page_config(page_title="OptiCell Research Workbench", page_icon="🔬", layout="wide")
     st.markdown(
         """
         <style>
@@ -173,6 +174,7 @@ def _main() -> None:
         st.divider()
         st.markdown("**Workflow**")
         st.caption("01 · Upload\n\n02 · QC\n\n03 · Segment\n\n04 · Review\n\n05 · Export")
+        st.caption("Pipeline " + PIPELINE_VERSION)
 
     uploaded = st.file_uploader(
         "Drop a microscopy image here",
@@ -235,6 +237,8 @@ def _main() -> None:
     overlay = overlay_labels(result["gray"], seg.labels)
 
     run_summary = {
+        "application": "OptiCell Research Workbench",
+        "pipeline_version": PIPELINE_VERSION,
         "input": {
             "filename": uploaded.name,
             "sha256": input_sha256,
@@ -287,7 +291,7 @@ def _main() -> None:
     q1, q2, q3, q4, q5 = st.columns(5)
     q1.metric("Objects", seg.count)
     q2.metric("Segmentation quality", f"{seg.quality_score:.0f}")
-    q3.metric("Confidence", f"{conf['confidence_score']:.0f}")
+    q3.metric("QC confidence", f"{conf['confidence_score']:.0f}")
     q4.metric("Acquisition quality", f"{result['acq_score']:.0f}")
     q5.metric("Gate", accept.status if accept else "N/A")
 
@@ -324,7 +328,7 @@ def _main() -> None:
         with c1:
             st.markdown("**Segmentation QC**")
             qc_df = pd.DataFrame({
-                "Signal": ["Quality score", "Confidence", "Border fraction",
+                "Signal": ["Quality score", "QC confidence score", "Border fraction",
                            "Tiny-object fraction", "Merged-object fraction"],
                 "Value": [
                     f"{seg.quality_score:.2f}",
@@ -335,6 +339,7 @@ def _main() -> None:
                 ],
             })
             st.dataframe(qc_df, hide_index=True, width="stretch")
+            st.caption("QC confidence is a heuristic 0–100 score, not a calibrated probability.")
             if conf["flags"]:
                 st.warning("Confidence flags: " + _format_confidence_flags(conf["flags"]))
         with c2:
@@ -374,6 +379,7 @@ def _main() -> None:
             st.write("SHA-256: " + input_sha256)
             st.write("Shape: " + str(raw.shape))
             st.write("dtype: " + str(raw.dtype))
+            st.write("Pipeline version: " + PIPELINE_VERSION)
             st.write("Cellpose available: " + str(_HAS_CELLPOSE))
             st.download_button(
                 "Download run summary JSON",
