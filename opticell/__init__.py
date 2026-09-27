@@ -16,7 +16,7 @@ from .lineage_events import division_consistency, lineage_event_summary
 from .lineage_quality import lineage_quality_summary
 from .ome_io import OMEImageInfo, load_ome_series, read_ome_info
 from .power import two_group_sample_size
-from .provenance import build_manifest, collect_input_manifest, file_sha256, write_manifest
+from .provenance import build_immutable_manifest, build_manifest, collect_input_manifest, file_sha256, verify_manifest, write_manifest
 from .profiling import ProfileRecord, profile_call, profile_records, summarize_profile
 from .quality_gate import ExperimentQualityGate, experiment_quality_gate
 from .reporting import RuntimeStats, build_report, dataframe_summary, runtime_stats, write_report
@@ -66,6 +66,7 @@ __all__ = [
 
 __all__ += [
     "LargeDataPlan", "PRESETS", "SegmentationConfig", "ValidationEvidence", "WorkbenchStore",
+    "build_immutable_manifest", "verify_manifest",
     "annotate_outliers", "calibration_curve", "checkpoint_sha256", "choose_threshold",
     "compare_configs", "config_for_checkpoint", "config_from_preset", "coverage_summary",
     "dataset_qc_summary", "health_snapshot", "iter_ome_planes", "known_validation_evidence",
