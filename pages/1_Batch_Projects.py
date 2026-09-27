@@ -71,11 +71,19 @@ with setup:
     checkpoint = st.file_uploader("Optional custom Cellpose checkpoint", type=None, key="batch_checkpoint")
     config = config_from_preset(preset, {"gpu": use_gpu})
     if checkpoint is not None:
-        model_dir = Path(os.getenv("OPTICELL_WORKSPACE", ".opticell")) / "models"
-        model_dir.mkdir(parents=True, exist_ok=True)
-        safe_model_name = Path(checkpoint.name).name
-        model_path = model_dir / (str(uuid.uuid4()) + "-" + safe_model_name)
-        model_path.write_bytes(checkpoint.getvalue())
+        checkpoint_bytes = checkpoint.getvalue()
+        checkpoint_digest = hashlib.sha256(checkpoint_bytes).hexdigest()
+        state_key = "opticell_checkpoint_" + checkpoint_digest
+        model_path = st.session_state.get(state_key)
+        if model_path is None:
+            model_dir = Path(os.getenv("OPTICELL_WORKSPACE", ".opticell")) / "models"
+            model_dir.mkdir(parents=True, exist_ok=True)
+            safe_model_name = Path(checkpoint.name).name
+            target = model_dir / (checkpoint_digest[:16] + "-" + safe_model_name)
+            if not target.exists():
+                target.write_bytes(checkpoint_bytes)
+            model_path = str(target)
+            st.session_state[state_key] = model_path
         config = config_for_checkpoint(model_path, backend=config.backend if config.backend in {"cellpose", "hybrid"} else "cellpose", gpu=use_gpu)
         st.caption("Custom model SHA-256: " + str(config.checkpoint_sha256))
 
@@ -149,7 +157,8 @@ with setup:
         annotated = frame.copy()
         if successful.any():
             ok = annotate_outliers(frame.loc[successful].copy(), metric_columns)
-            annotated.loc[ok.index, ok.columns] = ok
+            for column in ok.columns:
+                annotated.loc[ok.index, column] = ok[column]
         if "dataset_qc_flags" not in annotated:
             annotated["dataset_qc_flags"] = ""
             annotated["dataset_qc_outlier"] = False
