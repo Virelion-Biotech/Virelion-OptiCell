@@ -15,8 +15,10 @@ Record whether these steps work without errors:
 
 1. Upload a PNG or TIFF microscopy image.
 2. Leave backend on `auto` and note the resolved backend shown by the UI.
-3. Confirm acquisition QC, segmentation QC, object count, and overlay rendering.
-4. Download the overlay PNG and per-object CSV.
-5. Repeat with `threshold` to verify the CPU path.
+3. Confirm the run-summary metrics, acceptance gate, acquisition QC, segmentation QC, object count, and overlay rendering.
+4. Download the overlay PNG, per-object CSV, and run-summary JSON.
+5. Confirm the run-summary JSON records the input SHA-256 plus requested/resolved backend and QC/acceptance outputs.
+6. Repeat with `threshold` to verify the CPU path.
+7. Upload a file with punctuation in its filename and confirm the filename is rendered as text rather than interpreted as HTML.
 
 This checklist is usability feedback, not scientific validation.
