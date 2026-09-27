@@ -20,12 +20,13 @@ dependencies = [
 
 [project.optional-dependencies]
 cellpose = ["cellpose", "packaging>=24"]
-ui = ["streamlit>=1.28"]
+ui = ["streamlit>=1.53,<2", "streamlit-drawable-canvas[image]>=0.13,<0.14"]
 dev = [
   "pytest>=8",
   "ruff>=0.6",
   "build>=1.2",
-  "streamlit>=1.28,<2",
+  "streamlit>=1.53,<2",
+  "streamlit-drawable-canvas[image]>=0.13,<0.14",
   "bandit>=1.7,<2",
   "pip-audit>=2.7,<3",
 ]

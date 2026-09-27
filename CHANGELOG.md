@@ -4,6 +4,12 @@ All notable OptiCell changes are documented here.
 
 ## Unreleased
 
+### Added
+
+- Pixel-level instance-mask brush correction in the human-review UI: add to an existing instance, erase pixels, or paint new disconnected objects with auditable corrected-mask persistence.
+- Real CUDA + Cellpose + Streamlit UI self-hosted GitHub Actions workflow and runner setup documentation.
+
+
 ## 2.19.0 — 2026-09-27
 
 ### Added
