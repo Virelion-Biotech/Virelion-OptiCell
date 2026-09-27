@@ -22,14 +22,14 @@ python scripts/run_killer_workflow.py /path/to/frames \
 
 ---
 
-## Easy UI (Stage 4)
+## Research Workbench (Stage 4)
 
 ```bash
 pip install -e '.[ui,cellpose]'
 streamlit run app_streamlit.py
 ```
 
-Upload one image → acquisition QC → segmentation → acceptance gate → per-object CSV + overlay download.
+Upload one image → acquisition QC → segmentation → acceptance gate → per-object measurements, overlay/CSV exports, and a SHA-256-linked run-summary JSON.
 
 ---
 
