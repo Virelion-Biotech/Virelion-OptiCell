@@ -55,3 +55,9 @@ jobs:
           assert opticell.__all__;
           from opticell import audit_experiment;
           print('OptiCell isolated sdist API OK', opticell.__version__)"
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --build-arg OPTICELL_EXTRAS=ui -t opticell-ci .
