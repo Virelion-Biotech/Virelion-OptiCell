@@ -1,7 +1,8 @@
-"""Human review, corrected masks, and immediate reruns for OptiCell runs."""
+"""Human review, pixel-level mask correction, and immediate reruns."""
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import uuid
 from pathlib import Path
@@ -10,17 +11,23 @@ import cv2
 import numpy as np
 import pandas as pd
 import streamlit as st
+from PIL import Image
+from streamlit_drawable_canvas import st_canvas
 
 from app_streamlit import overlay_labels, run_pipeline
 from provenance import build_immutable_manifest
 from qc_pipeline import CellposeSegmenter, _HAS_CELLPOSE
 from opticell import __version__
+from opticell.mask_edit import apply_brush_edit, instance_count
 from opticell.ui_auth import current_user
 
 st.set_page_config(page_title="OptiCell · Review", page_icon="✅", layout="wide")
 user, store = current_user(st)
 st.title("Human review & correction")
-st.caption("Inspect saved masks, approve/reject, attach validated correction masks, or rerun a FOV with an auditable parent-child record.")
+st.caption(
+    "Inspect saved masks, paint pixel-level corrections, approve/reject, attach a replacement mask, "
+    "or rerun a FOV with an auditable parent-child record."
+)
 
 projects = store.list_projects(user)
 if not projects:
@@ -60,8 +67,10 @@ if selected:
         except (OSError, ValueError):
             saved_labels = None
 
+gray = None
 if raw is not None and saved_labels is not None and saved_labels.shape == raw.shape[:2]:
     from qc_pipeline import to_grayscale_uint8
+
     gray = to_grayscale_uint8(raw)
     c1, c2 = st.columns(2)
     c1.image(gray, caption="Input", width="stretch", clamp=True)
@@ -72,37 +81,191 @@ elif selected:
 decision = st.radio("Decision", ["accept", "reject", "corrected", "rerun"], horizontal=True)
 notes = st.text_area("Reviewer notes")
 
-corrected_path = None
+editor_token = hashlib.sha256(f"{run_id}|{image_key}".encode("utf-8")).hexdigest()[:16]
+correction_key = f"opticell_saved_correction_{editor_token}"
+corrected_path = st.session_state.get(correction_key)
+
 if decision == "corrected":
-    mask_upload = st.file_uploader("Corrected instance-label mask (PNG/TIFF)", type=["png", "tif", "tiff"])
-    if mask_upload is not None:
-        payload = mask_upload.getvalue()
-        decoded = cv2.imdecode(np.frombuffer(payload, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
-        if decoded is None or decoded.ndim != 2:
-            st.error("Corrected mask must decode to one 2-D label image.")
-        elif raw is not None and decoded.shape != raw.shape[:2]:
-            st.error(f"Corrected mask shape {decoded.shape} does not match input {raw.shape[:2]}.")
-        elif (decoded < 0).any():
-            st.error("Corrected mask cannot contain negative labels.")
+    brush_tab, upload_tab = st.tabs(["Brush editor", "Upload replacement mask"])
+
+    with brush_tab:
+        if gray is None or saved_labels is None:
+            st.info("Pixel editing requires the persisted input image and saved segmentation for this run.")
         else:
-            digest = hashlib.sha256(payload).hexdigest()
-            target_dir = Path(os.getenv("OPTICELL_WORKSPACE", ".opticell")) / "corrections" / run_id
-            target_dir.mkdir(parents=True, exist_ok=True)
-            target = target_dir / (digest[:16] + "-labels.npy")
-            if not target.exists():
-                np.save(target, decoded.astype(np.int32, copy=False))
-            corrected_path = str(target)
-            st.caption("Validated correction SHA-256: " + digest)
-            if raw is not None:
-                from qc_pipeline import to_grayscale_uint8
-                st.image(overlay_labels(to_grayscale_uint8(raw), decoded.astype(np.int32)), caption="Corrected-mask preview", width="stretch")
+            labels_key = f"opticell_editor_labels_{editor_token}"
+            revision_key = f"opticell_editor_revision_{editor_token}"
+            if labels_key not in st.session_state:
+                st.session_state[labels_key] = saved_labels.astype(np.int32, copy=True)
+            if revision_key not in st.session_state:
+                st.session_state[revision_key] = 0
+
+            working_labels = np.asarray(st.session_state[labels_key], dtype=np.int32)
+            existing_ids = [int(x) for x in np.unique(working_labels) if x > 0]
+
+            m1, m2 = st.columns(2)
+            m1.metric("Working instances", instance_count(working_labels))
+            m2.metric("Saved instances", instance_count(saved_labels))
+
+            edit_label = st.radio(
+                "Brush operation",
+                ["Add to existing object", "Erase pixels", "Create new object"],
+                horizontal=True,
+                key=f"edit_mode_{editor_token}",
+            )
+            brush_width = st.slider(
+                "Brush width (pixels)",
+                min_value=1,
+                max_value=80,
+                value=8,
+                key=f"brush_width_{editor_token}",
+            )
+
+            label_id = None
+            mode = "erase"
+            if edit_label == "Add to existing object":
+                mode = "add"
+                if existing_ids:
+                    label_id = st.selectbox(
+                        "Target instance ID",
+                        existing_ids,
+                        key=f"target_label_{editor_token}",
+                    )
+                else:
+                    st.warning("There are no existing instances. Use Create new object instead.")
+            elif edit_label == "Create new object":
+                mode = "new_object"
+
+            st.caption(
+                "Draw one or more strokes, then click Apply brush edit. "
+                "New disconnected strokes become separate new instance IDs."
+            )
+            background = Image.fromarray(overlay_labels(gray, working_labels))
+            canvas = st_canvas(
+                fill_color="rgba(255, 45, 85, 0.65)",
+                stroke_width=int(brush_width),
+                stroke_color="#ff2d55",
+                background_image=background,
+                update_streamlit=True,
+                height=int(gray.shape[0]),
+                width=int(gray.shape[1]),
+                drawing_mode="freedraw",
+                return_image_data=True,
+                max_display_height=700,
+                key=f"mask_canvas_{editor_token}_{st.session_state[revision_key]}",
+            )
+
+            c_apply, c_reset = st.columns(2)
+            if c_apply.button("Apply brush edit", type="primary", key=f"apply_edit_{editor_token}"):
+                if canvas.image_data is None:
+                    st.warning("Draw on the image before applying an edit.")
+                elif mode == "add" and label_id is None:
+                    st.warning("Choose an existing instance ID.")
+                else:
+                    drawing = np.asarray(canvas.image_data)
+                    if drawing.ndim != 3 or drawing.shape[:2] != working_labels.shape or drawing.shape[2] < 4:
+                        st.error("Canvas returned unexpected drawing dimensions; no mask change was applied.")
+                    else:
+                        stroke_mask = drawing[..., 3] > 0
+                        try:
+                            corrected, affected = apply_brush_edit(
+                                working_labels,
+                                stroke_mask,
+                                mode=mode,
+                                label_id=int(label_id) if label_id is not None else None,
+                            )
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        else:
+                            if not affected:
+                                st.warning("The brush layer contained no editable pixels.")
+                            else:
+                                st.session_state[labels_key] = corrected
+                                st.session_state[revision_key] += 1
+                                st.session_state.pop(correction_key, None)
+                                st.rerun()
+
+            if c_reset.button("Reset to saved segmentation", key=f"reset_edit_{editor_token}"):
+                st.session_state[labels_key] = saved_labels.astype(np.int32, copy=True)
+                st.session_state[revision_key] += 1
+                st.session_state.pop(correction_key, None)
+                st.rerun()
+
+            working_labels = np.asarray(st.session_state[labels_key], dtype=np.int32)
+            st.image(
+                overlay_labels(gray, working_labels),
+                caption="Working corrected mask",
+                width="stretch",
+            )
+
+            if st.button("Save brush-edited mask as correction", key=f"save_edit_{editor_token}"):
+                buffer = io.BytesIO()
+                np.save(buffer, working_labels.astype(np.int32, copy=False), allow_pickle=False)
+                payload = buffer.getvalue()
+                digest = hashlib.sha256(payload).hexdigest()
+                target_dir = Path(os.getenv("OPTICELL_WORKSPACE", ".opticell")) / "corrections" / run_id
+                target_dir.mkdir(parents=True, exist_ok=True)
+                target = target_dir / (digest[:16] + "-labels.npy")
+                if not target.exists():
+                    target.write_bytes(payload)
+                corrected_path = str(target)
+                st.session_state[correction_key] = corrected_path
+                st.success("Brush-edited correction saved.")
+                st.caption("Correction SHA-256: " + digest)
+
+            if st.session_state.get(correction_key):
+                corrected_path = st.session_state[correction_key]
+                st.caption("Current saved correction: " + corrected_path)
+
+    with upload_tab:
+        mask_upload = st.file_uploader(
+            "Corrected instance-label mask (PNG/TIFF)",
+            type=["png", "tif", "tiff"],
+            key=f"replacement_mask_{editor_token}",
+        )
+        if mask_upload is not None:
+            payload = mask_upload.getvalue()
+            decoded = cv2.imdecode(np.frombuffer(payload, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+            if decoded is None or decoded.ndim != 2:
+                st.error("Corrected mask must decode to one 2-D label image.")
+            elif raw is not None and decoded.shape != raw.shape[:2]:
+                st.error(f"Corrected mask shape {decoded.shape} does not match input {raw.shape[:2]}.")
+            elif not np.issubdtype(decoded.dtype, np.integer):
+                st.error("Corrected mask must contain integer instance IDs.")
+            elif (decoded < 0).any():
+                st.error("Corrected mask cannot contain negative labels.")
+            else:
+                buffer = io.BytesIO()
+                np.save(buffer, decoded.astype(np.int32, copy=False), allow_pickle=False)
+                normalized_payload = buffer.getvalue()
+                digest = hashlib.sha256(normalized_payload).hexdigest()
+                target_dir = Path(os.getenv("OPTICELL_WORKSPACE", ".opticell")) / "corrections" / run_id
+                target_dir.mkdir(parents=True, exist_ok=True)
+                target = target_dir / (digest[:16] + "-labels.npy")
+                if not target.exists():
+                    target.write_bytes(normalized_payload)
+                corrected_path = str(target)
+                st.session_state[correction_key] = corrected_path
+                st.caption("Validated correction SHA-256: " + digest)
+                if gray is not None:
+                    st.image(
+                        overlay_labels(gray, decoded.astype(np.int32)),
+                        caption="Uploaded corrected-mask preview",
+                        width="stretch",
+                    )
 
 if decision != "rerun":
     if st.button("Record review", type="primary"):
         if decision == "corrected" and not corrected_path:
-            st.error("Attach a valid corrected mask when using the corrected decision.")
+            st.error("Save a brush edit or attach a valid corrected mask when using the corrected decision.")
         else:
-            review_id = store.add_review(run_id, image_key, decision, reviewer=user, notes=notes, corrected_mask_path=corrected_path)
+            review_id = store.add_review(
+                run_id,
+                image_key,
+                decision,
+                reviewer=user,
+                notes=notes,
+                corrected_mask_path=corrected_path if decision == "corrected" else None,
+            )
             st.success("Review recorded: " + review_id)
 else:
     rerun_backend = st.selectbox("Rerun backend", ["auto", "threshold", "adaptive", "cellpose", "hybrid"], index=0)
@@ -173,7 +336,13 @@ else:
                 status="complete" if not seg.error else "partial",
                 sample_id=run.get("sample_id"),
             )
-            review_id = store.add_review(run_id, image_key, "rerun", reviewer=user, notes=(notes + f" Child run: {new_run}").strip())
+            review_id = store.add_review(
+                run_id,
+                image_key,
+                "rerun",
+                reviewer=user,
+                notes=(notes + f" Child run: {new_run}").strip(),
+            )
             st.success(f"Rerun saved as {new_run}; review record {review_id}.")
 
 reviews = store.list_reviews(run_id)
