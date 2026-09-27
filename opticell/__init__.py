@@ -46,6 +46,7 @@ from .calibration import calibration_curve, choose_threshold, threshold_performa
 from .dataset_qc import annotate_outliers, dataset_qc_summary, plate_view, replicate_qc
 from .large_data import LargeDataPlan, iter_ome_planes, plan_ome_iteration, pyramid_levels
 from .model_config import PRESETS, SegmentationConfig, checkpoint_sha256, compare_configs, config_for_checkpoint, config_from_preset
+from .mask_edit import apply_brush_edit, instance_count
 from .observability import health_snapshot, structured_event
 from .validation_registry import ValidationEvidence, coverage_summary, known_validation_evidence
 from .workbench_store import WorkbenchStore
@@ -67,9 +68,9 @@ __all__ = [
 __all__ += [
     "LargeDataPlan", "PRESETS", "SegmentationConfig", "ValidationEvidence", "WorkbenchStore",
     "build_immutable_manifest", "verify_manifest",
-    "annotate_outliers", "calibration_curve", "checkpoint_sha256", "choose_threshold",
+    "annotate_outliers", "apply_brush_edit", "calibration_curve", "checkpoint_sha256", "choose_threshold",
     "compare_configs", "config_for_checkpoint", "config_from_preset", "coverage_summary",
-    "dataset_qc_summary", "health_snapshot", "iter_ome_planes", "known_validation_evidence",
+    "dataset_qc_summary", "health_snapshot", "instance_count", "iter_ome_planes", "known_validation_evidence",
     "plan_ome_iteration", "plate_view", "pyramid_levels", "replicate_qc", "structured_event",
     "threshold_performance",
 ]
