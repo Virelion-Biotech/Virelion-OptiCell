@@ -51,6 +51,14 @@ def run_pipeline(
     raw_image: np.ndarray,
     backend: str,
     cellpose_segmenter: "CellposeSegmenter | None" = None,
+    *,
+    min_area: int = 15,
+    max_area_frac: float = 0.25,
+    diameter: float | None = None,
+    minimum_quality: float = 70.0,
+    maximum_border_fraction: float = 0.35,
+    maximum_tiny_fraction: float = 0.50,
+    maximum_merged_fraction: float = 0.25,
 ) -> dict:
     """Run acquisition QC + segmentation + segmentation QC on one image."""
     if backend not in BACKENDS:
@@ -66,15 +74,21 @@ def run_pipeline(
     acq_score = artifact_burden_score(acq_metrics)
 
     if resolved == "threshold":
-        seg = segment_threshold(gray)
+        seg = segment_threshold(gray, min_area=min_area, max_area_frac=max_area_frac)
     elif resolved == "adaptive":
-        seg = segment_threshold(gray, adaptive=True)
+        seg = segment_threshold(gray, min_area=min_area, max_area_frac=max_area_frac, adaptive=True)
     elif resolved == "cellpose":
         if cellpose_segmenter is None:
             raise RuntimeError("cellpose backend requested but no CellposeSegmenter was provided")
-        seg = cellpose_segmenter.segment(gray)
+        seg = cellpose_segmenter.segment(gray, diameter=diameter, min_area=min_area, max_area_frac=max_area_frac)
     else:  # hybrid
-        seg = hybrid_threshold_cellpose(gray, cellpose_segmenter=cellpose_segmenter)
+        seg = hybrid_threshold_cellpose(
+            gray,
+            cellpose_segmenter=cellpose_segmenter,
+            min_area=min_area,
+            max_area_frac=max_area_frac,
+            diameter=diameter,
+        )
 
     conf = fov_confidence(gray, seg.labels)
 
@@ -85,6 +99,10 @@ def run_pipeline(
             border_fraction=seg.border_fraction,
             tiny_object_fraction=seg.tiny_object_fraction,
             merged_object_fraction=seg.merged_object_fraction,
+            minimum_quality=minimum_quality,
+            maximum_border_fraction=maximum_border_fraction,
+            maximum_tiny_fraction=maximum_tiny_fraction,
+            maximum_merged_fraction=maximum_merged_fraction,
         )
 
     obj_df = object_channel_intensity(gray, seg.labels) if seg.count > 0 else pd.DataFrame()
@@ -122,6 +140,7 @@ def _format_confidence_flags(flags: str) -> str:
 
 def _main() -> None:
     import streamlit as st
+    from opticell.ui_auth import current_user
 
     st.set_page_config(page_title="OptiCell Research Workbench", page_icon="🔬", layout="wide")
     st.markdown(
@@ -147,6 +166,8 @@ def _main() -> None:
         unsafe_allow_html=True,
     )
 
+    user, _workspace_store = current_user(st)
+
     st.markdown(
         """
         <div class="hero">
@@ -160,6 +181,7 @@ def _main() -> None:
     )
 
     with st.sidebar:
+        st.caption("User · " + user)
         st.markdown("### Analysis setup")
         backend = st.selectbox(
             "Segmentation backend",

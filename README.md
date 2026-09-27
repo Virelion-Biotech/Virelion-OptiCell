@@ -29,7 +29,18 @@ pip install -e '.[ui,cellpose]'
 streamlit run app_streamlit.py
 ```
 
-Upload one image → acquisition QC → segmentation → acceptance gate → per-object measurements, overlay/CSV exports, and a SHA-256-linked run-summary JSON.
+The multipage workbench now supports:
+
+- single-image analysis with QC, acceptance and reproducibility exports,
+- persistent projects, samples, conditions and replicates,
+- multi-image batch analysis with dataset/outlier/replicate/plate QC,
+- human accept/reject/rerun decisions and corrected-mask attachment,
+- segmentation presets and custom checkpoint hashing,
+- empirical QC-score calibration against labeled outcomes,
+- OME-TIFF/z-stack/multichannel/time-series streaming plans,
+- health/audit/backup operations.
+
+The default local deployment uses SQLite. See [production deployment](docs/PRODUCTION_DEPLOYMENT.md) and the [product completeness matrix](docs/PRODUCT_COMPLETENESS.md).
 
 ---
 
@@ -75,10 +86,16 @@ pip install -e '.[cellpose]'
 pip install -e '.[ui]'
 ```
 
+### Container
+
+```bash
+docker compose up --build -d
+```
+
 ## Validation and release
 
 - Current LIVECell n=20 measurements: [`outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md`](outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md)
-- Release notes: [`docs/RELEASE_NOTES_v2.18.0.md`](docs/RELEASE_NOTES_v2.18.0.md)
+- Release notes: [`docs/RELEASE_NOTES_v2.19.0.md`](docs/RELEASE_NOTES_v2.19.0.md)
 - Optional HITL review: run the killer workflow with `--write-review-queue`, then record decisions with `--review-decisions reviewed.csv`.
 
 ## Roadmap

@@ -16,7 +16,7 @@ from .lineage_events import division_consistency, lineage_event_summary
 from .lineage_quality import lineage_quality_summary
 from .ome_io import OMEImageInfo, load_ome_series, read_ome_info
 from .power import two_group_sample_size
-from .provenance import build_manifest, collect_input_manifest, file_sha256, write_manifest
+from .provenance import build_immutable_manifest, build_manifest, collect_input_manifest, file_sha256, verify_manifest, write_manifest
 from .profiling import ProfileRecord, profile_call, profile_records, summarize_profile
 from .quality_gate import ExperimentQualityGate, experiment_quality_gate
 from .reporting import RuntimeStats, build_report, dataframe_summary, runtime_stats, write_report
@@ -42,6 +42,13 @@ from .tracking_events import classify_divisions, detect_time_series_events, dete
 from .tracking_validation import track_fragmentation, track_gap_rate, track_purity
 from .volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_features
 from .volumetric_segmentation import VolumetricSegmentationResult, segment_threshold_3d
+from .calibration import calibration_curve, choose_threshold, threshold_performance
+from .dataset_qc import annotate_outliers, dataset_qc_summary, plate_view, replicate_qc
+from .large_data import LargeDataPlan, iter_ome_planes, plan_ome_iteration, pyramid_levels
+from .model_config import PRESETS, SegmentationConfig, checkpoint_sha256, compare_configs, config_for_checkpoint, config_from_preset
+from .observability import health_snapshot, structured_event
+from .validation_registry import ValidationEvidence, coverage_summary, known_validation_evidence
+from .workbench_store import WorkbenchStore
 
 __all__ = [
     "AssayQCDecision", "BaseSegmenter", "BatchConfig", "CellposeBackend", "ExperimentAudit", "ExperimentQualityGate", "OMEImageInfo", "ProfileRecord", "QCThresholds", "RuntimeCapabilities", "RuntimeStats", "SegmentationAcceptance",
@@ -57,4 +64,14 @@ __all__ = [
     "summarize_volume", "threshold_sensitivity", "track_fragmentation", "track_gap_rate", "track_purity", "two_group_sample_size", "volume_features", "write_dataframe", "write_manifest", "write_report", "z_prime_factor",
 ]
 
-__version__ = "2.18.0"
+__all__ += [
+    "LargeDataPlan", "PRESETS", "SegmentationConfig", "ValidationEvidence", "WorkbenchStore",
+    "build_immutable_manifest", "verify_manifest",
+    "annotate_outliers", "calibration_curve", "checkpoint_sha256", "choose_threshold",
+    "compare_configs", "config_for_checkpoint", "config_from_preset", "coverage_summary",
+    "dataset_qc_summary", "health_snapshot", "iter_ome_planes", "known_validation_evidence",
+    "plan_ome_iteration", "plate_view", "pyramid_levels", "replicate_qc", "structured_event",
+    "threshold_performance",
+]
+
+__version__ = "2.19.0"

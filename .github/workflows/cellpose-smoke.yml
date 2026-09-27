@@ -1,0 +1,19 @@
+name: Real Cellpose smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 1 * *"
+
+jobs:
+  real-cellpose-cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[cellpose]"
+      - run: python scripts/real_cellpose_smoke.py

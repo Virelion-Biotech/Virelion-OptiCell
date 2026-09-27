@@ -174,6 +174,7 @@ def hybrid_threshold_cellpose(
     cellpose_segmenter: Optional[CellposeSegmenter] = None,
     min_area: int = 15,
     max_area_frac: float = 0.25,
+    diameter: float | None = None,
     count_tol_frac: float = 0.12,
     count_tol_abs: int = 8,
     threshold_collapse_fg_frac: float = 0.005,
@@ -206,9 +207,10 @@ def hybrid_threshold_cellpose(
             error=thr.error,
         )
 
-    cp = cellpose_segmenter.segment(
-        gray, min_area=min_area, max_area_frac=max_area_frac
-    )
+    cp_kwargs = {"min_area": min_area, "max_area_frac": max_area_frac}
+    if diameter is not None:
+        cp_kwargs["diameter"] = diameter
+    cp = cellpose_segmenter.segment(gray, **cp_kwargs)
 
     threshold_collapsed = thr.count == 0 or thr.foreground_fraction < threshold_collapse_fg_frac
     low_contrast = image_looks_low_contrast(gray)
