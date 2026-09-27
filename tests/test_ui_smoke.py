@@ -43,6 +43,7 @@ def test_streamlit_threshold_workflow_accepts_uploaded_image():
     assert not at.error
     assert any(getattr(metric, "label", "") == "Objects" for metric in at.metric)
     assert any(button.label == "Download overlay PNG" for button in at.download_button)
+    assert any(button.label == "Download run summary JSON" for button in at.download_button)
 
 
 def test_confidence_flags_are_formatted_as_tokens_not_characters():
