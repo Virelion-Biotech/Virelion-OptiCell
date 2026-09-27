@@ -11,7 +11,7 @@ that cannot be truthfully manufactured in code.
 | Cellpose testing | Mock/unit contract in normal CI; real Cellpose scheduled/manual | GPU E2E needs a connected GPU runner |
 | Scientific calibration | Calibration framework implemented | Labeled domain-specific outcomes required |
 | External validation breadth | Evidence registry implemented | Independent-lab datasets/studies required |
-| Human review | Decisions, notes, correction-mask upload, audit implemented | Pixel-level browser mask painting is not implemented |
+| Human review | Decisions, notes, correction-mask upload, pixel-level brush editing, preview, rerun, and audit implemented | Advanced contour/spline editing beyond brush operations is optional future polish |
 | Dataset QC | Implemented | Domain-specific QC cutoffs still need calibration |
 | Model/config management | Presets, comparisons, custom checkpoint hash/persistence implemented | Model performance claims require validation |
 | Deployment | Docker, health, local auth, quotas, audit, backup implemented | Enterprise SSO/multi-node DB/object storage are operator integrations |
