@@ -68,8 +68,27 @@ with setup:
     base_config = config_from_preset(preset)
     use_gpu = c2.checkbox("Use GPU", value=base_config.gpu and _HAS_CELLPOSE, disabled=not _HAS_CELLPOSE)
 
+    with st.expander("Advanced segmentation / acceptance settings"):
+        min_area = st.number_input("Minimum object area", min_value=1, value=int(base_config.min_area))
+        max_area_frac = st.number_input("Maximum object area fraction", min_value=0.001, max_value=1.0, value=float(base_config.max_area_frac), step=0.01)
+        diameter = st.number_input("Cellpose diameter (0 = automatic)", min_value=0.0, value=float(base_config.diameter or 0.0), step=1.0)
+        minimum_quality = st.number_input("Acceptance minimum segmentation quality", min_value=0.0, max_value=100.0, value=float(base_config.minimum_quality))
+        maximum_border_fraction = st.number_input("Maximum border-object fraction", min_value=0.0, max_value=1.0, value=float(base_config.maximum_border_fraction), step=0.01)
+        maximum_tiny_fraction = st.number_input("Maximum tiny-object fraction", min_value=0.0, max_value=1.0, value=float(base_config.maximum_tiny_fraction), step=0.01)
+        maximum_merged_fraction = st.number_input("Maximum merged-object fraction", min_value=0.0, max_value=1.0, value=float(base_config.maximum_merged_fraction), step=0.01)
+
+    overrides = {
+        "gpu": use_gpu,
+        "min_area": int(min_area),
+        "max_area_frac": float(max_area_frac),
+        "diameter": float(diameter) if diameter > 0 else None,
+        "minimum_quality": float(minimum_quality),
+        "maximum_border_fraction": float(maximum_border_fraction),
+        "maximum_tiny_fraction": float(maximum_tiny_fraction),
+        "maximum_merged_fraction": float(maximum_merged_fraction),
+    }
     checkpoint = st.file_uploader("Optional custom Cellpose checkpoint", type=None, key="batch_checkpoint")
-    config = config_from_preset(preset, {"gpu": use_gpu})
+    config = config_from_preset(preset, overrides)
     if checkpoint is not None:
         checkpoint_bytes = checkpoint.getvalue()
         checkpoint_digest = hashlib.sha256(checkpoint_bytes).hexdigest()
@@ -84,7 +103,19 @@ with setup:
                 target.write_bytes(checkpoint_bytes)
             model_path = str(target)
             st.session_state[state_key] = model_path
-        config = config_for_checkpoint(model_path, backend=config.backend if config.backend in {"cellpose", "hybrid"} else "cellpose", gpu=use_gpu)
+        config = config_for_checkpoint(
+            model_path,
+            backend=config.backend if config.backend in {"cellpose", "hybrid"} else "cellpose",
+            gpu=use_gpu,
+            diameter=config.diameter,
+            min_area=config.min_area,
+            max_area_frac=config.max_area_frac,
+            adaptive_threshold=config.adaptive_threshold,
+            minimum_quality=config.minimum_quality,
+            maximum_border_fraction=config.maximum_border_fraction,
+            maximum_tiny_fraction=config.maximum_tiny_fraction,
+            maximum_merged_fraction=config.maximum_merged_fraction,
+        )
         st.caption("Custom model SHA-256: " + str(config.checkpoint_sha256))
 
     uploads = st.file_uploader(
@@ -98,7 +129,9 @@ with setup:
     if run and uploads:
         artifact_root = Path(os.getenv("OPTICELL_WORKSPACE", ".opticell")) / "projects" / project_id / str(uuid.uuid4())
         input_dir = artifact_root / "inputs"
+        mask_dir = artifact_root / "masks"
         input_dir.mkdir(parents=True, exist_ok=True)
+        mask_dir.mkdir(parents=True, exist_ok=True)
         input_paths: list[str] = []
         for index, upload in enumerate(uploads):
             safe_name = Path(upload.name).name
@@ -123,17 +156,33 @@ with setup:
             data = np.frombuffer(Path(path).read_bytes(), dtype=np.uint8)
             raw = cv2.imdecode(data, cv2.IMREAD_UNCHANGED)
             sha = hashlib.sha256(Path(path).read_bytes()).hexdigest()
-            row = {"index": index, "filename": upload.name, "sha256": sha, "condition": condition, "replicate": replicate, "sample_group": sample_group}
+            row = {"index": index, "filename": upload.name, "sha256": sha, "input_path": path, "condition": condition, "replicate": replicate, "sample_group": sample_group}
             row.update(parse_metadata(upload.name))
             try:
                 if raw is None:
                     raise ValueError("OpenCV could not decode the image")
-                result = run_pipeline(raw, config.backend, cellpose_segmenter=segmenter)
+                result = run_pipeline(
+                    raw,
+                    config.backend,
+                    cellpose_segmenter=segmenter,
+                    min_area=config.min_area,
+                    max_area_frac=config.max_area_frac,
+                    diameter=config.diameter,
+                    minimum_quality=config.minimum_quality,
+                    maximum_border_fraction=config.maximum_border_fraction,
+                    maximum_tiny_fraction=config.maximum_tiny_fraction,
+                    maximum_merged_fraction=config.maximum_merged_fraction,
+                )
                 seg, conf, accept = result["seg"], result["conf"], result["accept"]
                 if seg.error:
                     raise RuntimeError(seg.error)
+                mask_path = mask_dir / f"{index:04d}-labels.npy"
+                np.save(mask_path, seg.labels)
                 row.update({
                     "backend": result["backend_resolved"],
+                    "height": int(raw.shape[0]),
+                    "width": int(raw.shape[1]),
+                    "mask_path": str(mask_path),
                     "objects": int(seg.count),
                     "segmentation_quality": float(seg.quality_score),
                     "qc_confidence": float(conf["confidence_score"]),
