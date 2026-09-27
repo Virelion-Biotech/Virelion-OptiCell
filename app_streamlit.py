@@ -11,6 +11,8 @@ See docs/DEMO_5_MIN.md for the 5-minute checklist.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
 from html import escape
 from pathlib import Path
@@ -189,7 +191,9 @@ def _main() -> None:
             st.info("Tip: choose auto for an unknown microscopy modality.")
         st.stop()
 
-    file_bytes = np.frombuffer(uploaded.getvalue(), dtype=np.uint8)
+    uploaded_bytes = uploaded.getvalue()
+    input_sha256 = hashlib.sha256(uploaded_bytes).hexdigest()
+    file_bytes = np.frombuffer(uploaded_bytes, dtype=np.uint8)
     raw = cv2.imdecode(file_bytes, cv2.IMREAD_UNCHANGED)
     if raw is None:
         st.error("Could not decode this file as an image.")
@@ -211,8 +215,12 @@ def _main() -> None:
         def _get_segmenter(model_type: str, use_gpu: bool) -> CellposeSegmenter:
             return CellposeSegmenter(model_type=model_type, gpu=use_gpu)
 
-        with st.spinner("Preparing Cellpose model…"):
-            cellpose_segmenter = _get_segmenter("cpsam", gpu)
+        try:
+            with st.spinner("Preparing Cellpose model…"):
+                cellpose_segmenter = _get_segmenter("cpsam", gpu)
+        except (RuntimeError, OSError) as exc:
+            st.error("Could not initialize Cellpose: " + str(exc))
+            st.stop()
 
     with st.spinner("Running OptiCell analysis…"):
         result = run_pipeline(raw, backend, cellpose_segmenter=cellpose_segmenter)
@@ -225,6 +233,46 @@ def _main() -> None:
     accept = result["accept"]
     conf = result["conf"]
     overlay = overlay_labels(result["gray"], seg.labels)
+
+    run_summary = {
+        "input": {
+            "filename": uploaded.name,
+            "sha256": input_sha256,
+            "shape": list(raw.shape),
+            "dtype": str(raw.dtype),
+        },
+        "backend": {
+            "requested": backend,
+            "resolved": str(result["backend_resolved"]),
+            "reason": str(result["backend_reason"]),
+            "routing_probe": probe_reason,
+            "cellpose_available": bool(_HAS_CELLPOSE),
+            "gpu_requested": bool(gpu),
+        },
+        "acquisition": {
+            "score": float(result["acq_score"]),
+            "metrics": {k: float(v) for k, v in result["acq_metrics"].items()},
+        },
+        "segmentation": {
+            "method": str(seg.method),
+            "count": int(seg.count),
+            "quality_score": float(seg.quality_score),
+            "border_fraction": float(seg.border_fraction),
+            "tiny_object_fraction": float(seg.tiny_object_fraction),
+            "merged_object_fraction": float(seg.merged_object_fraction),
+            "confidence_score": float(conf["confidence_score"]),
+            "confidence_flags": [part for part in conf["flags"].split(";") if part],
+        },
+        "acceptance": (
+            {
+                "status": accept.status,
+                "reason": accept.reason,
+                "score": float(accept.score),
+            }
+            if accept is not None
+            else None
+        ),
+    }
 
     safe_filename = escape(uploaded.name, quote=True)
     st.markdown(
@@ -323,9 +371,16 @@ def _main() -> None:
         with c2:
             st.markdown("**Reproducibility**")
             st.write("Input: " + uploaded.name)
+            st.write("SHA-256: " + input_sha256)
             st.write("Shape: " + str(raw.shape))
             st.write("dtype: " + str(raw.dtype))
             st.write("Cellpose available: " + str(_HAS_CELLPOSE))
+            st.download_button(
+                "Download run summary JSON",
+                data=json.dumps(run_summary, indent=2, sort_keys=True),
+                file_name="opticell_run_summary.json",
+                mime="application/json",
+            )
         with st.expander("Raw segmentation metadata"):
             st.json(
                 {k: v for k, v in seg.__dict__.items() if k != "labels"}
