@@ -87,6 +87,7 @@ def run_pipeline(
             cellpose_segmenter=cellpose_segmenter,
             min_area=min_area,
             max_area_frac=max_area_frac,
+            diameter=diameter,
         )
 
     conf = fov_confidence(gray, seg.labels)
