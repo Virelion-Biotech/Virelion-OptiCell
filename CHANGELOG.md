@@ -4,6 +4,28 @@ All notable OptiCell changes are documented here.
 
 ## Unreleased
 
+## 2.19.0 — 2026-09-27
+
+### Added
+
+- Persistent SQLite-backed users, projects, samples, runs, review decisions, audit logs, quotas, and consistent backups.
+- Multipage Streamlit workflows for batch/project analysis, dataset QC, human review, calibration/validation, large-data inspection, model presets, and operations.
+- Content-addressed provenance manifest v2 with input/model hashes, package versions, source commit, parameters, runtime, and manifest digest verification.
+- Dataset-level robust outlier detection, replicate QC, plate views, and batch run bundles.
+- Versioned segmentation presets, configuration fingerprints, custom Cellpose checkpoint persistence, and checkpoint SHA-256 recording.
+- Empirical score calibration and threshold sensitivity/specificity/precision analysis from labeled outcomes.
+- Validation evidence registry that distinguishes repository benchmarks from independent-lab evidence.
+- Memory-conscious OME-TIFF plane iteration planning and pyramid inspection with explicit refusal to silently full-load unsupported giant series.
+- Docker/Compose deployment, optional local authentication, health checks, audit/backup UI, and release automation.
+- Scheduled/manual real Cellpose smoke workflow plus injected Cellpose contract coverage in normal tests.
+
+### Scientific scope
+
+- The new calibration tooling does not make existing QC scores calibrated probabilities without labeled domain-specific data.
+- No independent-laboratory dataset was invented or reclassified; external validation remains an evidence-generation task.
+- Corrected masks can be attached and audited, but pixel-level browser mask painting is not yet implemented.
+
+
 ## 2.18.0 — 2026-09-20
 
 ### Added
