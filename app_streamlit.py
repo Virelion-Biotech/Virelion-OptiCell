@@ -112,6 +112,11 @@ def overlay_labels(gray: np.ndarray, labels: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(base, cv2.COLOR_BGR2RGB)
 
 
+def _format_confidence_flags(flags: str) -> str:
+    """Format the semicolon-delimited confidence flag payload for display."""
+    return ", ".join(part for part in flags.split(";") if part)
+
+
 def _main() -> None:
     import streamlit as st
 
@@ -283,7 +288,7 @@ def _main() -> None:
             })
             st.dataframe(qc_df, hide_index=True, width="stretch")
             if conf["flags"]:
-                st.warning("Confidence flags: " + conf["flags"].replace(";", ", "))
+                st.warning("Confidence flags: " + _format_confidence_flags(conf["flags"]))
         with c2:
             st.markdown("**Acquisition QC**")
             acq_df = pd.DataFrame([
