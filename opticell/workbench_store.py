@@ -23,8 +23,8 @@ def _json(value: Any) -> str:
 
 
 def _password_hash(password: str, salt: bytes, iterations: int = 310_000) -> str:
-    if not isinstance(password, str) or len(password) < 10:
-        raise ValueError("password must contain at least 10 characters")
+    if not isinstance(password, str):
+        raise TypeError("password must be a string")
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
     return digest.hex()
 
@@ -128,6 +128,8 @@ class WorkbenchStore:
         username = username.strip()
         if not username or len(username) > 128:
             raise ValueError("username must contain 1..128 characters")
+        if len(password) < 10:
+            raise ValueError("password must contain at least 10 characters")
         if not isinstance(quota_runs, int) or isinstance(quota_runs, bool) or quota_runs < 1:
             raise ValueError("quota_runs must be a positive integer")
         salt = secrets.token_bytes(16)
@@ -151,6 +153,8 @@ class WorkbenchStore:
             self.create_user(username, password, quota_runs=int(os.getenv("OPTICELL_ADMIN_QUOTA_RUNS", "10000")))
 
     def authenticate(self, username: str, password: str) -> bool:
+        if not isinstance(password, str) or len(password) < 10:
+            return False
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT password_hash,salt,iterations,active FROM users WHERE username=?", (username.strip(),)
