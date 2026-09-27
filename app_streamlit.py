@@ -122,6 +122,7 @@ def _format_confidence_flags(flags: str) -> str:
 
 def _main() -> None:
     import streamlit as st
+    from opticell.ui_auth import current_user
 
     st.set_page_config(page_title="OptiCell Research Workbench", page_icon="🔬", layout="wide")
     st.markdown(
@@ -147,6 +148,8 @@ def _main() -> None:
         unsafe_allow_html=True,
     )
 
+    user, _workspace_store = current_user(st)
+
     st.markdown(
         """
         <div class="hero">
@@ -160,6 +163,7 @@ def _main() -> None:
     )
 
     with st.sidebar:
+        st.caption("User · " + user)
         st.markdown("### Analysis setup")
         backend = st.selectbox(
             "Segmentation backend",
