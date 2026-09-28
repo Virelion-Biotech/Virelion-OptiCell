@@ -87,7 +87,7 @@ def _jsonable(value):
 
 
 def main() -> int:
-    raw = os.environ.get("HEARTTWIN_PAYLOAD")
+    raw = sys.stdin.read() if os.environ.get("HEARTTWIN_PAYLOAD_STDIN") == "1" else os.environ.get("HEARTTWIN_PAYLOAD")
     if not raw:
         print("HEARTTWIN_PAYLOAD environment variable not set", file=sys.stderr)
         return 1
