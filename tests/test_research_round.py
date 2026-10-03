@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from benchmarking import aggregate_backend_benchmarks, benchmark_backends
 from experiment_qc import normalize_to_controls, plate_edge_effect, plate_qc_summary, robust_zscore
@@ -71,6 +72,27 @@ def test_benchmark_metadata_and_failure_accounting():
     assert result.loc[result["backend"] == "broken", "error"].notna().all()
     summary = aggregate_backend_benchmarks([result])
     assert set(["backend", "failed_runs"]).issubset(summary.columns)
+
+
+def test_benchmark_rejects_identity_metadata_override_and_shape_mismatch():
+    image = np.zeros((8, 8), dtype=np.uint8)
+    reference = np.zeros((8, 8), dtype=np.int32)
+    backend = ThresholdSegmenter(min_area=1)
+    with pytest.raises(ValueError, match="identity fields"):
+        benchmark_backends(image, reference, {"good": backend}, metadata={"backend": "spoofed"})
+
+    class WrongShape:
+        def segment(self, _image):
+            return type("Result", (), {"labels": np.zeros((4, 4), dtype=np.int32)})()
+
+    result = benchmark_backends(image, reference, {"wrong": WrongShape()})
+    assert result.loc[0, "error"].startswith("ValueError: predicted labels")
+
+
+def test_benchmark_aggregation_handles_results_without_error_column():
+    frame = pd.DataFrame({"backend": ["x"], "elapsed_seconds": [1.0]})
+    result = aggregate_backend_benchmarks([frame])
+    assert result.loc[0, "failed_runs"] == 0
 
 
 def test_profiling_records_are_machine_readable():

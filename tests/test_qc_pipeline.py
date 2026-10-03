@@ -2,9 +2,11 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 from qc_pipeline import (
     QCThresholds,
+    _validate_tiff_shape,
     adaptive_dataset_qc,
     analyze_image,
     analyze_paths,
@@ -44,6 +46,22 @@ def test_brightness_is_predictable():
     assert std == 0.0
 
 
+def test_tiff_shape_validation_rejects_ambiguous_stacks():
+    plane = np.zeros((32, 48), dtype=np.uint16)
+    rgb = np.zeros((32, 48, 3), dtype=np.uint16)
+    z_stack = np.zeros((5, 32, 48), dtype=np.uint16)
+    assert _validate_tiff_shape(plane).shape == plane.shape
+    assert _validate_tiff_shape(rgb).shape == rgb.shape
+    with pytest.raises(ValueError, match="Z/T/C projection"):
+        _validate_tiff_shape(z_stack)
+
+
+def test_tiff_shape_validation_rejects_higher_dimensional_arrays():
+    rgba_time = np.zeros((2, 32, 48, 4), dtype=np.uint8)
+    with pytest.raises(ValueError, match="Z/T/C projection"):
+        _validate_tiff_shape(rgba_time)
+
+
 def test_threshold_segmentation_finds_separated_objects():
     image = np.zeros((100, 100), dtype=np.uint8)
     cv2.circle(image, (25, 25), 8, 255, -1)
@@ -62,6 +80,52 @@ def test_object_features_are_one_row_per_object():
     features = extract_object_features(image, result.labels)
     assert len(features) == 2
     assert set(["area_px", "circularity", "centroid_x", "centroid_y"]).issubset(features.columns)
+
+
+def test_object_features_preserve_native_intensity_values():
+    image = np.zeros((40, 40), dtype=np.uint16)
+    image[10:20, 10:20] = 4095
+    labels = np.zeros_like(image, dtype=np.int32)
+    labels[10:20, 10:20] = 1
+    features = extract_object_features(image, labels)
+    assert features.iloc[0]["mean_intensity"] == 4095.0
+    assert features.iloc[0]["max_intensity"] == 4095.0
+
+
+def test_object_features_preserve_non_contiguous_instance_ids():
+    image = np.zeros((30, 30), dtype=np.uint16)
+    image[3:8, 4:9] = 100
+    image[20:25, 21:26] = 200
+    labels = np.zeros((30, 30), dtype=np.int32)
+    labels[3:8, 4:9] = 7
+    labels[20:25, 21:26] = 42
+    features = extract_object_features(image, labels)
+    assert list(features["label"]) == [7, 42]
+    assert features["area_px"].tolist() == [25, 25]
+    assert features["mean_intensity"].tolist() == [100.0, 200.0]
+
+
+def test_object_features_reject_shape_mismatch():
+    image = np.zeros((20, 20), dtype=np.uint8)
+    labels = np.zeros((10, 10), dtype=np.int32)
+    with pytest.raises(ValueError, match="identical 2-D shapes"):
+        extract_object_features(image, labels)
+
+
+def test_object_features_reject_non_finite_intensity():
+    image = np.zeros((20, 20), dtype=np.float32)
+    image[5:10, 5:10] = np.nan
+    labels = np.zeros((20, 20), dtype=np.int32)
+    labels[5:10, 5:10] = 1
+    with pytest.raises(ValueError, match="finite"):
+        extract_object_features(image, labels)
+
+
+def test_to_grayscale_rejects_non_finite_values():
+    image = np.zeros((20, 20), dtype=np.float32)
+    image[5, 5] = np.inf
+    with pytest.raises(ValueError, match="finite"):
+        to_grayscale_uint8(image)
 
 
 def test_analyze_image_flags_empty_scene(tmp_path):

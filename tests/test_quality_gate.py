@@ -27,3 +27,11 @@ def test_quality_gate_rejects_invalid_scores_and_thresholds():
         experiment_quality_gate(artifact_score=101, segmentation_score=90)
     with pytest.raises(ValueError):
         experiment_quality_gate(artifact_score=90, segmentation_score=90, review_threshold=90, pass_threshold=80)
+    with pytest.raises(ValueError):
+        experiment_quality_gate(artifact_score=90, segmentation_score=90, review_threshold=-1, pass_threshold=80)
+    with pytest.raises(ValueError):
+        experiment_quality_gate(artifact_score=90, segmentation_score=90, review_threshold=80, pass_threshold=-1)
+    with pytest.raises(ValueError):
+        experiment_quality_gate(artifact_score=90, segmentation_score=90, review_threshold=101, pass_threshold=102)
+    with pytest.raises(ValueError):
+        experiment_quality_gate(artifact_score=90, segmentation_score=90, review_threshold=float("nan"), pass_threshold=85)

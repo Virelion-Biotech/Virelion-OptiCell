@@ -67,6 +67,8 @@ def canonicalize_axes(stack: ImageStack) -> ImageStack:
     unknown = set(stack.axes) - allowed
     if unknown:
         raise ValueError(f"Unsupported TIFF axes: {sorted(unknown)}")
+    if len(stack.axes) != stack.data.ndim or len(set(stack.axes)) != len(stack.axes):
+        raise ValueError("stack axes must contain one unique name per data dimension")
     order = [axis for axis in "TZCYX" if axis in stack.axes]
     transpose = [stack.axes.index(axis) for axis in order]
     data = np.transpose(stack.data, transpose) if transpose != list(range(stack.data.ndim)) else stack.data
@@ -86,7 +88,7 @@ def select_channel(stack: ImageStack, channel: int = 0) -> np.ndarray:
 
 
 def project_z(stack: ImageStack, method: str = "max") -> ImageStack:
-    """Project Z while preserving all other dimensions."""
+    """Project Z while preserving all other dimensions and quantitative precision."""
     if "Z" not in stack.axes:
         return stack
     axis = stack.axes.index("Z")
@@ -94,9 +96,9 @@ def project_z(stack: ImageStack, method: str = "max") -> ImageStack:
     if method == "max":
         data = np.max(stack.data, axis=axis)
     elif method == "mean":
-        data = np.mean(stack.data, axis=axis).astype(stack.data.dtype, copy=False)
+        data = np.mean(stack.data, axis=axis, dtype=np.float64)
     elif method == "median":
-        data = np.median(stack.data, axis=axis).astype(stack.data.dtype, copy=False)
+        data = np.median(stack.data, axis=axis)
     else:
         raise ValueError("method must be one of: max, mean, median")
     axes = stack.axes.replace("Z", "")

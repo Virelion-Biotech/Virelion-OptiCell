@@ -1,0 +1,13 @@
+.git
+.github
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.venv
+dist
+build
+*.egg-info
+.opticell
+outputs
+data

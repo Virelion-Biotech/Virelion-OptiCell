@@ -29,6 +29,25 @@ def test_tracking3d_supports_short_gaps():
     assert int(tracks.iloc[-1]["gap"]) == 1
 
 
+def test_tracking3d_summary_accounts_for_missing_frames():
+    tracks = pd.DataFrame(
+        {
+            "track_id": [1, 1],
+            "frame": [0, 2],
+            "z_um": [0.0, 0.0],
+            "y_um": [0.0, 0.0],
+            "x_um": [0.0, 10.0],
+        }
+    )
+    summary = summarize_tracks_3d(tracks, frame_interval=2.0)
+    assert summary.iloc[0]["path_length_um"] == 10.0
+    assert summary.iloc[0]["net_displacement_um"] == 10.0
+    assert summary.iloc[0]["mean_speed_um_per_frame"] == 5.0
+    assert summary.iloc[0]["net_speed_um_per_frame"] == 5.0
+    assert summary.iloc[0]["mean_speed_um_per_time"] == 2.5
+    assert summary.iloc[0]["net_speed_um_per_time"] == 2.5
+
+
 def test_tracking3d_summary_reports_straightness():
     frames = [_single_object(1, 1, 1), _single_object(2, 1, 1), _single_object(3, 1, 1)]
     tracks = link_frames_3d(frames)
@@ -39,12 +58,19 @@ def test_tracking3d_summary_reports_straightness():
 
 
 def test_tracking3d_rejects_invalid_configuration():
-    try:
-        Tracking3DConfig(max_distance_um=0).validate()
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("Invalid configuration should fail")
+    invalid = [Tracking3DConfig(max_distance_um=0), Tracking3DConfig(max_gap=1.5), Tracking3DConfig(velocity_smoothing=np.nan)]
+    for config in invalid:
+        try:
+            config.validate()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Invalid configuration should fail")
+
+
+def test_tracking3d_rejects_mismatched_volume_shapes():
+    with np.testing.assert_raises(ValueError):
+        link_frames_3d([_single_object(1, 1, 1), np.zeros((10, 10, 10), dtype=np.int32)])
 
 
 def test_provenance_manifest_hashes_existing_file(tmp_path):

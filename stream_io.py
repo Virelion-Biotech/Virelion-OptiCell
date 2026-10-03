@@ -36,18 +36,48 @@ def memmap_tiff(path: str, *, series: int = 0) -> np.memmap:
 
 
 def iter_tiff_frames(path: str, *, series: int = 0, axis: int = 0) -> Iterator[np.ndarray]:
-    """Yield one leading-axis frame at a time without materializing the stack."""
+    """Yield logical frames along the leading series axis without loading the stack.
+
+    This is supported only when tifffile exposes one TIFF page per logical
+    leading-axis frame.  Series such as a ``TZYX`` stack are supported when
+    each page is already a complete ``ZYX`` frame.  Ambiguous page layouts are
+    rejected instead of silently yielding planes as if they were frames.
+    """
     if tifffile is None:
         raise RuntimeError("tifffile is required for streaming TIFF access") from _TIFF_ERROR
     source = Path(path)
     with tifffile.TiffFile(source) as tif:
         if series < 0 or series >= len(tif.series):
             raise IndexError(f"series {series} outside range 0..{len(tif.series) - 1}")
-        data = tif.series[series].aszarr() if False else tif.series[series].pages
-        if not data:
+        series_data = tif.series[series]
+        if not isinstance(axis, int):
+            raise TypeError("axis must be an integer")
+        normalized_axis = axis + len(series_data.shape) if axis < 0 else axis
+        if normalized_axis != 0:
+            raise ValueError("iter_tiff_frames currently supports only the leading series axis (axis=0)")
+        if not series_data.pages:
             return
-        for page in data:
-            yield np.asarray(page.asarray())
+
+        expected_shape = tuple(series_data.shape[1:])
+        expected_dtype = np.dtype(series_data.dtype)
+        expected_pages = int(series_data.shape[0])
+        actual_pages = len(series_data.pages)
+        if actual_pages != expected_pages:
+            raise ValueError(
+                "TIFF series page layout is ambiguous for axis-0 streaming: "
+                f"series shape {series_data.shape} implies {expected_pages} pages, "
+                f"but tifffile exposes {actual_pages} pages"
+            )
+
+        for index, page in enumerate(series_data.pages):
+            frame = np.asarray(page.asarray())
+            if tuple(frame.shape) != expected_shape or np.dtype(frame.dtype) != expected_dtype:
+                raise ValueError(
+                    "TIFF page does not represent one logical leading-axis frame: "
+                    f"page {index} has shape/dtype {frame.shape}/{frame.dtype}, "
+                    f"expected {expected_shape}/{expected_dtype}"
+                )
+            yield frame
 
 
 def iter_array_chunks(array: np.ndarray, *, axis: int = 0, chunk_size: int = 1) -> Iterator[np.ndarray]:

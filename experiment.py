@@ -7,11 +7,18 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-# Require a non-letter boundary for wells so the 'e2' in 'Plate2' cannot be mistaken for a well.
 _WELL = re.compile(r"(?<![A-Za-z])([A-Ha-h])([0-9]{1,2})(?![0-9])")
-# Accept common separators but also compact filename forms such as A07t3.
 _TIME = re.compile(r"(?:^|[_-])(?:t|time|tp)([0-9]+)(?=[_.-]|$)|(?<=[A-Za-z0-9])(?:t|time|tp)([0-9]+)(?=[_.-]|$)", re.I)
 _PLATE = re.compile(r"(?:^|[_-])(?:plate|p)([0-9]+)(?:[_-]|$)", re.I)
+
+
+def _strict_numeric(values: pd.Series, name: str) -> pd.Series:
+    numeric = pd.to_numeric(values, errors="coerce")
+    malformed = values.notna() & numeric.isna()
+    if malformed.any():
+        examples = values.loc[malformed].astype(str).head(3).tolist()
+        raise ValueError(f"{name} contains non-numeric values: {examples}")
+    return numeric
 
 
 def _timepoint(match: re.Match[str] | None) -> int | None:
@@ -29,6 +36,8 @@ def parse_metadata(filename: str) -> dict[str, object]:
     plate = _PLATE.search(name)
     row = well.group(1).upper() if well else None
     col = int(well.group(2)) if well else None
+    if col is not None and not 1 <= col <= 12:
+        raise ValueError(f"well column must be in 1..12, got {col}")
     return {
         "plate": int(plate.group(1)) if plate else None,
         "well": f"{row}{col:02d}" if row and col else None,
@@ -60,6 +69,8 @@ def summarize_groups(df: pd.DataFrame, group_by: list[str], metrics: list[str]) 
     missing = (set(group_by) | set(metrics)) - set(df.columns)
     if missing:
         raise ValueError(f"missing columns: {sorted(missing)}")
+    for metric in metrics:
+        _strict_numeric(df[metric], metric)
     grouped = df.groupby(group_by, dropna=False)
     aggregations = {m: ["count", "mean", "median", "std"] for m in metrics}
     out = grouped.agg(aggregations)
@@ -68,38 +79,40 @@ def summarize_groups(df: pd.DataFrame, group_by: list[str], metrics: list[str]) 
 
 
 def compare_groups(df: pd.DataFrame, group_column: str, metric: str) -> pd.DataFrame:
-    """Descriptive two-group comparison; no hidden inferential assumptions."""
+    """Descriptive group comparison; no hidden inferential assumptions."""
     if group_column not in df or metric not in df:
         raise ValueError("group_column and metric must exist")
+    values = _strict_numeric(df[metric], metric)
     groups = [g for g in df[group_column].dropna().unique()]
     rows = []
     for g in groups:
-        values = pd.to_numeric(df.loc[df[group_column] == g, metric], errors="coerce").dropna().to_numpy(float)
-        rows.append(
-            {
-                "group": g,
-                "n": int(len(values)),
-                "mean": float(values.mean()) if len(values) else np.nan,
-                "median": float(np.median(values)) if len(values) else np.nan,
-                "std": float(values.std(ddof=1)) if len(values) > 1 else 0.0,
-            }
-        )
+        group_values = values.loc[df[group_column] == g].dropna().to_numpy(float)
+        rows.append({
+            "group": g,
+            "n": int(len(group_values)),
+            "mean": float(group_values.mean()) if len(group_values) else np.nan,
+            "median": float(np.median(group_values)) if len(group_values) else np.nan,
+            "std": float(group_values.std(ddof=1)) if len(group_values) > 1 else np.nan,
+        })
     return pd.DataFrame(rows)
 
 
 def plate_heatmap(df: pd.DataFrame, metric: str, value: str = "mean") -> pd.DataFrame:
-    """Return an 8x12-like well matrix for plate QC/phenotyping."""
+    """Return an 8x12 well matrix for plate QC/phenotyping."""
     required = {"well", metric}
     if not required.issubset(df.columns):
         raise ValueError(f"missing columns: {sorted(required - set(df.columns))}")
+    if value not in {"mean", "median", "max", "min"}:
+        raise ValueError("value must be one of: mean, median, max, min")
     tmp = df.copy()
-    tmp[metric] = pd.to_numeric(tmp[metric], errors="coerce")
+    tmp[metric] = _strict_numeric(tmp[metric], metric)
     agg = tmp.groupby("well", dropna=True)[metric]
-    vals = getattr(agg, value)() if value in {"mean", "median", "max", "min"} else agg.mean()
+    vals = getattr(agg, value)()
     matrix = pd.DataFrame(index=list("ABCDEFGH"), columns=range(1, 13), dtype=float)
     for well, val in vals.items():
-        if isinstance(well, str) and len(well) >= 2 and well[0] in matrix.index:
-            col = int(well[1:])
-            if 1 <= col <= 12:
-                matrix.loc[well[0], col] = float(val)
+        if not isinstance(well, str) or not re.fullmatch(r"[A-Ha-h](?:0?[1-9]|1[0-2])", well):
+            raise ValueError(f"invalid well identifier: {well!r}")
+        row = well[0].upper()
+        col = int(well[1:])
+        matrix.loc[row, col] = float(val)
     return matrix
