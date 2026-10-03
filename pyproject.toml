@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "build"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opticell"
+dynamic = ["version"]
+description = "Quantitative microscopy quality control and cell analysis engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "AGPL-3.0-or-later"
+dependencies = [
+  "numpy>=1.26,<3",
+  "opencv-python-headless>=4.9,<5",
+  "pandas>=2.1,<3",
+  "tifffile>=2024.2,<2027",
+  "scipy>=1.11,<2",
+  "defusedxml>=0.7.1,<0.8",
+]
+
+[project.optional-dependencies]
+cellpose = ["cellpose", "packaging>=24"]
+ui = ["streamlit>=1.53,<2", "streamlit-drawable-canvas[image]>=0.13,<0.14"]
+dev = [
+  "pytest>=8",
+  "ruff>=0.6",
+  "build>=1.2",
+  "streamlit>=1.53,<2",
+  "streamlit-drawable-canvas[image]>=0.13,<0.14",
+  "bandit>=1.7,<2",
+  "pip-audit>=2.7,<3",
+]
+
+[project.scripts]
+opticell = "qc_pipeline:_main"
+opticell-hearttwin = "opticell.hearttwin_adapter:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "opticell.__version__"}
+
+[tool.setuptools]
+py-modules = [
+  "qc_pipeline", "quantitative", "image_io", "validation", "compartments", "phenotype", "tracking", "ensemble", "experiment", "texture", "preprocessing", "volumetric", "volumetric_segmentation", "tracking3d", "provenance", "reporting", "benchmarking", "runtime", "tracking_events", "experiment_stats", "experiment_qc", "profiling", "lineage", "screening", "stream_io", "screening_qc", "sensitivity", "lineage_events", "artifact_quality", "acceptance", "robustness", "quality_gate", "screening_advanced", "reproducibility", "tracking_validation", "experiment_audit",
+]
+
+[tool.setuptools.packages.find]
+include = ["opticell*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+lint.select = ["E", "F"]

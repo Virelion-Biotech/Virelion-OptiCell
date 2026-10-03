@@ -1,0 +1,131 @@
+"""3-D morphology and spatial analysis for labelled microscopy volumes.
+
+Physical spacing is interpreted in micrometres (um) throughout this module.
+"""
+from __future__ import annotations
+
+from typing import Sequence
+
+import numpy as np
+from scipy.spatial import cKDTree
+
+
+def _validate_labels(labels: np.ndarray) -> np.ndarray:
+    arr = np.asarray(labels)
+    if arr.ndim != 3 or 0 in arr.shape:
+        raise ValueError("labels must be a non-empty 3-D array")
+    if not np.issubdtype(arr.dtype, np.integer):
+        raise ValueError("labels must contain integer instance IDs")
+    if (arr < 0).any():
+        raise ValueError("labels must be non-negative")
+    return arr
+
+
+def _validate_spacing(voxel_size: Sequence[float]) -> tuple[float, float, float]:
+    spacing = tuple(float(x) for x in voxel_size)
+    if len(spacing) != 3 or not np.isfinite(spacing).all() or min(spacing) <= 0:
+        raise ValueError("voxel_size must contain three finite positive values in micrometres")
+    return spacing
+
+
+def _surface_area(arr: np.ndarray, label_id: int, spacing: tuple[float, float, float]) -> float:
+    """Compute exposed voxel-face area on a minimal local crop."""
+    coords = np.argwhere(arr == label_id)
+    if coords.size == 0:
+        return 0.0
+    mins = np.maximum(coords.min(axis=0) - 1, 0)
+    maxs = np.minimum(coords.max(axis=0) + 2, np.asarray(arr.shape))
+    z0, y0, x0 = mins
+    z1, y1, x1 = maxs
+    mask = arr[z0:z1, y0:y1, x0:x1] == label_id
+    vz, vy, vx = spacing
+    area = 0.0
+    area += np.count_nonzero(mask[0, :, :]) * vy * vx
+    area += np.count_nonzero(mask[-1, :, :]) * vy * vx
+    area += np.count_nonzero(mask[:, 0, :]) * vz * vx
+    area += np.count_nonzero(mask[:, -1, :]) * vz * vx
+    area += np.count_nonzero(mask[:, :, 0]) * vz * vy
+    area += np.count_nonzero(mask[:, :, -1]) * vz * vy
+    area += np.count_nonzero(mask[1:, :, :] & ~mask[:-1, :, :]) * vy * vx
+    area += np.count_nonzero(mask[:-1, :, :] & ~mask[1:, :, :]) * vy * vx
+    area += np.count_nonzero(mask[:, 1:, :] & ~mask[:, :-1, :]) * vz * vx
+    area += np.count_nonzero(mask[:, :-1, :] & ~mask[:, 1:, :]) * vz * vx
+    area += np.count_nonzero(mask[:, :, 1:] & ~mask[:, :, :-1]) * vz * vy
+    area += np.count_nonzero(mask[:, :, :-1] & ~mask[:, :, 1:]) * vz * vy
+    return float(area)
+
+
+def volume_features(labels: np.ndarray, voxel_size: Sequence[float] = (1.0, 1.0, 1.0)) -> list[dict[str, float]]:
+    """Return per-object volume, centroid, bounding box, and surface area.
+
+    ``voxel_size`` is ordered ``(z, y, x)`` and expressed in micrometres.
+    """
+    arr = _validate_labels(labels)
+    spacing = _validate_spacing(voxel_size)
+    vz, vy, vx = spacing
+    rows: list[dict[str, float]] = []
+    for label_id in np.unique(arr):
+        if label_id <= 0:
+            continue
+        coords = np.argwhere(arr == label_id)
+        if coords.size == 0:
+            continue
+        centroid_vox = coords.mean(axis=0)
+        volume = float(len(coords) * vz * vy * vx)
+        mins = coords.min(axis=0)
+        maxs = coords.max(axis=0)
+        rows.append(
+            {
+                "label": int(label_id),
+                "volume": volume,
+                "centroid_z": float(centroid_vox[0]),
+                "centroid_y": float(centroid_vox[1]),
+                "centroid_x": float(centroid_vox[2]),
+                "centroid_z_um": float(centroid_vox[0] * vz),
+                "centroid_y_um": float(centroid_vox[1] * vy),
+                "centroid_x_um": float(centroid_vox[2] * vx),
+                "bbox_z": int(maxs[0] - mins[0] + 1),
+                "bbox_y": int(maxs[1] - mins[1] + 1),
+                "bbox_x": int(maxs[2] - mins[2] + 1),
+                "surface_area_approx": _surface_area(arr, int(label_id), spacing),
+            }
+        )
+    return rows
+
+
+def nearest_neighbor_distances_3d(features: list[dict[str, float]]) -> np.ndarray:
+    """Return nearest-neighbour centroid distances using a KD-tree."""
+    if not features:
+        return np.array([], dtype=float)
+    required = {"centroid_z_um", "centroid_y_um", "centroid_x_um"}
+    if any(not required.issubset(item) for item in features):
+        raise ValueError("features must contain physical centroid coordinates")
+    points = np.asarray([[x["centroid_z_um"], x["centroid_y_um"], x["centroid_x_um"]] for x in features], dtype=float)
+    if not np.isfinite(points).all():
+        raise ValueError("physical centroid coordinates must be finite")
+    if len(points) < 2:
+        return np.full(len(points), np.nan, dtype=float)
+    distances, _ = cKDTree(points).query(points, k=2)
+    return distances[:, 1].astype(float)
+
+
+def summarize_volume(labels: np.ndarray, voxel_size: Sequence[float] = (1.0, 1.0, 1.0)) -> dict[str, float]:
+    """Return object count, volume statistics, and physical density.
+
+    ``voxel_size`` is ``(z, y, x)`` in micrometres; density is therefore
+    reported per mm^3.
+    """
+    arr = _validate_labels(labels)
+    spacing = _validate_spacing(voxel_size)
+    features = volume_features(arr, spacing)
+    values = np.asarray([row["volume"] for row in features], dtype=float)
+    physical_volume_um3 = float(np.prod(arr.shape) * np.prod(spacing))
+    physical_volume_mm3 = physical_volume_um3 / 1e9
+    return {
+        "object_count": float(len(features)),
+        "total_object_volume": float(values.sum()) if values.size else 0.0,
+        "mean_object_volume": float(values.mean()) if values.size else np.nan,
+        "median_object_volume": float(np.median(values)) if values.size else np.nan,
+        "volume_fraction": float(values.sum() / physical_volume_um3),
+        "object_density_per_mm3": float(len(features) / physical_volume_mm3),
+    }

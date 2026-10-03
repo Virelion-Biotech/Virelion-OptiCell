@@ -1,0 +1,40 @@
+{
+  "dataset": "LIVECell",
+  "source": "https://github.com/sartorius-research/LIVECell",
+  "license": "CC BY-NC 4.0 (non-commercial)",
+  "split": "val",
+  "backend": "threshold",
+  "cellpose_model": null,
+  "gpu": false,
+  "n_requested": 20,
+  "n_scored": 20,
+  "n_missing_files": 0,
+  "mean_truth_instances_per_image": 197.6,
+  "max_truth_instances_per_image": 425,
+  "timestamp_utc": "2026-09-17T15:02:55.342929+00:00",
+  "software": {
+    "script": "scripts/run_livecell_validation.py",
+    "repo": "Virelion-Biotech/Virelion-OptiCell"
+  },
+  "summary": {
+    "n_images": 20.0,
+    "pixel_iou_mean": 0.028357060132876838,
+    "pixel_dice_mean": 0.054332385344310376,
+    "pixel_precision_mean": 0.9959425248798155,
+    "pixel_recall_mean": 0.028365023141338163,
+    "instance_precision_mean": 0.6636097873589412,
+    "instance_recall_mean": 0.4183170610978174,
+    "instance_f1_mean": 0.43517184863031877,
+    "absolute_count_error_mean": 87.5,
+    "relative_count_error_mean": 0.32902371042377954,
+    "iou": 0.028357060132876838,
+    "dice": 0.054332385344310376,
+    "precision": 0.6636097873589412,
+    "recall": 0.4183170610978174,
+    "f1": 0.43517184863031877,
+    "absolute_count_error": 87.5,
+    "relative_count_error": 0.32902371042377954
+  },
+  "per_image": "see livecell_val_threshold_n20.csv",
+  "note": "Measured only. Threshold collapses on dense phase-contrast (4/20 zero-object FOVs). Compare cellpose n=20 on same FOVs."
+}

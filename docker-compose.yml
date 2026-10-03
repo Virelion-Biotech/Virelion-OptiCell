@@ -1,0 +1,23 @@
+services:
+  opticell:
+    build:
+      context: .
+      args:
+        OPTICELL_EXTRAS: ui
+    ports:
+      - "8501:8501"
+    environment:
+      OPTICELL_WORKSPACE: /data/opticell
+      OPTICELL_DB: /data/opticell/workbench.sqlite3
+      OPTICELL_DATA_ROOT: /data/input
+      OPTICELL_REQUIRE_AUTH: "${OPTICELL_REQUIRE_AUTH:-0}"
+      OPTICELL_ADMIN_USER: "${OPTICELL_ADMIN_USER:-}"
+      OPTICELL_ADMIN_PASSWORD: "${OPTICELL_ADMIN_PASSWORD:-}"
+      OPTICELL_ADMIN_QUOTA_RUNS: "${OPTICELL_ADMIN_QUOTA_RUNS:-10000}"
+    volumes:
+      - opticell_workspace:/data/opticell
+      - ./data:/data/input:ro
+    restart: unless-stopped
+
+volumes:
+  opticell_workspace:
