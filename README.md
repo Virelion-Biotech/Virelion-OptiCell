@@ -44,37 +44,24 @@ The default local deployment uses SQLite. See [production deployment](docs/PRODU
 
 ---
 
-## Measured baselines
+## Measured validation
 
-### Stage 1 — BBBC039 nuclei (n=197)
+The 6 October 2026 cloud CPU study corrected reference decoding and adaptive thresholding, then scored complete public data. **The software tests pass; broad scientific validation fails.**
 
-| Backend | Dice | Instance F1 | Mean \|count err\| |
-|---------|-----:|------------:|------------------:|
-| OptiCell threshold | 0.925 | **0.929** | **8.7** |
-| OptiCell hybrid | 0.929 | 0.924 | 9.0 |
-| Cellpose-SAM | **0.969** | 0.907 | 16.7 |
-| CellProfiler 4.2 | 0.895 | 0.722 | 28.1 |
+| Data / backend | Records | Dice | Instance IoU F1 | Count MAE |
+|---|---:|---:|---:|---:|
+| BBBC039 threshold | 200 | 0.9249 | 0.7663 | 28.90 |
+| BBBC039 adaptive, corrected | 200 | 0.9278 | 0.8736 | 24.35 |
+| BBBC038 threshold | 670 | 0.8556 | 0.6940 | 14.06 |
+| BBBC038 adaptive, corrected | 670 | 0.6090 | 0.5130 | 25.75 |
+| LIVECell validation, threshold | 570 | 0.1131 | 0.0037 | 150.52 |
+| LIVECell test, threshold | 1564 | 0.0954 | 0.0038 | 153.10 |
 
-### Stage 3 — CTC TRA
+IoU F1 matches instance shapes at IoU ≥0.5; the old centroid F1 was a different metric. GT-dependent legacy BBBC039 instance/count comparisons are withdrawn because touching reference nuclei were merged. LIVECell records include repeated source files and use a documented overlap projection, not official COCO AP.
 
-Cellpose TRA best on **all six** sequences. See [`outputs/stage3/STAGE3_REPORT.md`](outputs/stage3/STAGE3_REPORT.md).
+The study also covers 10 tracking sequences (981 frames, including 215 simulated frames) and all 34 BBBC006 focus depths (26,112 images). Several tracking datasets fail, and the shipped focus score has AUROC 0.3458. Cellpose-SAM was smoke-tested on five nuclei images and one LIVECell auto case; its full learned-backend matrices remain uncompleted.
 
-### BBBC038 (Kaggle 2018 DSB nuclei)
-
-| Backend | n | Dice | Instance F1 | Mean \|count err\| |
-|---------|---|------|--------------|------------------:|
-| Threshold (Otsu) | 200 | 0.846 | 0.807 | 14.1 |
-
-### LIVECell (dense phase-contrast, validation, same 20 FOVs)
-
-| Backend | n | Dice | Instance F1 | Mean \|count err\| |
-|---------|---|------|--------------|------------------:|
-| Cellpose-SAM (GPU) | 20 | **0.930** | **0.904** | **25.7** |
-| Hybrid (GPU) | 20 | **0.930** | **0.904** | **25.7** |
-| Auto (GPU) | 20 | **0.930** | **0.904** | **25.7** |
-| Threshold (CPU) | 20 | 0.054 | 0.435 | 87.5 |
-
-The current hybrid/auto measurements supersede the historical pre-routing-rule hybrid result; see [the current n=20 report](outputs/livecell_validation/LIVECELL_CURRENT_N20_REPORT.md).
+See [methods, repairs, scope and results](docs/CLOUD_VALIDATION_2026-10-06.md) and [the measured summary](outputs/cloud_validation_2026_10_06/MEASURED_SUMMARY.json). Historical GPU panels and older centroid-based comparisons remain in their original output folders and are not substitutes for the current corrected studies.
 
 ---
 
