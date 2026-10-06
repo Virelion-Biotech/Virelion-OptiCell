@@ -146,3 +146,16 @@ def test_ambiguous_source_files_fail_without_conflating_repeated_coco_ids(tmp_pa
         cv2.imwrite(str(path / "same.tif"), np.zeros((8, 8), np.uint8))
     with pytest.raises(ValueError, match="Ambiguous source image"):
         build_image_index(tmp_path)
+
+
+def test_undefined_empty_reference_ratio_serializes_as_null_without_changing_absolute_error():
+    import json
+    from validation import count_error, json_ready_metrics, _finite_mean
+
+    error = count_error(3, 0)
+    assert np.isnan(error["relative_count_error"])
+    encoded = json.dumps(json_ready_metrics(dict(per_image=[error])), allow_nan=False)
+    decoded = json.loads(encoded)["per_image"][0]
+    assert decoded["relative_count_error"] is None
+    assert decoded["absolute_count_error"] == 3.0
+    assert _finite_mean([None, 0.5]) == 0.5
