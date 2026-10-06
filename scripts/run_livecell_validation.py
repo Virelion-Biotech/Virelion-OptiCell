@@ -32,6 +32,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import sys
@@ -47,7 +48,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from validation import benchmark_segmentation, paired_segmentation_metrics  # noqa: E402
+from validation import aggregate_segmentation_rows, paired_segmentation_metrics  # noqa: E402
 from qc_pipeline import (  # noqa: E402
     to_grayscale_uint8,
     segment_threshold,
@@ -57,11 +58,11 @@ from qc_pipeline import (  # noqa: E402
 )
 from ensemble import hybrid_threshold_cellpose, fov_confidence, suggest_backend  # noqa: E402
 
-LIVECELL_IMAGES_URL = "http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/images.zip"
+LIVECELL_IMAGES_URL = "https://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/images.zip"
 LIVECELL_ANNOTATIONS = {
-    "train": "http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/LIVECell/livecell_coco_train.json",
-    "val": "http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/LIVECell/livecell_coco_val.json",
-    "test": "http://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/LIVECell/livecell_coco_test.json",
+    "train": "https://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/LIVECell/livecell_coco_train.json",
+    "val": "https://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/LIVECell/livecell_coco_val.json",
+    "test": "https://livecell-dataset.s3.eu-central-1.amazonaws.com/LIVECell_dataset_2021/annotations/LIVECell/livecell_coco_test.json",
 }
 
 
@@ -105,12 +106,16 @@ def build_image_index(images_root: Path) -> dict[str, Path]:
 
 
 def _polygon_to_mask(polygon: list, height: int, width: int) -> np.ndarray:
-    pts = np.asarray(polygon, dtype=np.float64).reshape(-1, 2)
-    pts = np.round(pts).astype(np.int32)
-    mask = np.zeros((height, width), dtype=np.uint8)
-    if pts.shape[0] >= 3:
-        cv2.fillPoly(mask, [pts], 1)
-    return mask
+    # COCO rasterization uses subpixel polygon rules. Rounding coordinates
+    # before cv2.fillPoly changes the reference contours and measured IoU.
+    from pycocotools import mask as mask_utils
+
+    if len(polygon) < 6 or len(polygon) % 2:
+        raise ValueError("COCO polygons require at least three finite coordinate pairs")
+    if not np.isfinite(np.asarray(polygon, dtype=float)).all():
+        raise ValueError("COCO polygon contains non-finite coordinates")
+    rles = mask_utils.frPyObjects([polygon], height, width)
+    return np.asarray(mask_utils.decode(mask_utils.merge(rles)), dtype=np.uint8)
 
 
 def _rle_to_mask(rle: dict, height: int, width: int) -> np.ndarray:
@@ -118,6 +123,8 @@ def _rle_to_mask(rle: dict, height: int, width: int) -> np.ndarray:
     size = rle.get("size", [height, width])
     if isinstance(counts, (list, tuple)):
         h, w = size
+        if (h, w) != (height, width) or any(not isinstance(c, int) or c < 0 for c in counts) or sum(counts) != h * w:
+            raise ValueError("COCO RLE dimensions/counts disagree with image")
         flat = np.zeros(h * w, dtype=np.uint8)
         idx = 0
         val = 0
@@ -140,26 +147,26 @@ def _rle_to_mask(rle: dict, height: int, width: int) -> np.ndarray:
 def decode_coco_instance_masks(anns: list, height: int, width: int) -> np.ndarray:
     """Paint each annotation's segmentation into one int32 instance-label array.
 
-    Painted in listed order (a later instance overwrites an earlier one at any
-    overlap). LIVECell polygons are per-cell boundaries and rarely overlap in
-    practice, but -- unlike BBBC038 -- that is not a guarantee of the format, so
-    treat this as a documented approximation, not an exact reconstruction.
+    Painted in listed order (the first instance owns overlap pixels).
+    Overlapping or fully occluded annotations cannot all be represented in a
+    single label image. This is a documented projection, not official COCO AP.
     """
     labels = np.zeros((height, width), dtype=np.int32)
     next_id = 1
     for ann in anns:
         seg = ann.get("segmentation")
         if not seg:
-            continue
+            raise ValueError("Annotation has no reference segmentation")
         if isinstance(seg, list):
             mask = np.zeros((height, width), dtype=np.uint8)
             for poly in seg:
-                if len(poly) >= 6:
-                    mask |= _polygon_to_mask(poly, height, width)
+                mask |= _polygon_to_mask(poly, height, width)
         elif isinstance(seg, dict):
             mask = _rle_to_mask(seg, height, width)
         else:
-            continue
+            raise ValueError("Unsupported COCO reference segmentation type")
+        if mask.shape != (height, width):
+            raise ValueError("COCO mask dimensions disagree with image")
         fg = mask > 0
         if not fg.any():
             continue
@@ -217,7 +224,7 @@ def main() -> int:
     index = build_image_index(images_root)
     print(f"[index] indexed {len(index)} image files under {images_root}")
 
-    ordered_image_ids = ordered_image_ids[: max(1, args.max_images)]
+    ordered_image_ids = ordered_image_ids if args.max_images == 0 else ordered_image_ids[: max(1, args.max_images)]
     print(f"[run] backend={args.backend} n_images={len(ordered_image_ids)} split={args.split} gpu={args.gpu}")
     print(f"[env] cellpose_available={_HAS_CELLPOSE} import_error={_CELLPOSE_IMPORT_ERROR!r}")
 
@@ -243,8 +250,7 @@ def main() -> int:
                 print(f"[auto] Cellpose initialization failed; auto will use threshold: {exc}")
                 cellpose_seg = None
 
-    pred_labels: list = []
-    truth_labels: list = []
+    failures: list[dict] = []
     per_image: list = []
     missing_files: list = []
     truth_instance_counts: list = []
@@ -266,10 +272,10 @@ def main() -> int:
             gray = to_grayscale_uint8(raw)
             height, width = int(meta.get("height", gray.shape[0])), int(meta.get("width", gray.shape[1]))
             if (height, width) != gray.shape:
-                height, width = gray.shape  # trust the actual decoded image over stale JSON metadata
+                raise ValueError("Decoded image shape disagrees with COCO metadata")
 
             truth = decode_coco_instance_masks(anns_by_image.get(image_id, []), height, width)
-            truth_count = int(truth.max())
+            truth_count = int(np.unique(truth[truth > 0]).size)
             truth_instance_counts.append(truth_count)
 
             backend_for_image = args.backend
@@ -300,6 +306,7 @@ def main() -> int:
                 "cell_type": file_name.split("_")[0] if "_" in file_name else "",
                 "pred_count": int(seg.count),
                 "truth_count": truth_count,
+                "annotation_count": len(anns_by_image.get(image_id, [])),
                 "backend_requested": args.backend,
                 "backend_resolved": backend_for_image,
                 "backend_reason": backend_reason,
@@ -309,8 +316,6 @@ def main() -> int:
                 **{k: float(v) for k, v in metrics.items()},
             }
             per_image.append(row)
-            pred_labels.append(pred)
-            truth_labels.append(truth)
             print(
                 f"  [{i}/{len(ordered_image_ids)}] {file_name}: "
                 f"truth={truth_count} pred={int(seg.count)} "
@@ -319,16 +324,13 @@ def main() -> int:
                 f"conf={conf['confidence_score']:.0f}"
             )
         except Exception as exc:
+            failures.append({"image": file_name, "error": str(exc)})
             print(f"  [{i}/{len(ordered_image_ids)}] FAIL {file_name}: {exc}")
-
-    if not pred_labels:
-        print("ERROR: no successful segmentations", file=sys.stderr)
-        return 4
 
     if missing_files:
         print(f"[note] {len(missing_files)} annotated file(s) not found under images_root -> {missing_files[:10]}")
 
-    summary = benchmark_segmentation(pred_labels, truth_labels)
+    summary = aggregate_segmentation_rows(per_image) if per_image else {}
     payload = {
         "dataset": "LIVECell",
         "source": "https://github.com/sartorius-research/LIVECell",
@@ -338,7 +340,7 @@ def main() -> int:
         "cellpose_model": args.cellpose_model if cellpose_seg is not None else None,
         "gpu": bool(args.gpu),
         "n_requested": len(ordered_image_ids),
-        "n_scored": len(pred_labels),
+        "n_scored": len(per_image),
         "n_missing_files": len(missing_files),
         "mean_truth_instances_per_image": (
             float(np.mean(truth_instance_counts)) if truth_instance_counts else 0.0
@@ -351,27 +353,30 @@ def main() -> int:
             "script": "scripts/run_livecell_validation.py",
             "repo": "Virelion-Biotech/Virelion-OptiCell",
         },
+        "n_failed": len(failures),
+        "failures": failures,
+        "complete": len(per_image) == len(ordered_image_ids) and not failures and not missing_files,
+        "missing_files": missing_files,
         "summary": {k: float(v) for k, v in summary.items()},
         "per_image": per_image,
         "note": (
             "Measured only. Dense, real phase-contrast data -- ground truth decoded "
-            "from COCO polygons (or RLE via pycocotools if present), painted in "
-            "listed order at any overlap, unlike BBBC038's guaranteed non-overlapping "
+            "with official pycocotools COCO rasterization, first-instance-wins "
+            "at overlap pixels, unlike BBBC038's guaranteed non-overlapping "
             "masks. CC BY-NC 4.0: non-commercial use only."
         ),
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_json = out_dir / f"livecell_{args.split}_{args.backend}_n{len(pred_labels)}.json"
-    out_csv = out_dir / f"livecell_{args.split}_{args.backend}_n{len(pred_labels)}.csv"
+    out_json = out_dir / f"livecell_{args.split}_{args.backend}_n{len(per_image)}.json"
+    out_csv = out_dir / f"livecell_{args.split}_{args.backend}_n{len(per_image)}.csv"
     out_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     if per_image:
-        keys = list(per_image[0].keys())
-        lines = [",".join(keys)]
-        for row in per_image:
-            lines.append(",".join(str(row[k]) for k in keys))
-        out_csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        with out_csv.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=list(per_image[0]))
+            writer.writeheader()
+            writer.writerows(per_image)
 
     print("\n=== SUMMARY (measured only) ===")
     for k, v in sorted(summary.items()):
@@ -382,7 +387,7 @@ def main() -> int:
     )
     print(f"\nWrote {out_json}")
     print(f"Wrote {out_csv}")
-    return 0
+    return 6 if failures or missing_files or not per_image else 0
 
 
 if __name__ == "__main__":

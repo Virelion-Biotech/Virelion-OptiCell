@@ -268,24 +268,19 @@ def _segmentation_diagnostics(labels: np.ndarray, image_shape: tuple[int, int], 
         raise ValueError("labels must be a 2-D array matching image_shape")
     if min_area < 1 or not np.isfinite(max_area_frac) or not 0 < max_area_frac <= 1:
         raise ValueError("invalid segmentation area limits")
-    objects = _instance_objects(label_arr)
-    if not objects:
+    ids, counts = np.unique(label_arr, return_counts=True)
+    positive = ids > 0
+    if not positive.any():
         return 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0
-    areas: list[float] = []
-    border_count = 0
+    areas_arr = counts[positive].astype(float)
+    border_ids = np.unique(np.concatenate((label_arr[0], label_arr[-1], label_arr[:, 0], label_arr[:, -1])))
+    border_count = int(np.count_nonzero(border_ids > 0))
     height, width = image_shape
-    for _, mask in objects:
-        ys, xs = np.nonzero(mask)
-        area = float(len(xs))
-        areas.append(area)
-        if xs.min() == 0 or ys.min() == 0 or xs.max() == width - 1 or ys.max() == height - 1:
-            border_count += 1
-    areas_arr = np.asarray(areas, dtype=float)
     total_pixels = float(height * width)
     foreground_fraction = float(areas_arr.sum() / total_pixels) if total_pixels else 0.0
     median_area = float(np.median(areas_arr))
     area_cv = _safe_cv(areas_arr)
-    object_count = len(objects)
+    object_count = int(positive.sum())
     border_fraction = float(border_count / object_count)
     tiny_fraction = float((areas_arr < max(1, min_area * 2)).mean())
     merged_fraction = float((areas_arr > total_pixels * max_area_frac).mean()) if areas_arr.size else 0.0
@@ -333,13 +328,10 @@ def segment_threshold(gray: np.ndarray, min_area: int = 15, max_area_frac: float
     cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel, iterations=1)
     num_labels, raw_labels, stats, _ = cv2.connectedComponentsWithStats(cleaned, connectivity=8)
     max_area = arr.shape[0] * arr.shape[1] * max_area_frac
-    keep = np.zeros_like(raw_labels, dtype=np.int32)
-    next_id = 1
-    for label_id in range(1, num_labels):
-        area = int(stats[label_id, cv2.CC_STAT_AREA])
-        if min_area <= area <= max_area:
-            keep[raw_labels == label_id] = next_id
-            next_id += 1
+    admitted = (stats[:, cv2.CC_STAT_AREA] >= min_area) & (stats[:, cv2.CC_STAT_AREA] <= max_area)
+    admitted[0] = False
+    lookup = np.where(admitted, np.cumsum(admitted), 0).astype(np.int32)
+    keep = lookup[raw_labels]
     return _build_segmentation_result(keep, arr, "threshold", min_area, max_area_frac)
 
 

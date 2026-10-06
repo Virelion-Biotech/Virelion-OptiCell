@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import sys
@@ -23,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from validation import benchmark_segmentation, paired_segmentation_metrics  # noqa: E402
+from validation import aggregate_segmentation_rows, paired_segmentation_metrics  # noqa: E402
 from qc_pipeline import (  # noqa: E402
     to_grayscale_uint8,
     segment_threshold,
@@ -93,46 +94,20 @@ def decode_bbbc039_mask(path: Path) -> np.ndarray:
     arr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
     if arr is None:
         raise IOError(f"Could not read mask {path}")
-    if arr.ndim == 2:
-        binary = (arr > 0).astype(np.uint8)
-        _n, labels = cv2.connectedComponents(binary, connectivity=8)
-        return labels.astype(np.int32)
+    from scipy.ndimage import label
 
-    rgb = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_BGR2RGB)
-    channel0 = rgb[:, :, 0]
-    binary = (channel0 > 0).astype(np.uint8)
-    if int(binary.sum()) == 0:
-        binary = (rgb.max(axis=2) > 0).astype(np.uint8)
-    if int(binary.sum()) == 0:
-        return np.zeros(arr.shape[:2], dtype=np.int32)
-
-    _n, labels = cv2.connectedComponents(binary, connectivity=8)
-    n_cc = int(labels.max())
-    flat = rgb.reshape(-1, 3)
-    nonzero = flat[np.any(flat > 0, axis=1)]
-    if nonzero.size:
-        view = nonzero.view(
-            [("r", nonzero.dtype), ("g", nonzero.dtype), ("b", nonzero.dtype)]
-        )
-        n_colors = int(np.unique(view).size)
-    else:
-        n_colors = 0
-
-    if n_colors > max(n_cc, 1) * 2 and n_colors > 5:
-        h, w = rgb.shape[:2]
-        packed = (
-            rgb[:, :, 0].astype(np.int32) * 256 * 256
-            + rgb[:, :, 1].astype(np.int32) * 256
-            + rgb[:, :, 2].astype(np.int32)
-        )
-        unique_vals = np.unique(packed)
-        labels = np.zeros((h, w), dtype=np.int32)
-        next_id = 1
-        for v in unique_vals:
-            if v == 0:
-                continue
-            labels[packed == v] = next_id
-            next_id += 1
+    # Source-author decoder labels equal-valued connected pixels in the red
+    # channel. Binarizing it merges touching, differently encoded nuclei.
+    channel = arr if arr.ndim == 2 else arr[:, :, 2]  # OpenCV reads BGR
+    labels = np.zeros(channel.shape, dtype=np.int32)
+    offset = 0
+    for value in np.unique(channel):
+        if value == 0:
+            continue
+        components, count = label(channel == value, structure=np.ones((3, 3), dtype=int))
+        foreground = components > 0
+        labels[foreground] = components[foreground] + offset
+        offset += count
     return labels.astype(np.int32)
 
 
@@ -239,7 +214,7 @@ def main() -> int:
         print("ERROR: could not pair any images with masks.", file=sys.stderr)
         return 3
 
-    pairs = pairs[: max(1, args.max_images)]
+    pairs = pairs if args.max_images == 0 else pairs[: max(1, args.max_images)]
     print(f"[run] backend={args.backend} n_images={len(pairs)} gpu={args.gpu}")
     print(
         f"[env] cellpose_available={_HAS_CELLPOSE} import_error={_CELLPOSE_IMPORT_ERROR!r}"
@@ -269,8 +244,7 @@ def main() -> int:
         f"max_label={int(sample_truth.max())} fg_pixels={int((sample_truth > 0).sum())}"
     )
 
-    pred_labels: list[np.ndarray] = []
-    truth_labels: list[np.ndarray] = []
+    failures: list[dict] = []
     per_image: list[dict] = []
     skipped_empty_gt: list[str] = []
 
@@ -279,11 +253,7 @@ def main() -> int:
             gray = load_image_gray(img_path)
             truth = decode_bbbc039_mask(mask_path)
             if truth.shape != gray.shape:
-                truth = cv2.resize(
-                    truth.astype(np.float32),
-                    (gray.shape[1], gray.shape[0]),
-                    interpolation=cv2.INTER_NEAREST,
-                ).astype(np.int32)
+                raise ValueError(f"Reference shape {truth.shape} differs from image {gray.shape}")
 
             truth_count = int(truth.max())
             if truth_count == 0 and not args.include_empty_gt:
@@ -316,8 +286,6 @@ def main() -> int:
                 **{k: float(v) for k, v in metrics.items()},
             }
             per_image.append(row)
-            pred_labels.append(pred)
-            truth_labels.append(truth)
             print(
                 f"  [{i}/{len(pairs)}] {img_path.name}: "
                 f"truth={truth_count} pred={int(seg.count)} "
@@ -326,16 +294,13 @@ def main() -> int:
                 f"conf={conf['confidence_score']:.0f}"
             )
         except Exception as exc:
+            failures.append({"image": img_path.name, "error": str(exc)})
             print(f"  [{i}/{len(pairs)}] FAIL {img_path.name}: {exc}")
-
-    if not pred_labels:
-        print("ERROR: no successful segmentations", file=sys.stderr)
-        return 4
 
     if skipped_empty_gt:
         print(f"[note] skipped empty-GT FOVs: {len(skipped_empty_gt)} -> {skipped_empty_gt}")
 
-    summary = benchmark_segmentation(pred_labels, truth_labels)
+    summary = aggregate_segmentation_rows(per_image) if per_image else {}
     payload = {
         "dataset": "BBBC039",
         "source": "https://bbbc.broadinstitute.org/BBBC039",
@@ -343,7 +308,7 @@ def main() -> int:
         "cellpose_model": args.cellpose_model if needs_cellpose else None,
         "gpu": bool(args.gpu),
         "n_requested": len(pairs),
-        "n_scored": len(pred_labels),
+        "n_scored": len(per_image),
         "n_skipped_empty_gt": len(skipped_empty_gt),
         "skipped_empty_gt": skipped_empty_gt,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -351,29 +316,31 @@ def main() -> int:
             "script": "scripts/run_bbbc039_validation.py",
             "repo": "Virelion-Biotech/Virelion-OptiCell",
         },
+        "n_failed": len(failures),
+        "failures": failures,
+        "complete": len(per_image) == len(pairs) and not failures,
         "summary": {k: float(v) for k, v in summary.items()},
         "per_image": per_image,
         "note": "Measured only. Empty-GT FOVs skipped unless --include-empty-gt.",
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_json = out_dir / f"bbbc039_{args.backend}_n{len(pred_labels)}.json"
-    out_csv = out_dir / f"bbbc039_{args.backend}_n{len(pred_labels)}.csv"
+    out_json = out_dir / f"bbbc039_{args.backend}_n{len(per_image)}.json"
+    out_csv = out_dir / f"bbbc039_{args.backend}_n{len(per_image)}.csv"
     out_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     if per_image:
-        keys = list(per_image[0].keys())
-        lines = [",".join(keys)]
-        for row in per_image:
-            lines.append(",".join(str(row[k]) for k in keys))
-        out_csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        with out_csv.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=list(per_image[0]))
+            writer.writeheader()
+            writer.writerows(per_image)
 
     print("\n=== SUMMARY (measured only) ===")
     for k, v in sorted(summary.items()):
         print(f"  {k}: {v}")
     print(f"\nWrote {out_json}")
     print(f"Wrote {out_csv}")
-    return 0
+    return 6 if failures or not per_image else 0
 
 
 if __name__ == "__main__":

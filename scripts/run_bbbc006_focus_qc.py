@@ -1,50 +1,46 @@
 #!/usr/bin/env python3
-"""BBBC006 focus-metric validation (Stage 1 — second public dataset).
+"""BBBC006 focus QC on measured z planes; preserve physical well/site identity.
 
-BBBC006: U2OS Hoechst z-stacks; z≈16 is optimal focus; planes 11–23 labeled
-in-focus by experts. Full z zips are ~800 MB each — this script does **not**
-auto-download them. Point it at a local extract.
-
-What it measures (no fabricated numbers):
-  - OptiCell `compute_focus_score` (Laplacian variance) vs |z - z_focus|
-  - Rank correlation: does focus score peak near the true focal plane?
-
-Expected layout (flexible):
-  data/bbbc006/z_00/*.tif
-  data/bbbc006/z_16/*.tif
-  ...
-or any folder tree where path or filename encodes z index.
-
-Usage:
-  python scripts/run_bbbc006_focus_qc.py --root data/bbbc006 --z-focus 16 --max-sites 20
+Example: --root data/bbbc006 --max-sites 0 --expected-z 0 8 16 24 33
+The expert in-focus interval is z=11..23. z=16 is the laser autofocus target.
+Selected-plane results must not be presented as a complete 34-plane study.
 """
+
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
+from datetime import datetime, timezone
 import json
+from pathlib import Path
 import re
 import sys
-from datetime import datetime, timezone
-from pathlib import Path
 
 import cv2
 import numpy as np
+from scipy.stats import rankdata, spearmanr
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
 from qc_pipeline import compute_focus_score, to_grayscale_uint8  # noqa: E402
 
 Z_RE = re.compile(r"(?:^|[_/\\-])z[_-]?(\d{1,2})(?:[_/\\-]|\.|$)", re.I)
+SITE_RE = re.compile(r"(.+_[a-p]\d{2}_s\d+)_w[12]", re.I)
 
 
 def parse_z(path: Path) -> int | None:
     for part in [path.name, *path.parts[::-1]]:
-        m = Z_RE.search(str(part))
-        if m:
-            return int(m.group(1))
+        match = Z_RE.search(str(part))
+        if match:
+            return int(match.group(1))
     return None
+
+
+def site_key(path: Path) -> str:
+    # UUIDs after w1 identify individual images, not a physical z-stack.
+    match = SITE_RE.match(path.stem)
+    return match.group(1).lower() if match else Z_RE.sub("_zXX_", path.stem)
 
 
 def load_gray(path: Path) -> np.ndarray:
@@ -56,129 +52,114 @@ def load_gray(path: Path) -> np.ndarray:
     return to_grayscale_uint8(arr)
 
 
-def spearman_corr(x: np.ndarray, y: np.ndarray) -> float:
-    if len(x) < 3:
-        return float("nan")
-    rx = np.argsort(np.argsort(x))
-    ry = np.argsort(np.argsort(y))
-    return float(np.corrcoef(rx, ry)[0, 1])
+def spearman_corr(x: np.ndarray, y: np.ndarray) -> float | None:
+    if len(x) < 3 or np.ptp(x) == 0 or np.ptp(y) == 0:
+        return None
+    return float(spearmanr(x, y).statistic)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="BBBC006 focus QC (measured only)")
-    parser.add_argument("--root", type=Path, required=True, help="Root of extracted BBBC006 z folders")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--z-focus", type=int, default=16)
-    parser.add_argument("--max-sites", type=int, default=30, help="Max unique site stems to score")
+    parser.add_argument("--max-sites", type=int, default=30, help="0 scores every physical site")
+    parser.add_argument("--expected-z", type=int, nargs="+", help="Required plane set per physical site")
     parser.add_argument("--out-dir", type=Path, default=Path("outputs/bbbc006_focus_qc"))
     args = parser.parse_args()
-
     root = args.root.expanduser().resolve()
     if not root.is_dir():
         print(f"ERROR: root not found: {root}", file=sys.stderr)
-        print("Download selected z-plane zips from https://bbbc.broadinstitute.org/BBBC006", file=sys.stderr)
         return 2
-
-    # Collect tifs with parseable z
-    files: list[tuple[Path, int]] = []
-    for p in root.rglob("*"):
-        if not p.is_file() or p.suffix.lower() not in {".tif", ".tiff"}:
+    sites = defaultdict(list)
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in {".tif", ".tiff"} or "__MACOSX" in path.parts:
             continue
-        if "__MACOSX" in p.parts:
+        if "w2" in path.name.lower() and "w1" not in path.name.lower():
             continue
-        # prefer Hoechst w1 if present in name
-        name_l = p.name.lower()
-        if "w2" in name_l and "w1" not in name_l:
+        z = parse_z(path)
+        if z is not None:
+            sites[site_key(path)].append((path, z))
+    keys = sorted(sites)
+    if args.max_sites > 0:
+        keys = keys[: args.max_sites]
+    expected = set(args.expected_z) if args.expected_z else {z for stack in sites.values() for _, z in stack}
+    rows, site_rows, failures = [], [], []
+    for key in keys:
+        stack = sorted(sites[key], key=lambda item: item[1])
+        zs = [z for _, z in stack]
+        if set(zs) != expected or len(zs) != len(set(zs)):
+            failures.append(dict(site=key, error="Missing or duplicate z planes", observed=zs))
             continue
-        z = parse_z(p)
-        if z is None:
-            continue
-        files.append((p, z))
-
-    if not files:
-        print("ERROR: no TIFFs with z index in path/name under", root, file=sys.stderr)
-        return 3
-
-    # Group by site stem (strip z token approximately via parent+stem without z)
-    from collections import defaultdict
-
-    sites: dict[str, list[tuple[Path, int]]] = defaultdict(list)
-    for p, z in files:
-        # site key: filename without extension, remove z_XX patterns
-        key = Z_RE.sub("_zXX_", p.stem)
-        sites[key].append((p, z))
-
-    site_keys = sorted(sites.keys())[: max(1, args.max_sites)]
-    rows = []
-    rank_hits = 0
-    rank_total = 0
-
-    for key in site_keys:
-        stack = sorted(sites[key], key=lambda t: t[1])
         scores = []
         for path, z in stack:
             try:
-                gray = load_gray(path)
-                fs = compute_focus_score(gray)
+                score = float(compute_focus_score(load_gray(path)))
+                if not np.isfinite(score):
+                    raise ValueError("Non-finite focus score")
             except Exception as exc:
-                print(f"  FAIL {path.name}: {exc}")
+                failures.append(dict(site=key, file=path.name, error=str(exc)))
                 continue
-            scores.append((z, fs, path.name))
+            scores.append((z, score))
             rows.append(
-                {
-                    "site": key,
-                    "z": z,
-                    "focus_score": fs,
-                    "abs_dz": abs(z - args.z_focus),
-                    "file": path.name,
-                }
+                dict(
+                    site=key,
+                    z=z,
+                    focus_score=score,
+                    abs_dz=abs(z - args.z_focus),
+                    expert_in_focus=11 <= z <= 23,
+                    file=path.name,
+                )
             )
-        if len(scores) < 3:
+        if len(scores) != len(expected):
             continue
-        zs = np.array([s[0] for s in scores], dtype=float)
-        fs = np.array([s[1] for s in scores], dtype=float)
-        # best predicted focal plane = argmax focus score
-        z_hat = int(zs[int(np.argmax(fs))])
-        rank_total += 1
-        if abs(z_hat - args.z_focus) <= 2:
-            rank_hits += 1
-        corr = spearman_corr(fs, -np.abs(zs - args.z_focus))
-        print(f"  site {key[:40]}... n_z={len(scores)} z_hat={z_hat} spearman_vs_sharpness_proxy={corr:.3f}")
-
-    if not rows:
-        print("ERROR: no scores computed", file=sys.stderr)
-        return 4
-
-    abs_dz = np.array([r["abs_dz"] for r in rows], dtype=float)
-    focus = np.array([r["focus_score"] for r in rows], dtype=float)
-    corr_all = spearman_corr(focus, -abs_dz)
-
-    summary = {
-        "n_planes_scored": float(len(rows)),
-        "n_sites": float(rank_total),
-        "z_focus": float(args.z_focus),
-        "frac_argmax_within_2_planes": float(rank_hits / rank_total) if rank_total else float("nan"),
-        "spearman_focus_vs_neg_abs_dz": float(corr_all),
-    }
-
-    out_dir = args.out_dir.expanduser().resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "dataset": "BBBC006",
-        "source": "https://bbbc.broadinstitute.org/BBBC006",
-        "metric": "qc_pipeline.compute_focus_score (Laplacian variance)",
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-        "summary": summary,
-        "per_plane": rows,
-        "note": "Measured only on local extract. Positive Spearman means score falls as |z-z_focus| grows.",
-    }
-    out_json = out_dir / f"bbbc006_focus_sites{int(rank_total)}.json"
-    out_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-    print("\n=== SUMMARY (measured only) ===")
-    for k, v in summary.items():
-        print(f"  {k}: {v}")
-    print(f"Wrote {out_json}")
-    return 0
+        zs, focus = np.array(scores).T
+        best = int(zs[np.argmax(focus)])
+        site_rows.append(
+            dict(
+                site=key,
+                n_planes=len(scores),
+                best_z=best,
+                within_2_planes=abs(best - args.z_focus) <= 2,
+                spearman=spearman_corr(focus, -np.abs(zs - args.z_focus)),
+            )
+        )
+    summary = dict(
+        n_planes_scored=len(rows),
+        n_sites=len(site_rows),
+        n_requested_sites=len(keys),
+        planes=sorted(expected),
+        z_focus=args.z_focus,
+        frac_argmax_within_2_planes=float(np.mean([r["within_2_planes"] for r in site_rows])) if site_rows else None,
+    )
+    if rows:
+        focus = np.array([r["focus_score"] for r in rows])
+        truth = np.array([r["expert_in_focus"] for r in rows])
+        npos, nneg = int(truth.sum()), int((~truth).sum())
+        summary["expert_in_focus_auroc"] = (
+            float((rankdata(focus)[truth].sum() - npos * (npos + 1) / 2) / (npos * nneg)) if npos and nneg else None
+        )
+        summary["fixed_focus_threshold"] = 100.0
+        summary["sensitivity_at_100"] = float(np.mean(focus[truth] >= 100)) if npos else None
+        summary["specificity_at_100"] = float(np.mean(focus[~truth] < 100)) if nneg else None
+        summary["spearman_focus_vs_neg_abs_dz"] = spearman_corr(focus, -np.array([r["abs_dz"] for r in rows]))
+    payload = dict(
+        dataset="BBBC006",
+        source="https://bbbc.broadinstitute.org/BBBC006",
+        timestamp_utc=datetime.now(timezone.utc).isoformat(),
+        summary=summary,
+        complete=bool(site_rows) and not failures,
+        failures=failures,
+        per_plane=rows,
+        per_site=site_rows,
+        note=("Measured selected planes. Expert focus labels; automated segmentation labels are not expert "
+              "segmentation truth. Sites share one plate and are not independent biological replicates."),
+    )
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    out = args.out_dir / f"bbbc006_focus_sites{len(site_rows)}.json"
+    out.write_text(json.dumps(payload, indent=2, allow_nan=False))
+    print(json.dumps(summary, indent=2))
+    print(f"Wrote {out}")
+    return 0 if payload["complete"] else 6
 
 
 if __name__ == "__main__":

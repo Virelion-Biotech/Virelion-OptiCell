@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import sys
@@ -36,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from validation import benchmark_segmentation, paired_segmentation_metrics  # noqa: E402
+from validation import aggregate_segmentation_rows, paired_segmentation_metrics  # noqa: E402
 from qc_pipeline import (  # noqa: E402
     to_grayscale_uint8,
     segment_threshold,
@@ -134,22 +135,22 @@ def decode_bbbc038_instance_masks(record: Path, shape: tuple[int, int]) -> np.nd
     labels = np.zeros(shape, dtype=np.int32)
     mask_dir = record / "masks"
     if not mask_dir.is_dir():
-        return labels  # stage1_train records always have masks/; guard anyway
+        raise FileNotFoundError(f"Missing reference mask directory: {mask_dir}")
     next_id = 1
     for mf in sorted(mask_dir.glob("*.png")):
         m = cv2.imread(str(mf), cv2.IMREAD_UNCHANGED)
         if m is None:
-            continue
+            raise IOError(f"Could not read reference mask {mf}")
         if m.ndim == 3:
             m = m[:, :, 0]
         if m.shape != shape:
-            m = cv2.resize(
-                m.astype(np.uint8), (shape[1], shape[0]), interpolation=cv2.INTER_NEAREST
-            )
+            raise ValueError(f"Reference mask shape {m.shape} differs from image {shape}")
         fg = m > 0
         if not fg.any():
             continue
-        labels[fg & (labels == 0)] = next_id
+        if np.any(fg & (labels != 0)):
+            raise ValueError(f"Overlapping per-instance reference masks: {mf}")
+        labels[fg] = next_id
         next_id += 1
     return labels
 
@@ -201,7 +202,7 @@ def main() -> int:
         return 3
     print(f"[pair] records={len(records)}")
 
-    records = records[: max(1, args.max_images)]
+    records = records if args.max_images == 0 else records[: max(1, args.max_images)]
     print(f"[run] backend={args.backend} n_images={len(records)} gpu={args.gpu}")
     print(f"[env] cellpose_available={_HAS_CELLPOSE} import_error={_CELLPOSE_IMPORT_ERROR!r}")
 
@@ -225,8 +226,7 @@ def main() -> int:
         f"max_label={int(sample_truth.max())} fg_pixels={int((sample_truth > 0).sum())}"
     )
 
-    pred_labels: list[np.ndarray] = []
-    truth_labels: list[np.ndarray] = []
+    failures: list[dict] = []
     per_image: list[dict] = []
     skipped_empty_gt: list[str] = []
 
@@ -265,8 +265,6 @@ def main() -> int:
                 **{k: float(v) for k, v in metrics.items()},
             }
             per_image.append(row)
-            pred_labels.append(pred)
-            truth_labels.append(truth)
             print(
                 f"  [{i}/{len(records)}] {record.name}: "
                 f"truth={truth_count} pred={int(seg.count)} "
@@ -275,16 +273,13 @@ def main() -> int:
                 f"conf={conf['confidence_score']:.0f}"
             )
         except Exception as exc:
+            failures.append({"image": record.name, "error": str(exc)})
             print(f"  [{i}/{len(records)}] FAIL {record.name}: {exc}")
-
-    if not pred_labels:
-        print("ERROR: no successful segmentations", file=sys.stderr)
-        return 4
 
     if skipped_empty_gt:
         print(f"[note] skipped empty-GT records: {len(skipped_empty_gt)} -> {skipped_empty_gt}")
 
-    summary = benchmark_segmentation(pred_labels, truth_labels)
+    summary = aggregate_segmentation_rows(per_image) if per_image else {}
     payload = {
         "dataset": "BBBC038",
         "source": "https://bbbc.broadinstitute.org/BBBC038",
@@ -293,7 +288,7 @@ def main() -> int:
         "cellpose_model": args.cellpose_model if needs_cellpose else None,
         "gpu": bool(args.gpu),
         "n_requested": len(records),
-        "n_scored": len(pred_labels),
+        "n_scored": len(per_image),
         "n_skipped_empty_gt": len(skipped_empty_gt),
         "skipped_empty_gt": skipped_empty_gt,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -301,6 +296,9 @@ def main() -> int:
             "script": "scripts/run_bbbc038_validation.py",
             "repo": "Virelion-Biotech/Virelion-OptiCell",
         },
+        "n_failed": len(failures),
+        "failures": failures,
+        "complete": len(per_image) == len(records) and not failures,
         "summary": {k: float(v) for k, v in summary.items()},
         "per_image": per_image,
         "note": (
@@ -310,23 +308,22 @@ def main() -> int:
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_json = out_dir / f"bbbc038_{args.backend}_n{len(pred_labels)}.json"
-    out_csv = out_dir / f"bbbc038_{args.backend}_n{len(pred_labels)}.csv"
+    out_json = out_dir / f"bbbc038_{args.backend}_n{len(per_image)}.json"
+    out_csv = out_dir / f"bbbc038_{args.backend}_n{len(per_image)}.csv"
     out_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     if per_image:
-        keys = list(per_image[0].keys())
-        lines = [",".join(keys)]
-        for row in per_image:
-            lines.append(",".join(str(row[k]) for k in keys))
-        out_csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        with out_csv.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=list(per_image[0]))
+            writer.writeheader()
+            writer.writerows(per_image)
 
     print("\n=== SUMMARY (measured only) ===")
     for k, v in sorted(summary.items()):
         print(f"  {k}: {v}")
     print(f"\nWrote {out_json}")
     print(f"Wrote {out_csv}")
-    return 0
+    return 6 if failures or not per_image else 0
 
 
 if __name__ == "__main__":
