@@ -46,7 +46,7 @@ for split in ["val", "test"]:
     src = data_root / f"raw/livecell_coco_{split}.json"
     source_hash = hashlib.sha256(src.read_bytes()).hexdigest()
     coco = json.loads(src.read_text())
-    expected[split] = [i["file_name"] for i in coco["images"]]
+    expected[split] = [i["id"] for i in coco["images"]]
     lookup = {}
     for a in coco["annotations"]:
         lookup.setdefault(a["image_id"], []).append(a)
@@ -136,7 +136,7 @@ for split in ["val", "test"]:
         if s == split
     ]
     rows = [r for c in chunks for r in c["per_image"]]
-    names = [r["file_name"] for r in rows]
+    names = [r["image_id"] for r in rows]
     if len(names) != len(set(names)) or len(names) != len(expected[split]) or set(names) != set(expected[split]):
         raise ValueError(f"Incomplete or duplicate full-split coverage for {split}")
     sys.path.insert(0, str(ROOT))
@@ -146,6 +146,7 @@ for split in ["val", "test"]:
     payload.update(
         n_requested=len(expected[split]),
         n_scored=len(rows),
+        n_unique_source_images=len(set(r["file_name"] for r in rows)),
         n_failed=sum(c["n_failed"] for c in chunks),
         n_missing_files=sum(c["n_missing_files"] for c in chunks),
         failures=[f for c in chunks for f in c["failures"]],

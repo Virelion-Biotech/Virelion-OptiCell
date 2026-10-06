@@ -302,6 +302,7 @@ def main() -> int:
             conf = fov_confidence(gray, pred)
             row = {
                 "index": i,
+                "image_id": int(image_id),
                 "file_name": file_name,
                 "cell_type": file_name.split("_")[0] if "_" in file_name else "",
                 "pred_count": int(seg.count),

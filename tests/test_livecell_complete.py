@@ -20,8 +20,10 @@ def test_checkpointed_complete_runner_covers_splits_and_invalidates_changed_imag
     path = data / "images" / "test_cell.png"
     cv2.imwrite(str(path), image)
     coco = dict(
-        images=[dict(id=42, file_name=path.name, height=32, width=32)],
-        annotations=[dict(id=1, image_id=42, segmentation=[[8.0, 8.0, 24.0, 8.0, 24.0, 24.0, 8.0, 24.0]])],
+        images=[dict(id=i, file_name=path.name, height=32, width=32) for i in [42, 43]],
+        annotations=[
+            dict(id=i, image_id=i, segmentation=[[8.0, 8.0, 24.0, 8.0, 24.0, 24.0, 8.0, 24.0]]) for i in [42, 43]
+        ],
         categories=[],
     )
     for split in ["val", "test"]:
@@ -36,11 +38,13 @@ def test_checkpointed_complete_runner_covers_splits_and_invalidates_changed_imag
     ]
     env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     subprocess.run(command, check=True, capture_output=True, env=env, timeout=120)
-    result = output / "val/livecell_val_threshold_n1.json"
+    result = output / "val/livecell_val_threshold_n2.json"
     payload = json.loads(result.read_text())
     assert payload["complete"] and payload["coverage_verified_against_full_official_split"]
-    assert payload["n_scored"] == 1
-    assert (output / "test/livecell_test_threshold_n1.json").exists()
+    assert payload["n_scored"] == 2
+    assert payload["n_unique_source_images"] == 1
+    assert {r["image_id"] for r in payload["per_image"]} == {42, 43}
+    assert (output / "test/livecell_test_threshold_n2.json").exists()
     manifest = output / "_chunks/val_0000/manifest.json"
     prior = json.loads(manifest.read_text())
     cv2.imwrite(str(path), np.zeros_like(image))
