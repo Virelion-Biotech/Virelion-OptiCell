@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from qc_pipeline import QCThresholds, analyze_folder, analyze_paths
+from .optical_stimulation import extract_optical_stimulation
 
 
 def _find_input(payload: dict) -> tuple[str, dict]:
@@ -94,6 +95,7 @@ def main() -> int:
     try:
         payload = json.loads(raw)
         input_path, params = _find_input(payload)
+        optical_stimulation = extract_optical_stimulation(payload, params)
         thresholds = QCThresholds(
             focus_min=_parse_float(params, "focus_min", 100.0),
             brightness_min=_parse_float(params, "brightness_min", 25.0),
@@ -128,6 +130,7 @@ def main() -> int:
             "input_path": str(path),
             "cell_method": method,
             "n_rows": int(len(result)) if hasattr(result, "__len__") else None,
+            "optogenetic_stimulation": optical_stimulation,
             "results": _jsonable(result),
         }
         print(json.dumps(output, allow_nan=False, default=str))
