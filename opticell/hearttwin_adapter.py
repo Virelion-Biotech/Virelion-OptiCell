@@ -10,7 +10,11 @@ import numpy as np
 import pandas as pd
 
 from qc_pipeline import QCThresholds, analyze_folder, analyze_paths
-from .optical_stimulation import extract_optical_stimulation
+
+try:  # package execution: python -m opticell.hearttwin_adapter
+    from .optical_stimulation import extract_optical_stimulation
+except ImportError:  # direct-script compatibility used by some local registries
+    from optical_stimulation import extract_optical_stimulation
 
 
 def _find_input(payload: dict) -> tuple[str, dict]:
