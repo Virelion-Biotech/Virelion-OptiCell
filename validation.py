@@ -69,10 +69,13 @@ def _label_ids(labels: np.ndarray) -> np.ndarray:
 
 def _centroids_from_labels(labels: np.ndarray) -> np.ndarray:
     arr = np.asarray(labels)
-    ids = _label_ids(arr)
-    return np.asarray(
-        [np.argwhere(arr == label).mean(axis=0) for label in ids], dtype=float
-    )
+    _label_ids(arr)  # Validate dimensions and integer IDs.
+    ids, inverse = np.unique(arr, return_inverse=True)
+    inverse = inverse.ravel()
+    counts = np.bincount(inverse)
+    coordinates = np.indices(arr.shape, dtype=np.int32).reshape(arr.ndim, -1)
+    means = [np.bincount(inverse, weights=axis) / counts for axis in coordinates]
+    return np.stack(means, axis=1)[ids > 0]
 
 
 def _instance_count(labels: np.ndarray) -> int:
@@ -167,7 +170,43 @@ def paired_segmentation_metrics(
         "precision": inst["precision"],
         "recall": inst["recall"],
         "f1": inst["f1"],
+        **instance_iou_metrics(predicted, truth),
     }
+
+
+def instance_iou_metrics(predicted: np.ndarray, truth: np.ndarray, threshold: float = 0.5) -> dict[str, float]:
+    """Shape-sensitive one-to-one instance matching, separate from centroid F1."""
+    p, g = np.asarray(predicted), np.asarray(truth)
+    if p.shape != g.shape:
+        raise ValueError("predicted_labels and truth_labels must have identical shapes")
+    if not 0 < threshold <= 1 or not np.isfinite(threshold):
+        raise ValueError("IoU threshold must be finite and in (0, 1]")
+    for a in (p, g):
+        if not np.issubdtype(a.dtype, np.integer) or np.any(a < 0):
+            raise ValueError("labels must contain non-negative integer instance IDs")
+    # Compact IDs before making a contingency table; large sparse label IDs
+    # must not cause allocations proportional to max(label).
+    pu, pi = np.unique(np.r_[0, p.ravel()], return_inverse=True)
+    gu, gi = np.unique(np.r_[0, g.ravel()], return_inverse=True)
+    table = np.bincount(pi[1:] * len(gu) + gi[1:], minlength=len(pu) * len(gu)).reshape(len(pu), len(gu))
+    npred, ngt = len(pu) - 1, len(gu) - 1
+    tp = 0
+    if npred and ngt:
+        intersection = table[1:, 1:]
+        union = table.sum(axis=1)[1:, None] + table.sum(axis=0)[None, 1:] - intersection
+        iou = np.divide(intersection, union, out=np.zeros_like(intersection, dtype=float), where=union > 0)
+        valid = iou >= threshold
+        # Maximize admissible cardinality before optimizing IoU.
+        cost = np.where(valid, 1 - iou, min(npred, ngt) + 1.)
+        rows, cols = linear_sum_assignment(cost)
+        tp = int(valid[rows, cols].sum())
+    fp, fn = npred - tp, ngt - tp
+    precision = tp / npred if npred else 1.
+    recall = tp / ngt if ngt else 1.
+    f1 = 2 * tp / (npred + ngt) if npred + ngt else 1.
+    return {"instance_iou_precision": precision, "instance_iou_recall": recall, "instance_iou_f1": f1,
+            "instance_iou_true_positives": float(tp), "instance_iou_false_positives": float(fp),
+            "instance_iou_false_negatives": float(fn)}
 
 
 def _finite_mean(values: list[float]) -> float:
@@ -193,6 +232,14 @@ def benchmark_segmentation(
         for pred, truth in zip(predicted_labels, truth_labels)
     ]
 
+    return aggregate_segmentation_rows(rows)
+
+
+def aggregate_segmentation_rows(rows: Sequence[dict]) -> dict[str, float]:
+    """Aggregate already scored images without retaining every mask in memory."""
+    if not rows:
+        raise ValueError("At least one validation image is required")
+
     def mean(key: str) -> float:
         return _finite_mean([row[key] for row in rows])
 
@@ -214,4 +261,7 @@ def benchmark_segmentation(
         "f1": mean("instance_f1"),
         "absolute_count_error": mean("absolute_count_error"),
         "relative_count_error": mean("relative_count_error"),
+        "instance_iou_f1_mean": mean("instance_iou_f1"),
+        "instance_iou_precision_mean": mean("instance_iou_precision"),
+        "instance_iou_recall_mean": mean("instance_iou_recall"),
     }
