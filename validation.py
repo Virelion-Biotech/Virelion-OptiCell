@@ -265,3 +265,14 @@ def aggregate_segmentation_rows(rows: Sequence[dict]) -> dict[str, float]:
         "instance_iou_precision_mean": mean("instance_iou_precision"),
         "instance_iou_recall_mean": mean("instance_iou_recall"),
     }
+
+
+def json_ready_metrics(value):
+    """Represent undefined/non-finite measurements as JSON null, never as zero."""
+    if isinstance(value, dict):
+        return {key: json_ready_metrics(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_ready_metrics(item) for item in value]
+    if isinstance(value, (float, np.floating)):
+        return float(value) if np.isfinite(value) else None
+    return value

@@ -48,7 +48,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from validation import aggregate_segmentation_rows, paired_segmentation_metrics  # noqa: E402
+from validation import aggregate_segmentation_rows, paired_segmentation_metrics, json_ready_metrics  # noqa: E402
 from qc_pipeline import (  # noqa: E402
     to_grayscale_uint8,
     segment_threshold,
@@ -373,7 +373,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_json = out_dir / f"livecell_{args.split}_{args.backend}_n{len(per_image)}.json"
     out_csv = out_dir / f"livecell_{args.split}_{args.backend}_n{len(per_image)}.csv"
-    out_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    out_json.write_text(json.dumps(json_ready_metrics(payload), indent=2, allow_nan=False), encoding="utf-8")
 
     if per_image:
         with out_csv.open("w", newline="", encoding="utf-8") as stream:

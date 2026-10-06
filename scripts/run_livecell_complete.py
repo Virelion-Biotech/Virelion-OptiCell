@@ -140,7 +140,7 @@ for split in ["val", "test"]:
     if len(names) != len(set(names)) or len(names) != len(expected[split]) or set(names) != set(expected[split]):
         raise ValueError(f"Incomplete or duplicate full-split coverage for {split}")
     sys.path.insert(0, str(ROOT))
-    from validation import aggregate_segmentation_rows
+    from validation import aggregate_segmentation_rows, json_ready_metrics
 
     payload = dict(chunks[0])
     payload.update(
@@ -163,7 +163,7 @@ for split in ["val", "test"]:
     payload["max_truth_instances_per_image"] = max(r["truth_count"] for r in rows)
     out = output / split
     out.mkdir(exist_ok=True)
-    (out / f"livecell_{split}_{args.backend}_n{len(rows)}.json").write_text(json.dumps(payload, indent=2))
+    (out / f"livecell_{split}_{args.backend}_n{len(rows)}.json").write_text(json.dumps(json_ready_metrics(payload), indent=2, allow_nan=False))
     import csv
 
     with (out / f"livecell_{split}_{args.backend}_n{len(rows)}.csv").open("w", newline="") as stream:
