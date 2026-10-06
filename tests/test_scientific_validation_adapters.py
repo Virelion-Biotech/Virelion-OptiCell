@@ -124,3 +124,25 @@ def test_adaptive_bright_objects_do_not_become_background_halos():
     assert result.count == 2
     assert metrics["pixel_dice"] > 0.9
     assert metrics["instance_iou_f1"] == 1.0
+
+
+def test_missing_bbbc039_reference_is_not_silently_excluded(tmp_path):
+    from scripts.run_bbbc039_validation import find_pairs
+
+    images, masks = tmp_path / "images", tmp_path / "masks"
+    images.mkdir()
+    masks.mkdir()
+    cv2.imwrite(str(images / "unpaired.tif"), np.zeros((8, 8), np.uint8))
+    with pytest.raises(FileNotFoundError, match="missing reference"):
+        find_pairs(images, masks)
+
+
+def test_ambiguous_source_files_fail_without_conflating_repeated_coco_ids(tmp_path):
+    from scripts.run_livecell_validation import build_image_index
+
+    for folder in ["first", "second"]:
+        path = tmp_path / folder
+        path.mkdir()
+        cv2.imwrite(str(path / "same.tif"), np.zeros((8, 8), np.uint8))
+    with pytest.raises(ValueError, match="Ambiguous source image"):
+        build_image_index(tmp_path)

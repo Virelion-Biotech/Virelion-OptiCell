@@ -160,6 +160,8 @@ def find_pairs(images_root: Path, masks_root: Path) -> list[tuple[Path, Path]]:
         f"[pair] images={len(image_files)} masks={len(mask_by_stem)} "
         f"paired={len(pairs)} missing_mask={missing}"
     )
+    if missing:
+        raise FileNotFoundError(f"{missing} image(s) have missing reference masks")
     if pairs:
         print(f"[pair] example: {pairs[0][0].name} <-> {pairs[0][1].name}")
     return pairs

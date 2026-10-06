@@ -101,7 +101,9 @@ def build_image_index(images_root: Path) -> dict[str, Path]:
     index: dict[str, Path] = {}
     for ext in ("*.tif", "*.tiff", "*.png", "*.jpg", "*.jpeg"):
         for p in images_root.rglob(ext):
-            index.setdefault(p.name, p)
+            if p.name in index:
+                raise ValueError(f"Ambiguous source image filename: {p.name}")
+            index[p.name] = p
     return index
 
 
