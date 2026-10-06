@@ -108,3 +108,19 @@ def test_ctc_seg_scores_only_annotated_objects_and_requires_majority_overlap():
     assert seg_object_scores(prediction, truth) == [1.0]
     prediction[2, 2:4] = 0  # Exactly 50 percent GT coverage does not qualify.
     assert seg_object_scores(prediction, truth) == [0.0]
+
+
+def test_adaptive_bright_objects_do_not_become_background_halos():
+    from qc_pipeline import segment_threshold
+    from validation import paired_segmentation_metrics
+
+    image = np.zeros((80, 100), np.uint8)
+    truth = np.zeros_like(image, dtype=np.int32)
+    for index, (x, y) in enumerate([(28, 30), (70, 50)], 1):
+        cv2.circle(image, (x, y), 8, 200, -1)
+        cv2.circle(truth, (x, y), 8, index, -1)
+    result = segment_threshold(image, adaptive=True)
+    metrics = paired_segmentation_metrics(result.labels, truth)
+    assert result.count == 2
+    assert metrics["pixel_dice"] > 0.9
+    assert metrics["instance_iou_f1"] == 1.0

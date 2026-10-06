@@ -315,7 +315,9 @@ def segment_threshold(gray: np.ndarray, min_area: int = 15, max_area_frac: float
         raise ValueError("invalid segmentation area limits")
     blurred = cv2.GaussianBlur(arr, (3, 3), 0)
     if adaptive:
-        thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 3)
+        # A positive C admits uniform background; inversion then selects dark
+        # halos instead of bright cells. Require a positive local excess.
+        thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, -3)
     else:
         _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     if float((thresh > 0).mean()) > 0.5:
