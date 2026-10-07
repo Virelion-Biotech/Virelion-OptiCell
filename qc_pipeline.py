@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+from importlib.metadata import PackageNotFoundError, version
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
@@ -364,7 +365,16 @@ class CellposeSegmenter:
             if self.model_type not in known and not Path(self.model_type).is_file():
                 raise ValueError(f"Unknown or missing Cellpose checkpoint: {self.model_type}")
         last_err: Optional[Exception] = None
-        for kwargs0 in ({"pretrained_model": self.model_type}, {"model_type": self.model_type}):
+        try:
+            cellpose_major = int(version("cellpose").split(".")[0])
+        except (PackageNotFoundError, ValueError):
+            cellpose_major = None
+        choices = ({"pretrained_model": self.model_type}, {"model_type": self.model_type})
+        if cellpose_major is not None:
+            # v3 selects named models with model_type; v4 ignores model_type.
+            key = "pretrained_model" if cellpose_major >= 4 or Path(self.model_type).is_file() else "model_type"
+            choices = ({key: self.model_type},)
+        for kwargs0 in choices:
             kwargs = {**kwargs0, **({"gpu": bool(self.gpu)} if self.gpu is not None else {})}
             try:
                 candidate = _cellpose_models.CellposeModel(**kwargs)

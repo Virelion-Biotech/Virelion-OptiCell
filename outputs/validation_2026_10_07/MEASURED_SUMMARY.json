@@ -1,0 +1,2815 @@
+{
+  "verdict": "Broad CPU characterization completed; full scientific validation not established.",
+  "coverage": {
+    "BBBC001": 6,
+    "BBBC004": 100,
+    "BBBC005": 19200,
+    "BBBC006": 26112,
+    "BBBC038": 670,
+    "BBBC039": 200,
+    "LIVECell_official_records": 2134,
+    "CellFMCount": 3023,
+    "AutoQC_Bench": 148,
+    "CTC_frames": 1077
+  },
+  "total_records": 52670,
+  "segmentation": [
+    {
+      "study": "BBBC039 threshold",
+      "n": 200,
+      "dice": 0.9248596038102792,
+      "instance_iou_f1": 0.7662581088277376,
+      "count_mae": 28.895,
+      "interval_unit": "source plate",
+      "intervals": {
+        "dice": {
+          "low": 0.9055068592544468,
+          "high": 0.9420341546804214,
+          "n_clusters": 20
+        },
+        "instance_iou_f1": {
+          "low": 0.7445994613862181,
+          "high": 0.787723610849466,
+          "n_clusters": 20
+        },
+        "absolute_count_error": {
+          "low": 25.52246450996451,
+          "high": 32.28075533175355,
+          "n_clusters": 20
+        }
+      }
+    },
+    {
+      "study": "BBBC039 adaptive",
+      "n": 200,
+      "dice": 0.9277749556657315,
+      "instance_iou_f1": 0.8736325470020937,
+      "count_mae": 24.345,
+      "interval_unit": "source plate",
+      "intervals": {
+        "dice": {
+          "low": 0.912290043168719,
+          "high": 0.941560338928161,
+          "n_clusters": 20
+        },
+        "instance_iou_f1": {
+          "low": 0.8574164159262059,
+          "high": 0.8890276975467154,
+          "n_clusters": 20
+        },
+        "absolute_count_error": {
+          "low": 9.24697873324087,
+          "high": 40.666632192133086,
+          "n_clusters": 20
+        }
+      }
+    },
+    {
+      "study": "BBBC038 threshold",
+      "n": 670,
+      "dice": 0.8555960510585419,
+      "instance_iou_f1": 0.6939928350944666,
+      "count_mae": 14.064179104477612,
+      "interval_unit": "field; biological grouping unavailable",
+      "intervals": {
+        "dice": {
+          "low": 0.8416049146089053,
+          "high": 0.8683894521689641,
+          "n_clusters": 670
+        },
+        "instance_iou_f1": {
+          "low": 0.67499582726604,
+          "high": 0.712508673203227,
+          "n_clusters": 670
+        },
+        "absolute_count_error": {
+          "low": 11.93570895522388,
+          "high": 16.42731343283582,
+          "n_clusters": 670
+        }
+      }
+    },
+    {
+      "study": "BBBC038 adaptive",
+      "n": 670,
+      "dice": 0.6089598428359221,
+      "instance_iou_f1": 0.5130421415539886,
+      "count_mae": 25.750746268656716,
+      "interval_unit": "field; biological grouping unavailable",
+      "intervals": {
+        "dice": {
+          "low": 0.582248785377076,
+          "high": 0.6373036452324663,
+          "n_clusters": 670
+        },
+        "instance_iou_f1": {
+          "low": 0.4839477120438751,
+          "high": 0.5423714488847391,
+          "n_clusters": 670
+        },
+        "absolute_count_error": {
+          "low": 22.08186567164179,
+          "high": 29.86723880597015,
+          "n_clusters": 670
+        }
+      }
+    },
+    {
+      "study": "LIVECell val threshold",
+      "n": 570,
+      "dice": 0.11314150072594312,
+      "instance_iou_f1": 0.003680005843085413,
+      "count_mae": 150.51754385964912,
+      "interval_unit": "cell line/acquisition well",
+      "intervals": {
+        "dice": {
+          "low": 0.07699383436113912,
+          "high": 0.1540338529968278,
+          "n_clusters": 22
+        },
+        "instance_iou_f1": {
+          "low": 0.0024420686990099735,
+          "high": 0.005512883789352936,
+          "n_clusters": 22
+        },
+        "absolute_count_error": {
+          "low": 117.22549246101661,
+          "high": 186.157933888443,
+          "n_clusters": 22
+        }
+      }
+    },
+    {
+      "study": "LIVECell test threshold",
+      "n": 1564,
+      "dice": 0.09543603295987466,
+      "instance_iou_f1": 0.0038135807555789024,
+      "count_mae": 153.10230179028133,
+      "interval_unit": "cell line/acquisition well",
+      "intervals": {
+        "dice": {
+          "low": 0.04493961041012784,
+          "high": 0.1577685600431154,
+          "n_clusters": 9
+        },
+        "instance_iou_f1": {
+          "low": 0.002379331686391549,
+          "high": 0.005469260969580072,
+          "n_clusters": 9
+        },
+        "absolute_count_error": {
+          "low": 103.67271701587664,
+          "high": 216.52257429947537,
+          "n_clusters": 9
+        }
+      }
+    }
+  ],
+  "bbbc039_official_partitions": [
+    {
+      "backend": "threshold",
+      "split": "training",
+      "n": 100,
+      "dice": 0.9221904083056124,
+      "instance_iou_f1": 0.763687410577582,
+      "count_mae": 29.33
+    },
+    {
+      "backend": "threshold",
+      "split": "validation",
+      "n": 50,
+      "dice": 0.9077392943689838,
+      "instance_iou_f1": 0.7502766119725942,
+      "count_mae": 31.08
+    },
+    {
+      "backend": "threshold",
+      "split": "test",
+      "n": 50,
+      "dice": 0.9473183042609078,
+      "instance_iou_f1": 0.7873810021831922,
+      "count_mae": 25.84
+    },
+    {
+      "backend": "adaptive",
+      "split": "training",
+      "n": 100,
+      "dice": 0.9226651377218874,
+      "instance_iou_f1": 0.8726668821838871,
+      "count_mae": 30.21
+    },
+    {
+      "backend": "adaptive",
+      "split": "validation",
+      "n": 50,
+      "dice": 0.9215482245062462,
+      "instance_iou_f1": 0.8698014942352151,
+      "count_mae": 28.78
+    },
+    {
+      "backend": "adaptive",
+      "split": "test",
+      "n": 50,
+      "dice": 0.9442213227129048,
+      "instance_iou_f1": 0.8793949294053849,
+      "count_mae": 8.18
+    }
+  ],
+  "counts": {
+    "bbbc001": {
+      "n_scored": 6,
+      "count_mae": 70.25,
+      "mean_relative_count_error": 0.18797815633302095,
+      "n_foreground_references": 0,
+      "foreground_dice": null
+    },
+    "bbbc004": {
+      "n_scored": 100,
+      "count_mae": 92.61,
+      "mean_relative_count_error": 0.3087,
+      "n_foreground_references": 100,
+      "foreground_dice": 0.9397661638312432
+    },
+    "bbbc005": {
+      "n_scored": 19200,
+      "count_mae": 26.733333333333334,
+      "mean_relative_count_error": 0.41992800956121495,
+      "n_foreground_references": 1200,
+      "foreground_dice": 0.8344417391304599,
+      "fully_in_focus_auroc": 0.9886782407407407
+    }
+  },
+  "focus": {
+    "n_images": 26112,
+    "n_sites": 768,
+    "n_planes": 34,
+    "focus_score_auroc": 0.3457832320899948,
+    "native_laplacian_variance_auroc": 0.7272135106149998,
+    "sensitivity_at_100": 0.41235977564102566,
+    "specificity_at_100": 0.3819444444444444
+  },
+  "autoqc": {
+    "n_images": 148,
+    "n_normal": 100,
+    "n_anomaly": 48,
+    "sensitivity": 0.6666666666666666,
+    "specificity": 0.37,
+    "accuracy": 0.46621621621621623,
+    "low_focus_anomaly_auroc": 0.465
+  },
+  "cellfmcount": {
+    "summary": {
+      "n_scored": 3023,
+      "count_mae": 244.246443929871,
+      "count_rmse": 649.35300276236,
+      "mean_relative_count_error": 21.087146648966712,
+      "n_empty_references": 518,
+      "n_images_with_outside_dots": 4,
+      "n_dots_outside_image": 4
+    },
+    "by_split": {
+      "test": {
+        "n_scored": 605,
+        "count_mae": 248.37355371900827,
+        "count_rmse": 662.955077445481,
+        "mean_relative_count_error": 26.211713395065203,
+        "n_empty_references": 102,
+        "n_images_with_outside_dots": 1,
+        "n_dots_outside_image": 1
+      },
+      "trainval": {
+        "n_scored": 2418,
+        "count_mae": 243.21381306865177,
+        "count_rmse": 645.9048714614772,
+        "mean_relative_count_error": 19.79960565331859,
+        "n_empty_references": 416,
+        "n_images_with_outside_dots": 3,
+        "n_dots_outside_image": 3
+      }
+    },
+    "by_test_staining": {
+      "AF488": {
+        "n_scored": 45,
+        "count_mae": 485.84444444444443,
+        "count_rmse": 1083.1558931607624,
+        "mean_relative_count_error": 204.84414160401005,
+        "n_empty_references": 7,
+        "n_images_with_outside_dots": 0,
+        "n_dots_outside_image": 0
+      },
+      "Cy3": {
+        "n_scored": 285,
+        "count_mae": 253.55087719298245,
+        "count_rmse": 753.8992859350202,
+        "mean_relative_count_error": 27.59775188457643,
+        "n_empty_references": 95,
+        "n_images_with_outside_dots": 0,
+        "n_dots_outside_image": 0
+      },
+      "DAPI": {
+        "n_scored": 275,
+        "count_mae": 204.14909090909092,
+        "count_rmse": 431.16851377706985,
+        "mean_relative_count_error": 0.570333086166899,
+        "n_empty_references": 0,
+        "n_images_with_outside_dots": 1,
+        "n_dots_outside_image": 1
+      }
+    }
+  },
+  "ctc": [
+    {
+      "dataset": "Fluo-N2DH-GOWT1",
+      "sequence": "01",
+      "target_kind": "measured",
+      "n_requested": 92,
+      "metrics": {
+        "AOGM": 14728.0,
+        "fp_nodes": 1687,
+        "fn_nodes": 1134,
+        "ns_nodes": 0,
+        "fp_edges": 0,
+        "fn_edges": 1134,
+        "ws_edges": 0,
+        "TRA": 0.37679043689833913,
+        "DET": 0.36700680272108843,
+        "LNK": 0.44275184275184276
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.21272101573600205,
+        "n_gold_seg_frames": 30,
+        "n_gold_seg_objects": 144,
+        "per_frame": [
+          {
+            "frame": 2,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 5,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 6,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 7,
+            "n_gold_objects": 1,
+            "seg": 0.0
+          },
+          {
+            "frame": 8,
+            "n_gold_objects": 1,
+            "seg": 0.0
+          },
+          {
+            "frame": 10,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 12,
+            "n_gold_objects": 1,
+            "seg": 0.0
+          },
+          {
+            "frame": 13,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 14,
+            "n_gold_objects": 1,
+            "seg": 0.0
+          },
+          {
+            "frame": 15,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 16,
+            "n_gold_objects": 3,
+            "seg": 0.0
+          },
+          {
+            "frame": 17,
+            "n_gold_objects": 1,
+            "seg": 0.0
+          },
+          {
+            "frame": 18,
+            "n_gold_objects": 1,
+            "seg": 0.0
+          },
+          {
+            "frame": 20,
+            "n_gold_objects": 3,
+            "seg": 0.19887165021156558
+          },
+          {
+            "frame": 21,
+            "n_gold_objects": 24,
+            "seg": 0.27349676495824204
+          },
+          {
+            "frame": 27,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 28,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 29,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 31,
+            "n_gold_objects": 24,
+            "seg": 0.3165232910147496
+          },
+          {
+            "frame": 32,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 33,
+            "n_gold_objects": 24,
+            "seg": 0.32968080016094664
+          },
+          {
+            "frame": 34,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 37,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 39,
+            "n_gold_objects": 24,
+            "seg": 0.33176628200562835
+          },
+          {
+            "frame": 40,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 41,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 44,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 45,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 46,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 47,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "Fluo-N2DH-GOWT1",
+      "sequence": "02",
+      "target_kind": "measured",
+      "n_requested": 92,
+      "metrics": {
+        "AOGM": 19697.0,
+        "fp_nodes": 1966,
+        "fn_nodes": 1543,
+        "ns_nodes": 0,
+        "fp_edges": 0,
+        "fn_edges": 1534,
+        "ws_edges": 0,
+        "TRA": 0.3179236789251333,
+        "DET": 0.30885975367500995,
+        "LNK": 0.3794498381877023
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.43062071356704046,
+        "n_gold_seg_frames": 20,
+        "n_gold_seg_objects": 121,
+        "per_frame": [
+          {
+            "frame": 1,
+            "n_gold_objects": 22,
+            "seg": 0.31937501472379165
+          },
+          {
+            "frame": 22,
+            "n_gold_objects": 1,
+            "seg": 0.9284434490481523
+          },
+          {
+            "frame": 25,
+            "n_gold_objects": 1,
+            "seg": 0.9134528130671506
+          },
+          {
+            "frame": 27,
+            "n_gold_objects": 1,
+            "seg": 0.9243097800655125
+          },
+          {
+            "frame": 28,
+            "n_gold_objects": 1,
+            "seg": 0.9184554230550823
+          },
+          {
+            "frame": 29,
+            "n_gold_objects": 1,
+            "seg": 0.911328349626222
+          },
+          {
+            "frame": 30,
+            "n_gold_objects": 1,
+            "seg": 0.9211045364891519
+          },
+          {
+            "frame": 35,
+            "n_gold_objects": 1,
+            "seg": 0.9210620311941898
+          },
+          {
+            "frame": 39,
+            "n_gold_objects": 1,
+            "seg": 0.9387423427928491
+          },
+          {
+            "frame": 46,
+            "n_gold_objects": 1,
+            "seg": 0.9351089588377723
+          },
+          {
+            "frame": 47,
+            "n_gold_objects": 1,
+            "seg": 0.9169851887243191
+          },
+          {
+            "frame": 52,
+            "n_gold_objects": 28,
+            "seg": 0.3672970682785382
+          },
+          {
+            "frame": 55,
+            "n_gold_objects": 28,
+            "seg": 0.3731091218009615
+          },
+          {
+            "frame": 60,
+            "n_gold_objects": 1,
+            "seg": 0.9424372320881813
+          },
+          {
+            "frame": 65,
+            "n_gold_objects": 1,
+            "seg": 0.9462521406929258
+          },
+          {
+            "frame": 72,
+            "n_gold_objects": 27,
+            "seg": 0.3523452615402482
+          },
+          {
+            "frame": 76,
+            "n_gold_objects": 1,
+            "seg": 0.936396228920462
+          },
+          {
+            "frame": 80,
+            "n_gold_objects": 1,
+            "seg": 0.9285619263003858
+          },
+          {
+            "frame": 82,
+            "n_gold_objects": 1,
+            "seg": 0.9302293451229622
+          },
+          {
+            "frame": 91,
+            "n_gold_objects": 1,
+            "seg": 0.9212908878504673
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "Fluo-N2DH-SIM+",
+      "sequence": "01",
+      "target_kind": "simulated",
+      "n_requested": 65,
+      "metrics": {
+        "AOGM": 5161.0,
+        "fp_nodes": 533,
+        "fn_nodes": 384,
+        "ns_nodes": 7,
+        "fp_edges": 0,
+        "fn_edges": 492,
+        "ws_edges": 15,
+        "TRA": 0.8275441498337593,
+        "DET": 0.8309167625623322,
+        "LNK": 0.8047452353169973
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.6180449663150132,
+        "n_gold_seg_frames": 65,
+        "n_gold_seg_objects": 2607,
+        "per_frame": [
+          {
+            "frame": 0,
+            "n_gold_objects": 30,
+            "seg": 0.7088873391807695
+          },
+          {
+            "frame": 1,
+            "n_gold_objects": 30,
+            "seg": 0.6852728420659598
+          },
+          {
+            "frame": 2,
+            "n_gold_objects": 30,
+            "seg": 0.6292153053351082
+          },
+          {
+            "frame": 3,
+            "n_gold_objects": 30,
+            "seg": 0.6068296293406826
+          },
+          {
+            "frame": 4,
+            "n_gold_objects": 30,
+            "seg": 0.6125635832511584
+          },
+          {
+            "frame": 5,
+            "n_gold_objects": 30,
+            "seg": 0.5614206178802904
+          },
+          {
+            "frame": 6,
+            "n_gold_objects": 30,
+            "seg": 0.5773569130605499
+          },
+          {
+            "frame": 7,
+            "n_gold_objects": 30,
+            "seg": 0.5231329803570021
+          },
+          {
+            "frame": 8,
+            "n_gold_objects": 30,
+            "seg": 0.43943694489346363
+          },
+          {
+            "frame": 9,
+            "n_gold_objects": 30,
+            "seg": 0.4825770773592492
+          },
+          {
+            "frame": 10,
+            "n_gold_objects": 32,
+            "seg": 0.5482600883631125
+          },
+          {
+            "frame": 11,
+            "n_gold_objects": 33,
+            "seg": 0.5207115708995279
+          },
+          {
+            "frame": 12,
+            "n_gold_objects": 33,
+            "seg": 0.5823850327382983
+          },
+          {
+            "frame": 13,
+            "n_gold_objects": 33,
+            "seg": 0.6218353270712796
+          },
+          {
+            "frame": 14,
+            "n_gold_objects": 35,
+            "seg": 0.5604176835855201
+          },
+          {
+            "frame": 15,
+            "n_gold_objects": 35,
+            "seg": 0.5166769030169833
+          },
+          {
+            "frame": 16,
+            "n_gold_objects": 35,
+            "seg": 0.40654858905092567
+          },
+          {
+            "frame": 17,
+            "n_gold_objects": 35,
+            "seg": 0.3416066816704874
+          },
+          {
+            "frame": 18,
+            "n_gold_objects": 36,
+            "seg": 0.4332801593508002
+          },
+          {
+            "frame": 19,
+            "n_gold_objects": 39,
+            "seg": 0.511176766220152
+          },
+          {
+            "frame": 20,
+            "n_gold_objects": 40,
+            "seg": 0.5405351126307018
+          },
+          {
+            "frame": 21,
+            "n_gold_objects": 41,
+            "seg": 0.5978551399553903
+          },
+          {
+            "frame": 22,
+            "n_gold_objects": 42,
+            "seg": 0.6210223063610529
+          },
+          {
+            "frame": 23,
+            "n_gold_objects": 42,
+            "seg": 0.6053384743004762
+          },
+          {
+            "frame": 24,
+            "n_gold_objects": 43,
+            "seg": 0.6276619745720968
+          },
+          {
+            "frame": 25,
+            "n_gold_objects": 43,
+            "seg": 0.6433312453105148
+          },
+          {
+            "frame": 26,
+            "n_gold_objects": 43,
+            "seg": 0.6370751297313226
+          },
+          {
+            "frame": 27,
+            "n_gold_objects": 43,
+            "seg": 0.6171497621104082
+          },
+          {
+            "frame": 28,
+            "n_gold_objects": 44,
+            "seg": 0.6655520768488953
+          },
+          {
+            "frame": 29,
+            "n_gold_objects": 44,
+            "seg": 0.7467539545966901
+          },
+          {
+            "frame": 30,
+            "n_gold_objects": 45,
+            "seg": 0.7312377010746117
+          },
+          {
+            "frame": 31,
+            "n_gold_objects": 44,
+            "seg": 0.6841767012744758
+          },
+          {
+            "frame": 32,
+            "n_gold_objects": 43,
+            "seg": 0.6671470478033236
+          },
+          {
+            "frame": 33,
+            "n_gold_objects": 43,
+            "seg": 0.678326545916077
+          },
+          {
+            "frame": 34,
+            "n_gold_objects": 43,
+            "seg": 0.6898564133311765
+          },
+          {
+            "frame": 35,
+            "n_gold_objects": 42,
+            "seg": 0.7487399491401167
+          },
+          {
+            "frame": 36,
+            "n_gold_objects": 43,
+            "seg": 0.7728608691392882
+          },
+          {
+            "frame": 37,
+            "n_gold_objects": 43,
+            "seg": 0.7972932796525997
+          },
+          {
+            "frame": 38,
+            "n_gold_objects": 43,
+            "seg": 0.7865902905664547
+          },
+          {
+            "frame": 39,
+            "n_gold_objects": 42,
+            "seg": 0.7942496463947452
+          },
+          {
+            "frame": 40,
+            "n_gold_objects": 42,
+            "seg": 0.7795803713382718
+          },
+          {
+            "frame": 41,
+            "n_gold_objects": 42,
+            "seg": 0.8010130979017521
+          },
+          {
+            "frame": 42,
+            "n_gold_objects": 43,
+            "seg": 0.7684463166351212
+          },
+          {
+            "frame": 43,
+            "n_gold_objects": 43,
+            "seg": 0.7615154089954338
+          },
+          {
+            "frame": 44,
+            "n_gold_objects": 43,
+            "seg": 0.7217040570372826
+          },
+          {
+            "frame": 45,
+            "n_gold_objects": 43,
+            "seg": 0.7327085783779416
+          },
+          {
+            "frame": 46,
+            "n_gold_objects": 42,
+            "seg": 0.7552464155898772
+          },
+          {
+            "frame": 47,
+            "n_gold_objects": 43,
+            "seg": 0.7107679674305851
+          },
+          {
+            "frame": 48,
+            "n_gold_objects": 43,
+            "seg": 0.7639731446390862
+          },
+          {
+            "frame": 49,
+            "n_gold_objects": 45,
+            "seg": 0.7579449294869978
+          },
+          {
+            "frame": 50,
+            "n_gold_objects": 44,
+            "seg": 0.7484477730294746
+          },
+          {
+            "frame": 51,
+            "n_gold_objects": 43,
+            "seg": 0.7051694329710384
+          },
+          {
+            "frame": 52,
+            "n_gold_objects": 46,
+            "seg": 0.6512493952057922
+          },
+          {
+            "frame": 53,
+            "n_gold_objects": 45,
+            "seg": 0.6951582523936246
+          },
+          {
+            "frame": 54,
+            "n_gold_objects": 47,
+            "seg": 0.6408794638424303
+          },
+          {
+            "frame": 55,
+            "n_gold_objects": 47,
+            "seg": 0.6247829860871703
+          },
+          {
+            "frame": 56,
+            "n_gold_objects": 46,
+            "seg": 0.5859609126476049
+          },
+          {
+            "frame": 57,
+            "n_gold_objects": 46,
+            "seg": 0.573331261976323
+          },
+          {
+            "frame": 58,
+            "n_gold_objects": 45,
+            "seg": 0.562553353186322
+          },
+          {
+            "frame": 59,
+            "n_gold_objects": 45,
+            "seg": 0.5268802749541698
+          },
+          {
+            "frame": 60,
+            "n_gold_objects": 45,
+            "seg": 0.38427410751297375
+          },
+          {
+            "frame": 61,
+            "n_gold_objects": 44,
+            "seg": 0.34221544264488624
+          },
+          {
+            "frame": 62,
+            "n_gold_objects": 44,
+            "seg": 0.27156498357774606
+          },
+          {
+            "frame": 63,
+            "n_gold_objects": 44,
+            "seg": 0.23978089391606996
+          },
+          {
+            "frame": 64,
+            "n_gold_objects": 45,
+            "seg": 0.2751436962590089
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "Fluo-N2DH-SIM+",
+      "sequence": "02",
+      "target_kind": "simulated",
+      "n_requested": 150,
+      "metrics": {
+        "AOGM": 59562.5,
+        "fp_nodes": 27547,
+        "fn_nodes": 2748,
+        "ns_nodes": 13,
+        "fp_edges": 1,
+        "fn_edges": 2979,
+        "ws_edges": 1,
+        "TRA": 0.0,
+        "DET": 0.0,
+        "LNK": 0.1114092625720533
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.10526336577436579,
+        "n_gold_seg_frames": 150,
+        "n_gold_seg_objects": 3371,
+        "per_frame": [
+          {
+            "frame": 0,
+            "n_gold_objects": 8,
+            "seg": 0.6131168200103276
+          },
+          {
+            "frame": 1,
+            "n_gold_objects": 8,
+            "seg": 0.6194502231935227
+          },
+          {
+            "frame": 2,
+            "n_gold_objects": 8,
+            "seg": 0.2906895202536719
+          },
+          {
+            "frame": 3,
+            "n_gold_objects": 8,
+            "seg": 0.2777980584852527
+          },
+          {
+            "frame": 4,
+            "n_gold_objects": 8,
+            "seg": 0.2151596539694066
+          },
+          {
+            "frame": 5,
+            "n_gold_objects": 8,
+            "seg": 0.21843224726390587
+          },
+          {
+            "frame": 6,
+            "n_gold_objects": 8,
+            "seg": 0.2888036058477216
+          },
+          {
+            "frame": 7,
+            "n_gold_objects": 8,
+            "seg": 0.22974595726959166
+          },
+          {
+            "frame": 8,
+            "n_gold_objects": 8,
+            "seg": 0.29360520899263315
+          },
+          {
+            "frame": 9,
+            "n_gold_objects": 8,
+            "seg": 0.37665904750714396
+          },
+          {
+            "frame": 10,
+            "n_gold_objects": 8,
+            "seg": 0.2976520887942988
+          },
+          {
+            "frame": 11,
+            "n_gold_objects": 8,
+            "seg": 0.2922034707131356
+          },
+          {
+            "frame": 12,
+            "n_gold_objects": 8,
+            "seg": 0.27743443331173373
+          },
+          {
+            "frame": 13,
+            "n_gold_objects": 8,
+            "seg": 0.28387404867681
+          },
+          {
+            "frame": 14,
+            "n_gold_objects": 8,
+            "seg": 0.1972886524491126
+          },
+          {
+            "frame": 15,
+            "n_gold_objects": 9,
+            "seg": 0.24474529385370486
+          },
+          {
+            "frame": 16,
+            "n_gold_objects": 9,
+            "seg": 0.17429963506404775
+          },
+          {
+            "frame": 17,
+            "n_gold_objects": 9,
+            "seg": 0.2912832154908257
+          },
+          {
+            "frame": 18,
+            "n_gold_objects": 9,
+            "seg": 0.24485617280871452
+          },
+          {
+            "frame": 19,
+            "n_gold_objects": 9,
+            "seg": 0.13677200972595882
+          },
+          {
+            "frame": 20,
+            "n_gold_objects": 9,
+            "seg": 0.06695043007892171
+          },
+          {
+            "frame": 21,
+            "n_gold_objects": 9,
+            "seg": 0.06837946408864168
+          },
+          {
+            "frame": 22,
+            "n_gold_objects": 9,
+            "seg": 0.06519297299725929
+          },
+          {
+            "frame": 23,
+            "n_gold_objects": 9,
+            "seg": 0.07138520253274352
+          },
+          {
+            "frame": 24,
+            "n_gold_objects": 10,
+            "seg": 0.15692402729758265
+          },
+          {
+            "frame": 25,
+            "n_gold_objects": 11,
+            "seg": 0.1975039092651861
+          },
+          {
+            "frame": 26,
+            "n_gold_objects": 11,
+            "seg": 0.197569881114652
+          },
+          {
+            "frame": 27,
+            "n_gold_objects": 11,
+            "seg": 0.1974133422314979
+          },
+          {
+            "frame": 28,
+            "n_gold_objects": 12,
+            "seg": 0.18441923171001195
+          },
+          {
+            "frame": 29,
+            "n_gold_objects": 13,
+            "seg": 0.16047349321959625
+          },
+          {
+            "frame": 30,
+            "n_gold_objects": 13,
+            "seg": 0.20137779493435135
+          },
+          {
+            "frame": 31,
+            "n_gold_objects": 13,
+            "seg": 0.13563985520605787
+          },
+          {
+            "frame": 32,
+            "n_gold_objects": 13,
+            "seg": 0.17008224933566465
+          },
+          {
+            "frame": 33,
+            "n_gold_objects": 13,
+            "seg": 0.17290060785441466
+          },
+          {
+            "frame": 34,
+            "n_gold_objects": 13,
+            "seg": 0.13272467852170047
+          },
+          {
+            "frame": 35,
+            "n_gold_objects": 13,
+            "seg": 0.08333223287587316
+          },
+          {
+            "frame": 36,
+            "n_gold_objects": 13,
+            "seg": 0.08777084976068525
+          },
+          {
+            "frame": 37,
+            "n_gold_objects": 13,
+            "seg": 0.08301139748712635
+          },
+          {
+            "frame": 38,
+            "n_gold_objects": 13,
+            "seg": 0.11963826798598767
+          },
+          {
+            "frame": 39,
+            "n_gold_objects": 13,
+            "seg": 0.6105962532024367
+          },
+          {
+            "frame": 40,
+            "n_gold_objects": 13,
+            "seg": 0.5016877836145582
+          },
+          {
+            "frame": 41,
+            "n_gold_objects": 13,
+            "seg": 0.5667023971483899
+          },
+          {
+            "frame": 42,
+            "n_gold_objects": 13,
+            "seg": 0.6230309032173245
+          },
+          {
+            "frame": 43,
+            "n_gold_objects": 13,
+            "seg": 0.6074776585360661
+          },
+          {
+            "frame": 44,
+            "n_gold_objects": 13,
+            "seg": 0.6115249484126758
+          },
+          {
+            "frame": 45,
+            "n_gold_objects": 13,
+            "seg": 0.6255658634203975
+          },
+          {
+            "frame": 46,
+            "n_gold_objects": 13,
+            "seg": 0.6017201661200979
+          },
+          {
+            "frame": 47,
+            "n_gold_objects": 14,
+            "seg": 0.5451511961006785
+          },
+          {
+            "frame": 48,
+            "n_gold_objects": 14,
+            "seg": 0.557947046831811
+          },
+          {
+            "frame": 49,
+            "n_gold_objects": 15,
+            "seg": 0.5031847595941926
+          },
+          {
+            "frame": 50,
+            "n_gold_objects": 15,
+            "seg": 0.4782362573829275
+          },
+          {
+            "frame": 51,
+            "n_gold_objects": 15,
+            "seg": 0.46613432916329983
+          },
+          {
+            "frame": 52,
+            "n_gold_objects": 15,
+            "seg": 0.5071521339454849
+          },
+          {
+            "frame": 53,
+            "n_gold_objects": 15,
+            "seg": 0.4927211687182502
+          },
+          {
+            "frame": 54,
+            "n_gold_objects": 15,
+            "seg": 0.49569361417010327
+          },
+          {
+            "frame": 55,
+            "n_gold_objects": 15,
+            "seg": 0.5280936326273565
+          },
+          {
+            "frame": 56,
+            "n_gold_objects": 15,
+            "seg": 0.5331236158100786
+          },
+          {
+            "frame": 57,
+            "n_gold_objects": 15,
+            "seg": 0.1204931407895763
+          },
+          {
+            "frame": 58,
+            "n_gold_objects": 15,
+            "seg": 0.07595373460223294
+          },
+          {
+            "frame": 59,
+            "n_gold_objects": 15,
+            "seg": 0.10793380637452712
+          },
+          {
+            "frame": 60,
+            "n_gold_objects": 16,
+            "seg": 0.08061893061893062
+          },
+          {
+            "frame": 61,
+            "n_gold_objects": 16,
+            "seg": 0.04348536330371145
+          },
+          {
+            "frame": 62,
+            "n_gold_objects": 16,
+            "seg": 0.03775079197465681
+          },
+          {
+            "frame": 63,
+            "n_gold_objects": 16,
+            "seg": 0.03771003054989817
+          },
+          {
+            "frame": 64,
+            "n_gold_objects": 16,
+            "seg": 0.06839790447024705
+          },
+          {
+            "frame": 65,
+            "n_gold_objects": 16,
+            "seg": 0.03278638151425762
+          },
+          {
+            "frame": 66,
+            "n_gold_objects": 16,
+            "seg": 0.06462934899227193
+          },
+          {
+            "frame": 67,
+            "n_gold_objects": 16,
+            "seg": 0.06157796632039145
+          },
+          {
+            "frame": 68,
+            "n_gold_objects": 16,
+            "seg": 0.06717586179310228
+          },
+          {
+            "frame": 69,
+            "n_gold_objects": 17,
+            "seg": 0.06421068473166099
+          },
+          {
+            "frame": 70,
+            "n_gold_objects": 17,
+            "seg": 0.1360079649241426
+          },
+          {
+            "frame": 71,
+            "n_gold_objects": 17,
+            "seg": 0.03348201839977698
+          },
+          {
+            "frame": 72,
+            "n_gold_objects": 17,
+            "seg": 0.07230253770960482
+          },
+          {
+            "frame": 73,
+            "n_gold_objects": 18,
+            "seg": 0.09210536621547996
+          },
+          {
+            "frame": 74,
+            "n_gold_objects": 19,
+            "seg": 0.08108908030996387
+          },
+          {
+            "frame": 75,
+            "n_gold_objects": 19,
+            "seg": 0.08146658366207182
+          },
+          {
+            "frame": 76,
+            "n_gold_objects": 19,
+            "seg": 0.05704811528546543
+          },
+          {
+            "frame": 77,
+            "n_gold_objects": 19,
+            "seg": 0.05656256374981815
+          },
+          {
+            "frame": 78,
+            "n_gold_objects": 19,
+            "seg": 0.05564377143324512
+          },
+          {
+            "frame": 79,
+            "n_gold_objects": 19,
+            "seg": 0.06149508360344785
+          },
+          {
+            "frame": 80,
+            "n_gold_objects": 20,
+            "seg": 0.028992628992628992
+          },
+          {
+            "frame": 81,
+            "n_gold_objects": 20,
+            "seg": 0.058709486131723
+          },
+          {
+            "frame": 82,
+            "n_gold_objects": 20,
+            "seg": 0.08520280030999741
+          },
+          {
+            "frame": 83,
+            "n_gold_objects": 24,
+            "seg": 0.09659927146559832
+          },
+          {
+            "frame": 84,
+            "n_gold_objects": 24,
+            "seg": 0.09889411132764625
+          },
+          {
+            "frame": 85,
+            "n_gold_objects": 26,
+            "seg": 0.15155463880746264
+          },
+          {
+            "frame": 86,
+            "n_gold_objects": 26,
+            "seg": 0.15298842128766
+          },
+          {
+            "frame": 87,
+            "n_gold_objects": 27,
+            "seg": 0.1419516754856495
+          },
+          {
+            "frame": 88,
+            "n_gold_objects": 27,
+            "seg": 0.06526932129104918
+          },
+          {
+            "frame": 89,
+            "n_gold_objects": 27,
+            "seg": 0.06283728903195655
+          },
+          {
+            "frame": 90,
+            "n_gold_objects": 27,
+            "seg": 0.04746544504587309
+          },
+          {
+            "frame": 91,
+            "n_gold_objects": 27,
+            "seg": 0.03915367012265276
+          },
+          {
+            "frame": 92,
+            "n_gold_objects": 27,
+            "seg": 0.020791997354497355
+          },
+          {
+            "frame": 93,
+            "n_gold_objects": 27,
+            "seg": 0.0
+          },
+          {
+            "frame": 94,
+            "n_gold_objects": 27,
+            "seg": 0.03749424746156772
+          },
+          {
+            "frame": 95,
+            "n_gold_objects": 27,
+            "seg": 0.04036533011822461
+          },
+          {
+            "frame": 96,
+            "n_gold_objects": 28,
+            "seg": 0.08736987341722266
+          },
+          {
+            "frame": 97,
+            "n_gold_objects": 28,
+            "seg": 0.06892712105735564
+          },
+          {
+            "frame": 98,
+            "n_gold_objects": 28,
+            "seg": 0.09188413931937238
+          },
+          {
+            "frame": 99,
+            "n_gold_objects": 28,
+            "seg": 0.06985015763420874
+          },
+          {
+            "frame": 100,
+            "n_gold_objects": 29,
+            "seg": 0.06593380788797386
+          },
+          {
+            "frame": 101,
+            "n_gold_objects": 29,
+            "seg": 0.07668913824099524
+          },
+          {
+            "frame": 102,
+            "n_gold_objects": 29,
+            "seg": 0.07712522914356613
+          },
+          {
+            "frame": 103,
+            "n_gold_objects": 30,
+            "seg": 0.08293800562532135
+          },
+          {
+            "frame": 104,
+            "n_gold_objects": 31,
+            "seg": 0.08755987129382219
+          },
+          {
+            "frame": 105,
+            "n_gold_objects": 31,
+            "seg": 0.0715406015587261
+          },
+          {
+            "frame": 106,
+            "n_gold_objects": 32,
+            "seg": 0.07116609261438503
+          },
+          {
+            "frame": 107,
+            "n_gold_objects": 32,
+            "seg": 0.0930921731843591
+          },
+          {
+            "frame": 108,
+            "n_gold_objects": 32,
+            "seg": 0.05295060309035954
+          },
+          {
+            "frame": 109,
+            "n_gold_objects": 32,
+            "seg": 0.0543551985294651
+          },
+          {
+            "frame": 110,
+            "n_gold_objects": 32,
+            "seg": 0.07208217073456497
+          },
+          {
+            "frame": 111,
+            "n_gold_objects": 32,
+            "seg": 0.05493688610555861
+          },
+          {
+            "frame": 112,
+            "n_gold_objects": 32,
+            "seg": 0.05625242269750596
+          },
+          {
+            "frame": 113,
+            "n_gold_objects": 32,
+            "seg": 0.06094321519980311
+          },
+          {
+            "frame": 114,
+            "n_gold_objects": 32,
+            "seg": 0.033886275823107374
+          },
+          {
+            "frame": 115,
+            "n_gold_objects": 32,
+            "seg": 0.03443959168859624
+          },
+          {
+            "frame": 116,
+            "n_gold_objects": 32,
+            "seg": 0.03402175256404999
+          },
+          {
+            "frame": 117,
+            "n_gold_objects": 32,
+            "seg": 0.017903420870767104
+          },
+          {
+            "frame": 118,
+            "n_gold_objects": 32,
+            "seg": 0.019615051903114186
+          },
+          {
+            "frame": 119,
+            "n_gold_objects": 31,
+            "seg": 0.0595266793182638
+          },
+          {
+            "frame": 120,
+            "n_gold_objects": 31,
+            "seg": 0.03445693094096467
+          },
+          {
+            "frame": 121,
+            "n_gold_objects": 31,
+            "seg": 0.03259547580961155
+          },
+          {
+            "frame": 122,
+            "n_gold_objects": 31,
+            "seg": 0.03777742069675988
+          },
+          {
+            "frame": 123,
+            "n_gold_objects": 31,
+            "seg": 0.03740490021524229
+          },
+          {
+            "frame": 124,
+            "n_gold_objects": 31,
+            "seg": 0.03792844638644489
+          },
+          {
+            "frame": 125,
+            "n_gold_objects": 31,
+            "seg": 0.033984271228018004
+          },
+          {
+            "frame": 126,
+            "n_gold_objects": 32,
+            "seg": 0.08587205221150637
+          },
+          {
+            "frame": 127,
+            "n_gold_objects": 32,
+            "seg": 0.006944444444444444
+          },
+          {
+            "frame": 128,
+            "n_gold_objects": 31,
+            "seg": 0.01640036177268616
+          },
+          {
+            "frame": 129,
+            "n_gold_objects": 32,
+            "seg": 0.03514108357477673
+          },
+          {
+            "frame": 130,
+            "n_gold_objects": 32,
+            "seg": 0.04815074310959622
+          },
+          {
+            "frame": 131,
+            "n_gold_objects": 32,
+            "seg": 0.05242797499866775
+          },
+          {
+            "frame": 132,
+            "n_gold_objects": 37,
+            "seg": 0.045997971637569954
+          },
+          {
+            "frame": 133,
+            "n_gold_objects": 38,
+            "seg": 0.04250718964332352
+          },
+          {
+            "frame": 134,
+            "n_gold_objects": 40,
+            "seg": 0.07078611492782555
+          },
+          {
+            "frame": 135,
+            "n_gold_objects": 39,
+            "seg": 0.07217483767220363
+          },
+          {
+            "frame": 136,
+            "n_gold_objects": 41,
+            "seg": 0.028282774580032748
+          },
+          {
+            "frame": 137,
+            "n_gold_objects": 42,
+            "seg": 0.03707480375731198
+          },
+          {
+            "frame": 138,
+            "n_gold_objects": 42,
+            "seg": 0.0
+          },
+          {
+            "frame": 139,
+            "n_gold_objects": 43,
+            "seg": 0.012186141530275318
+          },
+          {
+            "frame": 140,
+            "n_gold_objects": 45,
+            "seg": 0.0288289676259849
+          },
+          {
+            "frame": 141,
+            "n_gold_objects": 47,
+            "seg": 0.009281933222869042
+          },
+          {
+            "frame": 142,
+            "n_gold_objects": 48,
+            "seg": 0.022974975009395066
+          },
+          {
+            "frame": 143,
+            "n_gold_objects": 51,
+            "seg": 0.019443673731753534
+          },
+          {
+            "frame": 144,
+            "n_gold_objects": 51,
+            "seg": 0.031594795593370445
+          },
+          {
+            "frame": 145,
+            "n_gold_objects": 52,
+            "seg": 0.010698395972368576
+          },
+          {
+            "frame": 146,
+            "n_gold_objects": 52,
+            "seg": 0.020076056379767556
+          },
+          {
+            "frame": 147,
+            "n_gold_objects": 52,
+            "seg": 0.04422989070354907
+          },
+          {
+            "frame": 148,
+            "n_gold_objects": 52,
+            "seg": 0.03078044305745503
+          },
+          {
+            "frame": 149,
+            "n_gold_objects": 54,
+            "seg": 0.01947215756872729
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "Fluo-N2DL-HeLa",
+      "sequence": "01",
+      "target_kind": "measured",
+      "n_requested": 92,
+      "metrics": {
+        "AOGM": 32775.0,
+        "fp_nodes": 914,
+        "fn_nodes": 2440,
+        "ns_nodes": 404,
+        "fp_edges": 32,
+        "fn_edges": 3558,
+        "ws_edges": 72,
+        "TRA": 0.6697167272983786,
+        "DET": 0.6835976386155804,
+        "LNK": 0.5763450907108931
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.45156913395387255,
+        "n_gold_seg_frames": 28,
+        "n_gold_seg_objects": 491,
+        "per_frame": [
+          {
+            "frame": 12,
+            "n_gold_objects": 2,
+            "seg": 0.4408284023668639
+          },
+          {
+            "frame": 13,
+            "n_gold_objects": 59,
+            "seg": 0.5297549525065292
+          },
+          {
+            "frame": 14,
+            "n_gold_objects": 4,
+            "seg": 0.4350533807829181
+          },
+          {
+            "frame": 15,
+            "n_gold_objects": 8,
+            "seg": 0.717520596104217
+          },
+          {
+            "frame": 20,
+            "n_gold_objects": 11,
+            "seg": 0.39023129347953484
+          },
+          {
+            "frame": 21,
+            "n_gold_objects": 3,
+            "seg": 0.0
+          },
+          {
+            "frame": 22,
+            "n_gold_objects": 9,
+            "seg": 0.1741472235266083
+          },
+          {
+            "frame": 23,
+            "n_gold_objects": 12,
+            "seg": 0.24056171299937534
+          },
+          {
+            "frame": 25,
+            "n_gold_objects": 5,
+            "seg": 0.5325218915038425
+          },
+          {
+            "frame": 29,
+            "n_gold_objects": 7,
+            "seg": 0.4767149882334258
+          },
+          {
+            "frame": 38,
+            "n_gold_objects": 14,
+            "seg": 0.6205679675666944
+          },
+          {
+            "frame": 39,
+            "n_gold_objects": 13,
+            "seg": 0.6182008833695474
+          },
+          {
+            "frame": 40,
+            "n_gold_objects": 9,
+            "seg": 0.7125856942101653
+          },
+          {
+            "frame": 44,
+            "n_gold_objects": 14,
+            "seg": 0.5118526282640892
+          },
+          {
+            "frame": 50,
+            "n_gold_objects": 1,
+            "seg": 0.0
+          },
+          {
+            "frame": 51,
+            "n_gold_objects": 3,
+            "seg": 0.2832783278327833
+          },
+          {
+            "frame": 52,
+            "n_gold_objects": 110,
+            "seg": 0.47199865595660817
+          },
+          {
+            "frame": 53,
+            "n_gold_objects": 4,
+            "seg": 0.3977685521536066
+          },
+          {
+            "frame": 54,
+            "n_gold_objects": 12,
+            "seg": 0.3488466091071232
+          },
+          {
+            "frame": 55,
+            "n_gold_objects": 19,
+            "seg": 0.4301964218183862
+          },
+          {
+            "frame": 62,
+            "n_gold_objects": 21,
+            "seg": 0.39573494513670665
+          },
+          {
+            "frame": 76,
+            "n_gold_objects": 35,
+            "seg": 0.4955013860203048
+          },
+          {
+            "frame": 77,
+            "n_gold_objects": 30,
+            "seg": 0.4269624287934167
+          },
+          {
+            "frame": 78,
+            "n_gold_objects": 1,
+            "seg": 0.0
+          },
+          {
+            "frame": 79,
+            "n_gold_objects": 26,
+            "seg": 0.3850220207657555
+          },
+          {
+            "frame": 80,
+            "n_gold_objects": 25,
+            "seg": 0.3606790707309304
+          },
+          {
+            "frame": 81,
+            "n_gold_objects": 2,
+            "seg": 0.7147085562062623
+          },
+          {
+            "frame": 88,
+            "n_gold_objects": 32,
+            "seg": 0.3566686849414532
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "Fluo-N2DL-HeLa",
+      "sequence": "02",
+      "target_kind": "measured",
+      "n_requested": 92,
+      "metrics": {
+        "AOGM": 78292.0,
+        "fp_nodes": 2761,
+        "fn_nodes": 5251,
+        "ns_nodes": 1455,
+        "fp_edges": 666,
+        "fn_edges": 9952,
+        "ws_edges": 152,
+        "TRA": 0.7318326300213733,
+        "DET": 0.7539496459480723,
+        "LNK": 0.5829095147276966
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.5176015249543273,
+        "n_gold_seg_frames": 8,
+        "n_gold_seg_objects": 895,
+        "per_frame": [
+          {
+            "frame": 23,
+            "n_gold_objects": 25,
+            "seg": 0.6108849097002164
+          },
+          {
+            "frame": 35,
+            "n_gold_objects": 30,
+            "seg": 0.5527433644921604
+          },
+          {
+            "frame": 36,
+            "n_gold_objects": 35,
+            "seg": 0.5542775256330281
+          },
+          {
+            "frame": 67,
+            "n_gold_objects": 45,
+            "seg": 0.3897850102702599
+          },
+          {
+            "frame": 75,
+            "n_gold_objects": 348,
+            "seg": 0.5417337205374329
+          },
+          {
+            "frame": 78,
+            "n_gold_objects": 1,
+            "seg": 0.8925619834710744
+          },
+          {
+            "frame": 79,
+            "n_gold_objects": 357,
+            "seg": 0.5215352709008848
+          },
+          {
+            "frame": 87,
+            "n_gold_objects": 54,
+            "seg": 0.34916507139669545
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "DIC-C2DH-HeLa",
+      "sequence": "01",
+      "target_kind": "measured",
+      "n_requested": 84,
+      "metrics": {
+        "AOGM": 48308.0,
+        "fp_nodes": 36346,
+        "fn_nodes": 1023,
+        "ns_nodes": 17,
+        "fp_edges": 0,
+        "fn_edges": 1098,
+        "ws_edges": 0,
+        "TRA": 0.0,
+        "DET": 0.0,
+        "LNK": 0.0018181818181818299
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.0,
+        "n_gold_seg_frames": 9,
+        "n_gold_seg_objects": 98,
+        "per_frame": [
+          {
+            "frame": 2,
+            "n_gold_objects": 10,
+            "seg": 0.0
+          },
+          {
+            "frame": 5,
+            "n_gold_objects": 10,
+            "seg": 0.0
+          },
+          {
+            "frame": 21,
+            "n_gold_objects": 11,
+            "seg": 0.0
+          },
+          {
+            "frame": 31,
+            "n_gold_objects": 13,
+            "seg": 0.0
+          },
+          {
+            "frame": 33,
+            "n_gold_objects": 13,
+            "seg": 0.0
+          },
+          {
+            "frame": 34,
+            "n_gold_objects": 12,
+            "seg": 0.0
+          },
+          {
+            "frame": 39,
+            "n_gold_objects": 13,
+            "seg": 0.0
+          },
+          {
+            "frame": 54,
+            "n_gold_objects": 13,
+            "seg": 0.0
+          },
+          {
+            "frame": 67,
+            "n_gold_objects": 3,
+            "seg": 0.0
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "DIC-C2DH-HeLa",
+      "sequence": "02",
+      "target_kind": "measured",
+      "n_requested": 84,
+      "metrics": {
+        "AOGM": 52179.5,
+        "fp_nodes": 41049,
+        "fn_nodes": 962,
+        "ns_nodes": 0,
+        "fp_edges": 0,
+        "fn_edges": 1007,
+        "ws_edges": 0,
+        "TRA": 0.0,
+        "DET": 0.0,
+        "LNK": 0.003956478733926794
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.0,
+        "n_gold_seg_frames": 9,
+        "n_gold_seg_objects": 97,
+        "per_frame": [
+          {
+            "frame": 6,
+            "n_gold_objects": 10,
+            "seg": 0.0
+          },
+          {
+            "frame": 7,
+            "n_gold_objects": 9,
+            "seg": 0.0
+          },
+          {
+            "frame": 14,
+            "n_gold_objects": 9,
+            "seg": 0.0
+          },
+          {
+            "frame": 27,
+            "n_gold_objects": 11,
+            "seg": 0.0
+          },
+          {
+            "frame": 34,
+            "n_gold_objects": 10,
+            "seg": 0.0
+          },
+          {
+            "frame": 38,
+            "n_gold_objects": 11,
+            "seg": 0.0
+          },
+          {
+            "frame": 42,
+            "n_gold_objects": 9,
+            "seg": 0.0
+          },
+          {
+            "frame": 61,
+            "n_gold_objects": 14,
+            "seg": 0.0
+          },
+          {
+            "frame": 67,
+            "n_gold_objects": 14,
+            "seg": 0.0
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "PhC-C2DH-U373",
+      "sequence": "01",
+      "target_kind": "measured",
+      "n_requested": 115,
+      "metrics": {
+        "AOGM": 9554.0,
+        "fp_nodes": 3335,
+        "fn_nodes": 528,
+        "ns_nodes": 0,
+        "fp_edges": 0,
+        "fn_edges": 626,
+        "ws_edges": 0,
+        "TRA": 0.0,
+        "DET": 0.0,
+        "LNK": 0.1741424802110818
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.01398947790429194,
+        "n_gold_seg_frames": 15,
+        "n_gold_seg_objects": 100,
+        "per_frame": [
+          {
+            "frame": 1,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 5,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 6,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 7,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 21,
+            "n_gold_objects": 7,
+            "seg": 0.0
+          },
+          {
+            "frame": 49,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 59,
+            "n_gold_objects": 7,
+            "seg": 0.0
+          },
+          {
+            "frame": 67,
+            "n_gold_objects": 7,
+            "seg": 0.0
+          },
+          {
+            "frame": 72,
+            "n_gold_objects": 7,
+            "seg": 0.0
+          },
+          {
+            "frame": 75,
+            "n_gold_objects": 7,
+            "seg": 0.06960292104062073
+          },
+          {
+            "frame": 92,
+            "n_gold_objects": 7,
+            "seg": 0.0
+          },
+          {
+            "frame": 96,
+            "n_gold_objects": 7,
+            "seg": 0.0
+          },
+          {
+            "frame": 100,
+            "n_gold_objects": 7,
+            "seg": 0.0
+          },
+          {
+            "frame": 102,
+            "n_gold_objects": 7,
+            "seg": 0.06285714285714286
+          },
+          {
+            "frame": 112,
+            "n_gold_objects": 7,
+            "seg": 0.06738962044926414
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "PhC-C2DH-U373",
+      "sequence": "02",
+      "target_kind": "measured",
+      "n_requested": 115,
+      "metrics": {
+        "AOGM": 9447.0,
+        "fp_nodes": 2787,
+        "fn_nodes": 571,
+        "ns_nodes": 4,
+        "fp_edges": 0,
+        "fn_edges": 620,
+        "ws_edges": 0,
+        "TRA": 0.0,
+        "DET": 0.0,
+        "LNK": 0.0948905109489051
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.03293940205915063,
+        "n_gold_seg_frames": 19,
+        "n_gold_seg_objects": 110,
+        "per_frame": [
+          {
+            "frame": 10,
+            "n_gold_objects": 5,
+            "seg": 0.0
+          },
+          {
+            "frame": 17,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 19,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 20,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 22,
+            "n_gold_objects": 5,
+            "seg": 0.0
+          },
+          {
+            "frame": 26,
+            "n_gold_objects": 5,
+            "seg": 0.08645801053610164
+          },
+          {
+            "frame": 35,
+            "n_gold_objects": 7,
+            "seg": 0.15095530671773455
+          },
+          {
+            "frame": 36,
+            "n_gold_objects": 7,
+            "seg": 0.07638029215152266
+          },
+          {
+            "frame": 41,
+            "n_gold_objects": 7,
+            "seg": 0.05204411861832111
+          },
+          {
+            "frame": 49,
+            "n_gold_objects": 7,
+            "seg": 0.044386422976501305
+          },
+          {
+            "frame": 51,
+            "n_gold_objects": 6,
+            "seg": 0.031031468531468532
+          },
+          {
+            "frame": 52,
+            "n_gold_objects": 7,
+            "seg": 0.048037808088059346
+          },
+          {
+            "frame": 59,
+            "n_gold_objects": 6,
+            "seg": 0.06703795379537954
+          },
+          {
+            "frame": 74,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 77,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 85,
+            "n_gold_objects": 4,
+            "seg": 0.0
+          },
+          {
+            "frame": 92,
+            "n_gold_objects": 6,
+            "seg": 0.0
+          },
+          {
+            "frame": 106,
+            "n_gold_objects": 3,
+            "seg": 0.0
+          },
+          {
+            "frame": 112,
+            "n_gold_objects": 5,
+            "seg": 0.0
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "Fluo-C2DL-MSC",
+      "sequence": "01",
+      "target_kind": "measured",
+      "n_requested": 48,
+      "metrics": {
+        "AOGM": 3319.0,
+        "fp_nodes": 1783,
+        "fn_nodes": 127,
+        "ns_nodes": 4,
+        "fp_edges": 0,
+        "fn_edges": 164,
+        "ws_edges": 0,
+        "TRA": 0.3225839371364425,
+        "DET": 0.2820093457943925,
+        "LNK": 0.602905569007264
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.1813643147381146,
+        "n_gold_seg_frames": 18,
+        "n_gold_seg_objects": 112,
+        "per_frame": [
+          {
+            "frame": 5,
+            "n_gold_objects": 8,
+            "seg": 0.19917887637060694
+          },
+          {
+            "frame": 7,
+            "n_gold_objects": 8,
+            "seg": 0.06564659427443238
+          },
+          {
+            "frame": 9,
+            "n_gold_objects": 2,
+            "seg": 0.3516237402015677
+          },
+          {
+            "frame": 11,
+            "n_gold_objects": 8,
+            "seg": 0.15132552621998133
+          },
+          {
+            "frame": 19,
+            "n_gold_objects": 9,
+            "seg": 0.1397460461360312
+          },
+          {
+            "frame": 24,
+            "n_gold_objects": 8,
+            "seg": 0.2840973734214438
+          },
+          {
+            "frame": 25,
+            "n_gold_objects": 8,
+            "seg": 0.366983208978938
+          },
+          {
+            "frame": 28,
+            "n_gold_objects": 2,
+            "seg": 0.1581691772885284
+          },
+          {
+            "frame": 29,
+            "n_gold_objects": 10,
+            "seg": 0.11222091855307062
+          },
+          {
+            "frame": 30,
+            "n_gold_objects": 2,
+            "seg": 0.28384742170944194
+          },
+          {
+            "frame": 31,
+            "n_gold_objects": 2,
+            "seg": 0.1604779411764706
+          },
+          {
+            "frame": 33,
+            "n_gold_objects": 10,
+            "seg": 0.14638190119445918
+          },
+          {
+            "frame": 34,
+            "n_gold_objects": 10,
+            "seg": 0.12897537905888323
+          },
+          {
+            "frame": 35,
+            "n_gold_objects": 11,
+            "seg": 0.11047278475855729
+          },
+          {
+            "frame": 36,
+            "n_gold_objects": 2,
+            "seg": 0.25054773082942094
+          },
+          {
+            "frame": 45,
+            "n_gold_objects": 8,
+            "seg": 0.2179123819514278
+          },
+          {
+            "frame": 46,
+            "n_gold_objects": 2,
+            "seg": 0.349147947327653
+          },
+          {
+            "frame": 47,
+            "n_gold_objects": 2,
+            "seg": 0.2876633041177443
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    },
+    {
+      "dataset": "Fluo-C2DL-MSC",
+      "sequence": "02",
+      "target_kind": "measured",
+      "n_requested": 48,
+      "metrics": {
+        "AOGM": 1994.0,
+        "fp_nodes": 1010,
+        "fn_nodes": 81,
+        "ns_nodes": 0,
+        "fp_edges": 0,
+        "fn_edges": 116,
+        "ws_edges": 0,
+        "TRA": 0.07126222636236612,
+        "DET": 0.03191489361702127,
+        "LNK": 0.348314606741573
+      },
+      "segmentation": {
+        "seg_style_mean_iou": 0.24601924033372455,
+        "n_gold_seg_frames": 33,
+        "n_gold_seg_objects": 116,
+        "per_frame": [
+          {
+            "frame": 0,
+            "n_gold_objects": 5,
+            "seg": 0.4103374238976663
+          },
+          {
+            "frame": 3,
+            "n_gold_objects": 5,
+            "seg": 0.1126430442575486
+          },
+          {
+            "frame": 5,
+            "n_gold_objects": 4,
+            "seg": 0.25396435304221154
+          },
+          {
+            "frame": 6,
+            "n_gold_objects": 4,
+            "seg": 0.1398239736226335
+          },
+          {
+            "frame": 7,
+            "n_gold_objects": 4,
+            "seg": 0.4603825906323415
+          },
+          {
+            "frame": 8,
+            "n_gold_objects": 4,
+            "seg": 0.44783300868438314
+          },
+          {
+            "frame": 9,
+            "n_gold_objects": 2,
+            "seg": 0.6587892217934184
+          },
+          {
+            "frame": 10,
+            "n_gold_objects": 3,
+            "seg": 0.5882402558639505
+          },
+          {
+            "frame": 11,
+            "n_gold_objects": 3,
+            "seg": 0.1941942495072848
+          },
+          {
+            "frame": 12,
+            "n_gold_objects": 3,
+            "seg": 0.24553961643272149
+          },
+          {
+            "frame": 13,
+            "n_gold_objects": 2,
+            "seg": 0.25357016613644395
+          },
+          {
+            "frame": 14,
+            "n_gold_objects": 4,
+            "seg": 0.1617850376363357
+          },
+          {
+            "frame": 15,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 16,
+            "n_gold_objects": 2,
+            "seg": 0.0
+          },
+          {
+            "frame": 18,
+            "n_gold_objects": 4,
+            "seg": 0.14062569832402236
+          },
+          {
+            "frame": 19,
+            "n_gold_objects": 4,
+            "seg": 0.14298826088927163
+          },
+          {
+            "frame": 20,
+            "n_gold_objects": 5,
+            "seg": 0.11815594272899776
+          },
+          {
+            "frame": 22,
+            "n_gold_objects": 6,
+            "seg": 0.12605008717704866
+          },
+          {
+            "frame": 24,
+            "n_gold_objects": 6,
+            "seg": 0.23571465495031937
+          },
+          {
+            "frame": 25,
+            "n_gold_objects": 3,
+            "seg": 0.2321308673625099
+          },
+          {
+            "frame": 26,
+            "n_gold_objects": 4,
+            "seg": 0.16585646763192533
+          },
+          {
+            "frame": 27,
+            "n_gold_objects": 3,
+            "seg": 0.2560358948792821
+          },
+          {
+            "frame": 28,
+            "n_gold_objects": 3,
+            "seg": 0.4210527554721965
+          },
+          {
+            "frame": 30,
+            "n_gold_objects": 2,
+            "seg": 0.5896323779528017
+          },
+          {
+            "frame": 34,
+            "n_gold_objects": 3,
+            "seg": 0.19968063102165923
+          },
+          {
+            "frame": 35,
+            "n_gold_objects": 3,
+            "seg": 0.24290787060522104
+          },
+          {
+            "frame": 36,
+            "n_gold_objects": 3,
+            "seg": 0.2133806712203656
+          },
+          {
+            "frame": 38,
+            "n_gold_objects": 3,
+            "seg": 0.23077647058823528
+          },
+          {
+            "frame": 40,
+            "n_gold_objects": 3,
+            "seg": 0.20589601667131233
+          },
+          {
+            "frame": 41,
+            "n_gold_objects": 3,
+            "seg": 0.1707008531185881
+          },
+          {
+            "frame": 42,
+            "n_gold_objects": 4,
+            "seg": 0.12779935102931006
+          },
+          {
+            "frame": 43,
+            "n_gold_objects": 4,
+            "seg": 0.14398299542184434
+          },
+          {
+            "frame": 47,
+            "n_gold_objects": 3,
+            "seg": 0.6054008112914505
+          }
+        ],
+        "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+      }
+    }
+  ],
+  "learned_panel": {
+    "LIVECell_val": {
+      "cellpose": {
+        "n_images": 8.0,
+        "pixel_iou_mean": 0.8344273464862638,
+        "pixel_dice_mean": 0.9075594805430358,
+        "pixel_precision_mean": 0.9249217447230484,
+        "pixel_recall_mean": 0.895244761524105,
+        "instance_precision_mean": 0.9398667365729175,
+        "instance_recall_mean": 0.8998502691338945,
+        "instance_f1_mean": 0.9164380068236233,
+        "absolute_count_error_mean": 13.625,
+        "relative_count_error_mean": 0.08240613732986328,
+        "iou": 0.8344273464862638,
+        "dice": 0.9075594805430358,
+        "precision": 0.9398667365729175,
+        "recall": 0.8998502691338945,
+        "f1": 0.9164380068236233,
+        "absolute_count_error": 13.625,
+        "relative_count_error": 0.08240613732986328,
+        "instance_iou_f1_mean": 0.8776777835828274,
+        "instance_iou_precision_mean": 0.8991660905361862,
+        "instance_iou_recall_mean": 0.8625147191961489
+      },
+      "hybrid": {
+        "n_images": 8.0,
+        "pixel_iou_mean": 0.7480814337270313,
+        "pixel_dice_mean": 0.822710983664762,
+        "pixel_precision_mean": 0.876619846635722,
+        "pixel_recall_mean": 0.7952491816368811,
+        "instance_precision_mean": 0.9359875018361024,
+        "instance_recall_mean": 0.8481261312028601,
+        "instance_f1_mean": 0.8831782214987902,
+        "absolute_count_error_mean": 72.25,
+        "relative_count_error_mean": 0.12835049469663445,
+        "iou": 0.7480814337270313,
+        "dice": 0.822710983664762,
+        "precision": 0.9359875018361024,
+        "recall": 0.8481261312028601,
+        "f1": 0.8831782214987902,
+        "absolute_count_error": 72.25,
+        "relative_count_error": 0.12835049469663445,
+        "instance_iou_f1_mean": 0.764393507827599,
+        "instance_iou_precision_mean": 0.7871829358654359,
+        "instance_iou_recall_mean": 0.7478987317353338
+      },
+      "auto": {
+        "n_images": 8.0,
+        "pixel_iou_mean": 0.8344273464862638,
+        "pixel_dice_mean": 0.9075594805430358,
+        "pixel_precision_mean": 0.9249217447230484,
+        "pixel_recall_mean": 0.895244761524105,
+        "instance_precision_mean": 0.9398667365729175,
+        "instance_recall_mean": 0.8998502691338945,
+        "instance_f1_mean": 0.9164380068236233,
+        "absolute_count_error_mean": 13.625,
+        "relative_count_error_mean": 0.08240613732986328,
+        "iou": 0.8344273464862638,
+        "dice": 0.9075594805430358,
+        "precision": 0.9398667365729175,
+        "recall": 0.8998502691338945,
+        "f1": 0.9164380068236233,
+        "absolute_count_error": 13.625,
+        "relative_count_error": 0.08240613732986328,
+        "instance_iou_f1_mean": 0.8776777835828274,
+        "instance_iou_precision_mean": 0.8991660905361862,
+        "instance_iou_recall_mean": 0.8625147191961489
+      }
+    },
+    "BBBC039": {
+      "cellpose": {
+        "n_images": 3.0,
+        "pixel_iou_mean": 0.9446081991874068,
+        "pixel_dice_mean": 0.9714637667153784,
+        "pixel_precision_mean": 0.9781032176147555,
+        "pixel_recall_mean": 0.9649669218558503,
+        "instance_precision_mean": 0.9920826623725175,
+        "instance_recall_mean": 0.9448796711620356,
+        "instance_f1_mean": 0.9670967863501824,
+        "absolute_count_error_mean": 4.333333333333333,
+        "relative_count_error_mean": 0.04725910793326524,
+        "iou": 0.9446081991874068,
+        "dice": 0.9714637667153784,
+        "precision": 0.9920826623725175,
+        "recall": 0.9448796711620356,
+        "f1": 0.9670967863501824,
+        "absolute_count_error": 4.333333333333333,
+        "relative_count_error": 0.04725910793326524,
+        "instance_iou_f1_mean": 0.9631047703821184,
+        "instance_iou_precision_mean": 0.9878091580990133,
+        "instance_iou_recall_mean": 0.9411343528099757
+      },
+      "hybrid": {
+        "n_images": 3.0,
+        "pixel_iou_mean": 0.9125952333645531,
+        "pixel_dice_mean": 0.9540748968541833,
+        "pixel_precision_mean": 0.9834912073357281,
+        "pixel_recall_mean": 0.9270470947460844,
+        "instance_precision_mean": 0.9913812033377251,
+        "instance_recall_mean": 0.8468204270353757,
+        "instance_f1_mean": 0.9101790544604169,
+        "absolute_count_error_mean": 14.333333333333334,
+        "relative_count_error_mean": 0.14531835205992508,
+        "iou": 0.9125952333645531,
+        "dice": 0.9540748968541833,
+        "precision": 0.9913812033377251,
+        "recall": 0.8468204270353757,
+        "f1": 0.9101790544604169,
+        "absolute_count_error": 14.333333333333334,
+        "relative_count_error": 0.14531835205992508,
+        "instance_iou_f1_mean": 0.861132323885024,
+        "instance_iou_precision_mean": 0.9354542871166912,
+        "instance_iou_recall_mean": 0.803136395710895
+      },
+      "auto": {
+        "n_images": 3.0,
+        "pixel_iou_mean": 0.9446081991874068,
+        "pixel_dice_mean": 0.9714637667153784,
+        "pixel_precision_mean": 0.9781032176147555,
+        "pixel_recall_mean": 0.9649669218558503,
+        "instance_precision_mean": 0.9920826623725175,
+        "instance_recall_mean": 0.9448796711620356,
+        "instance_f1_mean": 0.9670967863501824,
+        "absolute_count_error_mean": 4.333333333333333,
+        "relative_count_error_mean": 0.04725910793326524,
+        "iou": 0.9446081991874068,
+        "dice": 0.9714637667153784,
+        "precision": 0.9920826623725175,
+        "recall": 0.9448796711620356,
+        "f1": 0.9670967863501824,
+        "absolute_count_error": 4.333333333333333,
+        "relative_count_error": 0.04725910793326524,
+        "instance_iou_f1_mean": 0.9631047703821184,
+        "instance_iou_precision_mean": 0.9878091580990133,
+        "instance_iou_recall_mean": 0.9411343528099757
+      }
+    }
+  },
+  "learned_panel_n": 11,
+  "fixes": [
+    "Ambiguous BBBC039 roots and duplicate stems fail closed",
+    "Multiple BBBC038 source images fail closed",
+    "Missing Cellpose checkpoint cannot silently select upstream default",
+    "Checkpoint load failures propagate instead of retrying with defaults",
+    "Explicit GPU request cannot silently resolve to CPU",
+    "Version-specific named checkpoint selection for Cellpose 3/4"
+  ],
+  "software_tests": 216,
+  "cold_checkout_tests": 215,
+  "base_commit": "e4a3590c845d52f494d3fe58799b8935e9d56c3f",
+  "cold_validation_commit": "5a8990441e448d5f1c5a99f64a08233f03734956",
+  "uncompleted": [
+    "Full Cellpose/hybrid/GPU dataset matrices",
+    "TissueNet registration/access",
+    "EVICAN official endpoint returned HTTP 502",
+    "Cardiac-specific ground truth",
+    "Independent laboratory qualification",
+    "Prospective QC calibration",
+    "CellProfiler comparator",
+    "3D biological and lineage event validation"
+  ]
+}

@@ -51,6 +51,22 @@ def test_gpu_request_cannot_be_reported_as_gpu_after_cpu_resolution(monkeypatch)
     assert segmenter._model is None
 
 
+def test_cellpose3_named_checkpoint_uses_model_type(monkeypatch):
+    from types import SimpleNamespace
+    import qc_pipeline
+
+    calls = []
+    def constructor(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(gpu=False)
+    monkeypatch.setattr(qc_pipeline, "_HAS_CELLPOSE", True)
+    monkeypatch.setattr(qc_pipeline, "version", lambda name: "3.1.1")
+    monkeypatch.setattr(qc_pipeline, "_cellpose_models", SimpleNamespace(
+        MODEL_NAMES=["nuclei"], get_user_models=lambda: [], CellposeModel=constructor))
+    qc_pipeline.CellposeSegmenter("nuclei", gpu=False).model
+    assert calls == [{"model_type": "nuclei", "gpu": False}]
+
+
 class _FakeCellpose:
     def segment(self, gray, **kwargs):
         labels = np.zeros_like(gray, dtype=np.int32)
