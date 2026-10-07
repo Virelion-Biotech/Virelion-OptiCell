@@ -137,6 +137,37 @@ def test_missing_bbbc039_reference_is_not_silently_excluded(tmp_path):
         find_pairs(images, masks)
 
 
+@pytest.mark.parametrize("duplicate_kind", ["image", "mask"])
+def test_ambiguous_bbbc039_pairing_fails_closed(tmp_path, duplicate_kind):
+    from scripts.run_bbbc039_validation import find_pairs
+
+    images, masks = tmp_path / "images", tmp_path / "masks"
+    images.mkdir()
+    masks.mkdir()
+    image = np.zeros((8, 8), np.uint8)
+    cv2.imwrite(str(images / "same.tif"), image)
+    cv2.imwrite(str(masks / "same.png"), image)
+    parent = images if duplicate_kind == "image" else masks
+    # Both suffix variants at the content root must not be counted as separate FOVs.
+    if duplicate_kind == "image":
+        cv2.imwrite(str(parent / "same.tiff"), image)
+    else:
+        (parent / "duplicate").mkdir()
+        cv2.imwrite(str(parent / "duplicate/same.png"), image)
+    with pytest.raises(ValueError, match="Ambiguous"):
+        find_pairs(images, masks)
+
+
+def test_bbbc038_multiple_images_cannot_silently_select_first(tmp_path):
+    from scripts.run_bbbc038_validation import load_record_image_gray
+
+    (tmp_path / "images").mkdir()
+    for name in ["first.png", "second.png"]:
+        cv2.imwrite(str(tmp_path / "images" / name), np.zeros((8, 8), np.uint8))
+    with pytest.raises(IOError, match="exactly one image"):
+        load_record_image_gray(tmp_path)
+
+
 def test_ambiguous_source_files_fail_without_conflating_repeated_coco_ids(tmp_path):
     from scripts.run_livecell_validation import build_image_index
 

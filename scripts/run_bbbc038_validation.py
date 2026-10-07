@@ -116,8 +116,8 @@ def find_records(stage1_root: Path) -> list[Path]:
 
 def load_record_image_gray(record: Path) -> np.ndarray:
     img_files = sorted((record / "images").glob("*.png"))
-    if not img_files:
-        raise IOError(f"No image PNG under {record / 'images'}")
+    if len(img_files) != 1:
+        raise IOError(f"Expected exactly one image PNG under {record / 'images'}; found {len(img_files)}")
     arr = cv2.imread(str(img_files[0]), cv2.IMREAD_UNCHANGED)
     if arr is None:
         raise IOError(f"Could not read image {img_files[0]}")

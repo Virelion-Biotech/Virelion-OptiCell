@@ -1,7 +1,70 @@
 import numpy as np
+import pytest
 
 import app_streamlit
 from qc_pipeline import SegmentationResult
+
+
+def test_missing_checkpoint_cannot_be_substituted_with_default(monkeypatch):
+    from types import SimpleNamespace
+    import qc_pipeline
+
+    calls = []
+    def constructor(**kwargs):
+        calls.append(kwargs)
+        return object()
+    monkeypatch.setattr(qc_pipeline, "_HAS_CELLPOSE", True)
+    monkeypatch.setattr(qc_pipeline, "_cellpose_models", SimpleNamespace(
+        MODEL_NAMES=["cpsam"], get_user_models=lambda: [], CellposeModel=constructor))
+    with pytest.raises(ValueError, match="Unknown or missing Cellpose checkpoint"):
+        qc_pipeline.CellposeSegmenter("missing-checkpoint.pt").model
+    assert calls == []
+
+
+def test_checkpoint_load_failure_cannot_retry_with_default(monkeypatch):
+    from types import SimpleNamespace
+    import qc_pipeline
+
+    calls = []
+    def constructor(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("Corrupt requested weights")
+    monkeypatch.setattr(qc_pipeline, "_HAS_CELLPOSE", True)
+    monkeypatch.setattr(qc_pipeline, "_cellpose_models", SimpleNamespace(
+        MODEL_NAMES=["cpsam"], get_user_models=lambda: [], CellposeModel=constructor))
+    with pytest.raises(RuntimeError, match="Corrupt requested weights"):
+        qc_pipeline.CellposeSegmenter("cpsam").model
+    assert calls == [{"pretrained_model": "cpsam"}]
+
+
+def test_gpu_request_cannot_be_reported_as_gpu_after_cpu_resolution(monkeypatch):
+    from types import SimpleNamespace
+    import qc_pipeline
+
+    monkeypatch.setattr(qc_pipeline, "_HAS_CELLPOSE", True)
+    monkeypatch.setattr(qc_pipeline, "_cellpose_models", SimpleNamespace(
+        MODEL_NAMES=["cpsam"], get_user_models=lambda: [],
+        CellposeModel=lambda **kwargs: SimpleNamespace(gpu=False)))
+    segmenter = qc_pipeline.CellposeSegmenter("cpsam", gpu=True)
+    with pytest.raises(RuntimeError, match="resolved to CPU"):
+        segmenter.model
+    assert segmenter._model is None
+
+
+def test_cellpose3_named_checkpoint_uses_model_type(monkeypatch):
+    from types import SimpleNamespace
+    import qc_pipeline
+
+    calls = []
+    def constructor(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(gpu=False)
+    monkeypatch.setattr(qc_pipeline, "_HAS_CELLPOSE", True)
+    monkeypatch.setattr(qc_pipeline, "version", lambda name: "3.1.1")
+    monkeypatch.setattr(qc_pipeline, "_cellpose_models", SimpleNamespace(
+        MODEL_NAMES=["nuclei"], get_user_models=lambda: [], CellposeModel=constructor))
+    qc_pipeline.CellposeSegmenter("nuclei", gpu=False).model
+    assert calls == [{"model_type": "nuclei", "gpu": False}]
 
 
 class _FakeCellpose:

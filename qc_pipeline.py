@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+from importlib.metadata import PackageNotFoundError, version
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
@@ -352,19 +353,45 @@ class CellposeSegmenter:
     def model(self):
         if self._model is not None:
             return self._model
+        # Cellpose 4 silently substitutes its default when a requested checkpoint
+        # is missing. Refuse that substitution before model construction so the
+        # result's method/provenance cannot name weights that were never used.
+        registered = getattr(_cellpose_models, "MODEL_NAMES", None)
+        if registered is not None:
+            known = set(registered)
+            user_models = getattr(_cellpose_models, "get_user_models", None)
+            if user_models is not None:
+                known.update(user_models())
+            if self.model_type not in known and not Path(self.model_type).is_file():
+                raise ValueError(f"Unknown or missing Cellpose checkpoint: {self.model_type}")
         last_err: Optional[Exception] = None
-        for kwargs0 in ({"pretrained_model": self.model_type}, {"model_type": self.model_type}, {}):
+        try:
+            cellpose_major = int(version("cellpose").split(".")[0])
+        except (PackageNotFoundError, ValueError):
+            cellpose_major = None
+        choices = ({"pretrained_model": self.model_type}, {"model_type": self.model_type})
+        if cellpose_major is not None:
+            # v3 selects named models with model_type; v4 ignores model_type.
+            key = "pretrained_model" if cellpose_major >= 4 or Path(self.model_type).is_file() else "model_type"
+            choices = ({key: self.model_type},)
+        for kwargs0 in choices:
             kwargs = {**kwargs0, **({"gpu": bool(self.gpu)} if self.gpu is not None else {})}
             try:
-                self._model = _cellpose_models.CellposeModel(**kwargs)
+                candidate = _cellpose_models.CellposeModel(**kwargs)
+                if self.gpu is True and getattr(candidate, "gpu", None) is False:
+                    raise RuntimeError("GPU was requested but Cellpose resolved to CPU")
+                self._model = candidate
                 return self._model
-            except Exception as exc:
+            except TypeError as exc:
                 last_err = exc
             if hasattr(_cellpose_models, "Cellpose"):
                 try:
-                    self._model = _cellpose_models.Cellpose(**kwargs)
+                    candidate = _cellpose_models.Cellpose(**kwargs)
+                    if self.gpu is True and getattr(candidate, "gpu", None) is False:
+                        raise RuntimeError("GPU was requested but Cellpose resolved to CPU")
+                    self._model = candidate
                     return self._model
-                except Exception as exc:
+                except TypeError as exc:
                     last_err = exc
         raise RuntimeError(f"Could not initialize Cellpose model: {last_err}")
 
