@@ -74,6 +74,11 @@ def resolve_content_root(root: Path, kind: str) -> Path:
     nested = root / kind
     if nested.is_dir():
         return nested.resolve()
+    # A populated content root takes precedence over nested directories.
+    # Otherwise a duplicate-only subfolder can hide the real source records.
+    patterns = ("*.tif", "*.tiff") if kind == "images" else ("*.png",)
+    if any(any(root.glob(pattern)) for pattern in patterns):
+        return root.resolve()
     candidates: list[Path] = []
     for p in root.rglob("*"):
         if not p.is_dir() or "__MACOSX" in p.parts:
@@ -139,10 +144,20 @@ def find_pairs(images_root: Path, masks_root: Path) -> list[tuple[Path, Path]]:
         image_files.extend(p for p in img_root.rglob(ext) if p.is_file())
     image_files = sorted({p.resolve() for p in image_files})
 
+    image_by_stem: dict[str, Path] = {}
+    for p in image_files:
+        if "__MACOSX" in p.parts:
+            continue
+        if p.stem in image_by_stem:
+            raise ValueError(f"Ambiguous source image stem: {p.stem}")
+        image_by_stem[p.stem] = p
+
     mask_by_stem: dict[str, Path] = {}
-    for p in list(msk_root.glob("*.png")) + list(msk_root.rglob("*.png")):
+    for p in sorted({p.resolve() for p in msk_root.rglob("*.png")}):
         if not p.is_file() or "__MACOSX" in p.parts:
             continue
+        if p.stem in mask_by_stem:
+            raise ValueError(f"Ambiguous reference mask stem: {p.stem}")
         mask_by_stem[p.stem] = p.resolve()
 
     pairs: list[tuple[Path, Path]] = []

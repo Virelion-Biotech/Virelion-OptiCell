@@ -352,19 +352,30 @@ class CellposeSegmenter:
     def model(self):
         if self._model is not None:
             return self._model
+        # Cellpose 4 silently substitutes its default when a requested checkpoint
+        # is missing. Refuse that substitution before model construction so the
+        # result's method/provenance cannot name weights that were never used.
+        registered = getattr(_cellpose_models, "MODEL_NAMES", None)
+        if registered is not None:
+            known = set(registered)
+            user_models = getattr(_cellpose_models, "get_user_models", None)
+            if user_models is not None:
+                known.update(user_models())
+            if self.model_type not in known and not Path(self.model_type).is_file():
+                raise ValueError(f"Unknown or missing Cellpose checkpoint: {self.model_type}")
         last_err: Optional[Exception] = None
-        for kwargs0 in ({"pretrained_model": self.model_type}, {"model_type": self.model_type}, {}):
+        for kwargs0 in ({"pretrained_model": self.model_type}, {"model_type": self.model_type}):
             kwargs = {**kwargs0, **({"gpu": bool(self.gpu)} if self.gpu is not None else {})}
             try:
                 self._model = _cellpose_models.CellposeModel(**kwargs)
                 return self._model
-            except Exception as exc:
+            except TypeError as exc:
                 last_err = exc
             if hasattr(_cellpose_models, "Cellpose"):
                 try:
                     self._model = _cellpose_models.Cellpose(**kwargs)
                     return self._model
-                except Exception as exc:
+                except TypeError as exc:
                     last_err = exc
         raise RuntimeError(f"Could not initialize Cellpose model: {last_err}")
 
