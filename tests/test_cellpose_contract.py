@@ -37,6 +37,20 @@ def test_checkpoint_load_failure_cannot_retry_with_default(monkeypatch):
     assert calls == [{"pretrained_model": "cpsam"}]
 
 
+def test_gpu_request_cannot_be_reported_as_gpu_after_cpu_resolution(monkeypatch):
+    from types import SimpleNamespace
+    import qc_pipeline
+
+    monkeypatch.setattr(qc_pipeline, "_HAS_CELLPOSE", True)
+    monkeypatch.setattr(qc_pipeline, "_cellpose_models", SimpleNamespace(
+        MODEL_NAMES=["cpsam"], get_user_models=lambda: [],
+        CellposeModel=lambda **kwargs: SimpleNamespace(gpu=False)))
+    segmenter = qc_pipeline.CellposeSegmenter("cpsam", gpu=True)
+    with pytest.raises(RuntimeError, match="resolved to CPU"):
+        segmenter.model
+    assert segmenter._model is None
+
+
 class _FakeCellpose:
     def segment(self, gray, **kwargs):
         labels = np.zeros_like(gray, dtype=np.int32)

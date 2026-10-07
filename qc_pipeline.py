@@ -367,13 +367,19 @@ class CellposeSegmenter:
         for kwargs0 in ({"pretrained_model": self.model_type}, {"model_type": self.model_type}):
             kwargs = {**kwargs0, **({"gpu": bool(self.gpu)} if self.gpu is not None else {})}
             try:
-                self._model = _cellpose_models.CellposeModel(**kwargs)
+                candidate = _cellpose_models.CellposeModel(**kwargs)
+                if self.gpu is True and getattr(candidate, "gpu", None) is False:
+                    raise RuntimeError("GPU was requested but Cellpose resolved to CPU")
+                self._model = candidate
                 return self._model
             except TypeError as exc:
                 last_err = exc
             if hasattr(_cellpose_models, "Cellpose"):
                 try:
-                    self._model = _cellpose_models.Cellpose(**kwargs)
+                    candidate = _cellpose_models.Cellpose(**kwargs)
+                    if self.gpu is True and getattr(candidate, "gpu", None) is False:
+                        raise RuntimeError("GPU was requested but Cellpose resolved to CPU")
+                    self._model = candidate
                     return self._model
                 except TypeError as exc:
                     last_err = exc

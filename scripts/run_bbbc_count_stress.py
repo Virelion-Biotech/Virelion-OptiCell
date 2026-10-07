@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -22,7 +21,7 @@ from scipy.stats import rankdata
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from qc_pipeline import segment_threshold, to_grayscale_uint8, compute_focus_score  # noqa: E402
+from qc_pipeline import segment_threshold, to_grayscale_uint8, compute_focus_score, sha256_file  # noqa: E402
 from validation import binary_dice  # noqa: E402
 
 
@@ -55,8 +54,7 @@ def main():
         rows = []
         sources = []
         for source in sorted(folder.glob('*.zip')) + sorted(folder.glob('*.txt')):
-            with source.open('rb') as stream:
-                sources.append(dict(file=source.name, sha256=hashlib.file_digest(stream, 'sha256').hexdigest()))
+            sources.append(dict(file=source.name, sha256=sha256_file(str(source))))
         if dataset == 'bbbc001':
             with (folder / 'counts.txt').open() as stream:
                 references = list(csv.DictReader(stream, delimiter='\t'))

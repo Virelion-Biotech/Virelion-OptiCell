@@ -20,7 +20,7 @@ from scipy.stats import rankdata
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from qc_pipeline import compute_focus_score, to_grayscale_uint8  # noqa: E402
+from qc_pipeline import compute_focus_score, to_grayscale_uint8, sha256_file  # noqa: E402
 from scripts.run_bbbc006_focus_qc import site_key  # noqa: E402
 
 
@@ -44,8 +44,7 @@ def main():
                 with urllib.request.urlopen(url, timeout=120) as src, archive.open('wb') as dst:
                     while chunk := src.read(1 << 20):
                         dst.write(chunk)
-                with archive.open('rb') as stream:
-                    archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
+                archive_hash = sha256_file(str(archive))
                 rows = []
                 with zipfile.ZipFile(archive) as bundle:
                     names = sorted(n for n in bundle.namelist() if n.lower().endswith('.tif') and '_w1' in n.lower())
