@@ -1,4 +1,5 @@
 """HeartTwin local-command adapter for OptiCell imaging QC."""
+
 from __future__ import annotations
 
 import json
@@ -114,6 +115,23 @@ def main() -> int:
         method = str(params.get("cell_method", "threshold")).strip().lower()
         if method not in {"threshold", "cellpose"}:
             raise ValueError("cell_method must be 'threshold' or 'cellpose'")
+        scientific = _parse_bool(params.get("scientific_mode"), default=False)
+        if scientific:
+            from .domain_gate import require_domain_qualification
+
+            if method != "threshold":
+                raise ValueError("Scientific Cellpose mode requires weight binding, which is not implemented")
+            import hashlib
+            import qc_pipeline
+
+            model_sha256 = hashlib.sha256(Path(qc_pipeline.__file__).read_bytes()).hexdigest()
+            require_domain_qualification(
+                domain=params.get("domain"),
+                backend=method,
+                report_path=params.get("qualification_report"),
+                report_sha256=params.get("qualification_sha256"),
+                expected_model_sha256=model_sha256,
+            )
         path = Path(input_path)
         if not path.exists():
             raise FileNotFoundError(f"Input path does not exist: {path}")
@@ -121,18 +139,30 @@ def main() -> int:
         adaptive_threshold = _parse_bool(params.get("adaptive_threshold"), default=False)
         if path.is_dir():
             result = analyze_folder(
-                str(path), thresholds=thresholds, cell_method=method,
-                adaptive_qc=adaptive_qc, adaptive_threshold=adaptive_threshold,
+                str(path),
+                thresholds=thresholds,
+                cell_method=method,
+                adaptive_qc=adaptive_qc,
+                adaptive_threshold=adaptive_threshold,
+                allow_fallback=False,
             )
         else:
             result = analyze_paths(
-                [str(path)], thresholds=thresholds, cell_method=method,
-                adaptive_qc=adaptive_qc, adaptive_threshold=adaptive_threshold,
+                [str(path)],
+                thresholds=thresholds,
+                cell_method=method,
+                adaptive_qc=adaptive_qc,
+                adaptive_threshold=adaptive_threshold,
+                allow_fallback=False,
             )
         output = {
             "entity_id": payload.get("entity_id"),
             "input_path": str(path),
             "cell_method": method,
+            "scientific_mode": scientific,
+            "scientific_claim": "segmentation with declared qualification report"
+            if scientific
+            else "exploratory image QC",
             "n_rows": int(len(result)) if hasattr(result, "__len__") else None,
             "optogenetic_stimulation": optical_stimulation,
             "results": _jsonable(result),
