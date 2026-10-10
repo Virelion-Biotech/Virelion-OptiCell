@@ -7,6 +7,7 @@ from typing import Callable, Protocol
 import numpy as np
 
 from qc_pipeline import CellposeSegmenter, SegmentationResult, segment_threshold
+from opticell.fluorescence import FluorescenceSegmenter
 from ensemble import EnsembleResult, ensemble_from_results, threshold_ensemble
 
 
@@ -46,7 +47,7 @@ class CellposeBackend(BaseSegmenter):
 
 
 _BACKENDS: dict[str, Callable[..., SegmenterBackend]] = {
-    "threshold": ThresholdSegmenter, "otsu": ThresholdSegmenter,
+    "fluorescence": FluorescenceSegmenter, "threshold": ThresholdSegmenter, "otsu": ThresholdSegmenter,
     "adaptive": lambda **kwargs: ThresholdSegmenter(adaptive=True, **kwargs),
     "adaptive_threshold": lambda **kwargs: ThresholdSegmenter(adaptive=True, **kwargs),
     "cellpose": CellposeBackend,

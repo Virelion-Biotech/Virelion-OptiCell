@@ -1,0 +1,348 @@
+[
+  {
+    "dataset": "Fluo-N2DH-GOWT1",
+    "sequence": "01",
+    "backend": "fluorescence",
+    "target_kind": "measured",
+    "n_requested": 92,
+    "evaluation_scope": "public_training_sequences; characterization, not independent qualification",
+    "confidence_kind": "uncalibrated_qc_heuristic",
+    "workflow_summary": {
+      "n_images": 92,
+      "n_requested_images": 92,
+      "n_successful_images": 92,
+      "n_failed_images": 0,
+      "complete": true,
+      "mean_confidence": 100.0,
+      "mean_object_count": 36.08695652173913,
+      "count_cv": 0.3078884958582256,
+      "mean_focus": 274.090451915237,
+      "n_low_confidence_lt_50": 0,
+      "n_review_required": 0,
+      "n_objects_total": 3320,
+      "tracking_enabled": true,
+      "n_tracks": 382,
+      "phenotype_positive_fraction": 0.9981927710843373,
+      "phenotype_mean_score": 1.705722891566265
+    },
+    "metrics": {
+      "AOGM": 5188.5,
+      "fp_nodes": 1556,
+      "fn_nodes": 294,
+      "ns_nodes": 0,
+      "fp_edges": 0,
+      "fn_edges": 461,
+      "ws_edges": 1,
+      "TRA": 0.7804506505871152,
+      "DET": 0.7815354713313897,
+      "LNK": 0.7731367731367731
+    },
+    "segmentation": {
+      "seg_style_mean_iou": 0.5008669322670163,
+      "n_gold_seg_frames": 30,
+      "n_gold_seg_objects": 144,
+      "per_frame": [
+        {
+          "frame": 2,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 5,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 6,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 7,
+          "n_gold_objects": 1,
+          "seg": 0.9142572283150548
+        },
+        {
+          "frame": 8,
+          "n_gold_objects": 1,
+          "seg": 0.799163179916318
+        },
+        {
+          "frame": 10,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 12,
+          "n_gold_objects": 1,
+          "seg": 0.0
+        },
+        {
+          "frame": 13,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 14,
+          "n_gold_objects": 1,
+          "seg": 0.0
+        },
+        {
+          "frame": 15,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 16,
+          "n_gold_objects": 3,
+          "seg": 0.0
+        },
+        {
+          "frame": 17,
+          "n_gold_objects": 1,
+          "seg": 0.0
+        },
+        {
+          "frame": 18,
+          "n_gold_objects": 1,
+          "seg": 0.0
+        },
+        {
+          "frame": 20,
+          "n_gold_objects": 3,
+          "seg": 0.1662292213473316
+        },
+        {
+          "frame": 21,
+          "n_gold_objects": 24,
+          "seg": 0.7502133335656511
+        },
+        {
+          "frame": 27,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 28,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 29,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 31,
+          "n_gold_objects": 24,
+          "seg": 0.7589339984609368
+        },
+        {
+          "frame": 32,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 33,
+          "n_gold_objects": 24,
+          "seg": 0.706982691058029
+        },
+        {
+          "frame": 34,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 37,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 39,
+          "n_gold_objects": 24,
+          "seg": 0.6969004008394241
+        },
+        {
+          "frame": 40,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 41,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 44,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 45,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 46,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        },
+        {
+          "frame": 47,
+          "n_gold_objects": 2,
+          "seg": 0.0
+        }
+      ],
+      "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+    },
+    "status": "complete"
+  },
+  {
+    "dataset": "Fluo-N2DH-GOWT1",
+    "sequence": "02",
+    "backend": "fluorescence",
+    "target_kind": "measured",
+    "n_requested": 92,
+    "evaluation_scope": "public_training_sequences; characterization, not independent qualification",
+    "confidence_kind": "uncalibrated_qc_heuristic",
+    "workflow_summary": {
+      "n_images": 92,
+      "n_requested_images": 92,
+      "n_successful_images": 92,
+      "n_failed_images": 0,
+      "complete": true,
+      "mean_confidence": 100.0,
+      "mean_object_count": 58.22826086956522,
+      "count_cv": 0.42069390515102617,
+      "mean_focus": 111.55374614531719,
+      "n_low_confidence_lt_50": 0,
+      "n_review_required": 0,
+      "n_objects_total": 5357,
+      "tracking_enabled": true,
+      "n_tracks": 802,
+      "phenotype_positive_fraction": 0.9985066268433825,
+      "phenotype_mean_score": 1.645883890237073
+    },
+    "metrics": {
+      "AOGM": 9088.0,
+      "fp_nodes": 3311,
+      "fn_nodes": 471,
+      "ns_nodes": 0,
+      "fp_edges": 2,
+      "fn_edges": 710,
+      "ws_edges": 0,
+      "TRA": 0.6852967657039961,
+      "DET": 0.6813269765593961,
+      "LNK": 0.7122437971952535
+    },
+    "segmentation": {
+      "seg_style_mean_iou": 0.728023180953081,
+      "n_gold_seg_frames": 20,
+      "n_gold_seg_objects": 121,
+      "per_frame": [
+        {
+          "frame": 1,
+          "n_gold_objects": 22,
+          "seg": 0.7146936782599977
+        },
+        {
+          "frame": 22,
+          "n_gold_objects": 1,
+          "seg": 0.8151150054764512
+        },
+        {
+          "frame": 25,
+          "n_gold_objects": 1,
+          "seg": 0.0
+        },
+        {
+          "frame": 27,
+          "n_gold_objects": 1,
+          "seg": 0.0
+        },
+        {
+          "frame": 28,
+          "n_gold_objects": 1,
+          "seg": 0.0
+        },
+        {
+          "frame": 29,
+          "n_gold_objects": 1,
+          "seg": 0.0
+        },
+        {
+          "frame": 30,
+          "n_gold_objects": 1,
+          "seg": 0.7985587208647675
+        },
+        {
+          "frame": 35,
+          "n_gold_objects": 1,
+          "seg": 0.7977283157411657
+        },
+        {
+          "frame": 39,
+          "n_gold_objects": 1,
+          "seg": 0.7928725185362353
+        },
+        {
+          "frame": 46,
+          "n_gold_objects": 1,
+          "seg": 0.8101280695570439
+        },
+        {
+          "frame": 47,
+          "n_gold_objects": 1,
+          "seg": 0.8043882052472718
+        },
+        {
+          "frame": 52,
+          "n_gold_objects": 28,
+          "seg": 0.7665815766298903
+        },
+        {
+          "frame": 55,
+          "n_gold_objects": 28,
+          "seg": 0.8006067127748036
+        },
+        {
+          "frame": 60,
+          "n_gold_objects": 1,
+          "seg": 0.8186540731995278
+        },
+        {
+          "frame": 65,
+          "n_gold_objects": 1,
+          "seg": 0.8324764890282131
+        },
+        {
+          "frame": 72,
+          "n_gold_objects": 27,
+          "seg": 0.7338201132731453
+        },
+        {
+          "frame": 76,
+          "n_gold_objects": 1,
+          "seg": 0.82102596580114
+        },
+        {
+          "frame": 80,
+          "n_gold_objects": 1,
+          "seg": 0.8037145401348429
+        },
+        {
+          "frame": 82,
+          "n_gold_objects": 1,
+          "seg": 0.5784669083098403
+        },
+        {
+          "frame": 91,
+          "n_gold_objects": 1,
+          "seg": 0.0
+        }
+      ],
+      "scorer": "Independent Python SEG-style; overlap > 50% GT; no challenge executable"
+    },
+    "status": "complete"
+  }
+]

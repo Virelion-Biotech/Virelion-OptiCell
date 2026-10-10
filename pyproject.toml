@@ -19,10 +19,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+fluorescence = ["scikit-image>=0.23,<1"]
 validation = ["pycocotools>=2.0.8", "traccuracy>=0.4,<0.5", "scikit-image>=0.23"]
 cellpose = ["cellpose", "packaging>=24"]
 ui = ["streamlit>=1.53,<2", "streamlit-drawable-canvas[image]>=0.13,<0.14"]
 dev = [
+  "scikit-image>=0.23,<1",
   "pytest>=8",
   "pycocotools>=2.0.8",
   "ruff>=0.6",
