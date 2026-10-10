@@ -160,6 +160,8 @@ def fov_confidence(
 
     return {
         "confidence_score": float(np.clip(score, 0, 100)),
+        "confidence_kind": "uncalibrated_qc_heuristic",
+        "accuracy_status": "UNASSESSED",
         "focus_score": float(focus_score),
         "foreground_fraction": fg_frac,
         "object_count": float(n),

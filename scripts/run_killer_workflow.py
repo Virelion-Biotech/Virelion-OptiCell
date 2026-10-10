@@ -38,6 +38,7 @@ from qc_pipeline import (  # noqa: E402
 from ensemble import hybrid_threshold_cellpose, fov_confidence, suggest_backend  # noqa: E402
 from tracking import TrackingConfig, link_frames, summarize_tracks  # noqa: E402
 from phenotype import Rule, score_cells, group_phenotype_summary  # noqa: E402
+from opticell.fluorescence import segment_fluorescence  # noqa: E402
 from acceptance import segmentation_acceptance  # noqa: E402
 
 
@@ -123,7 +124,7 @@ def main() -> int:
     parser.add_argument("-o", "--out-dir", type=Path, default=Path("outputs/workflow_run"))
     parser.add_argument(
         "--backend",
-        choices=("auto", "threshold", "adaptive", "cellpose", "hybrid"),
+        choices=("auto", "threshold", "adaptive", "fluorescence", "cellpose", "hybrid"),
         default="auto",
         help="auto = cellpose if installed (phase-like always cellpose) else threshold",
     )
@@ -233,6 +234,8 @@ def main() -> int:
                 seg = segment_threshold(gray)
             elif backend == "adaptive":
                 seg = segment_threshold(gray, adaptive=True)
+            elif backend == "fluorescence":
+                seg = segment_fluorescence(gray)
             elif backend == "cellpose":
                 seg = cellpose_seg.segment(gray)
             else:
@@ -284,6 +287,9 @@ def main() -> int:
                 "brightness_std": float(bright_std),
                 "saturation_fraction": float(sat),
                 "confidence_score": float(conf["confidence_score"]),
+                "confidence_kind": conf["confidence_kind"],
+                "accuracy_status": conf["accuracy_status"],
+                "acceptance_scope": "configured_morphology_gates_only",
                 "confidence_flags": conf["flags"],
                 "foreground_fraction": float(seg.foreground_fraction),
                 "quality_score": float(seg.quality_score) if seg.quality_score is not None else None,
@@ -405,6 +411,9 @@ def main() -> int:
         "backend_requested": args.backend,
         "backend_reason": backend_reason,
         "stage": 2,
+        "confidence_kind": "uncalibrated_qc_heuristic",
+        "acceptance_scope": "configured_morphology_gates_only",
+        "scientific_validation": "NOT_ESTABLISHED_BY_WORKFLOW_COMPLETION",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "summary": summary,
         "phenotype_rules": [

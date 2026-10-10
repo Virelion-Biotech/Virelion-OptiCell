@@ -46,6 +46,8 @@ The default local deployment uses SQLite. See [production deployment](docs/PRODU
 
 ## Measured validation
 
+The [10 October GOWT1 diagnosis and repair](docs/CTC_DIAGNOSIS_2026-10-10.md) adds an explicit CPU `fluorescence` backend. Full-sequence TRA improves from 0.377/0.318 (threshold) to 0.780/0.685, with SEG-style 0.501/0.728. These are public training-data development measurements, not independent qualification; division-aware tracking and dim-object errors remain. Install `.[fluorescence]` and request `--backend fluorescence`. Existing backend defaults are preserved.
+
 The 6 October 2026 cloud CPU study corrected reference decoding and adaptive thresholding, then scored complete public data. **The software tests pass; broad scientific validation fails.**
 
 | Data / backend | Records | Dice | Instance IoU F1 | Count MAE |

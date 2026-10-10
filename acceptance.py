@@ -32,7 +32,7 @@ def segmentation_acceptance(
     maximum_merged_fraction: float = 0.25,
     minimum_agreement: float = 0.60,
 ) -> SegmentationAcceptance:
-    """Classify a segmentation as PASS/REVIEW/FAIL using transparent gates."""
+    """Classify morphology gates as PASS/REVIEW/FAIL, not segmentation accuracy."""
     quality_score = _require_range("quality_score", quality_score, 0.0, 100.0)
     border_fraction = _require_range("border_fraction", border_fraction, 0.0, 1.0)
     tiny_object_fraction = _require_range("tiny_object_fraction", tiny_object_fraction, 0.0, 1.0)
@@ -59,7 +59,7 @@ def segmentation_acceptance(
     penalty = sum(10.0 for _ in failed)
     score = max(0.0, min(100.0, quality_score - penalty))
     if not failed:
-        return SegmentationAcceptance("PASS", "all configured acceptance gates passed", score)
+        return SegmentationAcceptance("PASS", "configured morphology gates passed; segmentation accuracy unassessed", score)
     if quality_score < minimum_quality or len(failed) >= 3:
         return SegmentationAcceptance("FAIL", "; ".join(failed), score)
     return SegmentationAcceptance("REVIEW", "; ".join(failed), score)

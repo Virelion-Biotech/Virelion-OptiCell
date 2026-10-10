@@ -21,7 +21,7 @@ def main():
     p.add_argument("--data-dir", type=Path, required=True)
     p.add_argument("--out-dir", type=Path, required=True)
     p.add_argument("--datasets", nargs="+", required=True)
-    p.add_argument("--backend", default="threshold", choices=["threshold", "adaptive", "cellpose", "hybrid"])
+    p.add_argument("--backend", default="threshold", choices=["threshold", "adaptive", "fluorescence", "cellpose", "hybrid"])
     args = p.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     results = []
@@ -44,6 +44,9 @@ def main():
                 backend=args.backend,
                 target_kind="simulated" if "SIM+" in dataset else "measured",
                 n_requested=len(list(images.glob("t*.tif"))),
+                evaluation_scope="public_training_sequences; characterization, not independent qualification",
+                confidence_kind="uncalibrated_qc_heuristic",
+                tracking_scope="one-to-one centroid linking; no division parent links",
             )
             try:
                 with (out / "run.log").open("w") as log:
