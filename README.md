@@ -4,6 +4,21 @@
 
 ---
 
+
+<!-- VALIDATION_PRODUCT_STATUS:BEGIN -->
+## Validation and product completion status
+
+**Reviewed 2026-10-14; implementation base `053d9a669d98`.** **Status: Research workbench; domain-specific accuracy remains incomplete.** This is an evidence-backed scope assessment, not a percentage-complete estimate or a declaration that the product is finished.
+
+| Area | Current evidence / remaining gate |
+|---|---|
+| Software / operational checks | Automated test sources and CI definitions are present; this documentation audit does not report a new algorithm/data-validation run. |
+| Scientific or domain evidence | Committed public-data measurements include weak LIVECell classical segmentation and a scoped GOWT1 fluorescence repair: TRA 0.780/0.685 and SEG-style 0.501/0.728. These are development measurements, not universal segmentation qualification. |
+| Remaining for the declared product scope | Complete learned-backend and real-GPU matrices; qualify independent-lab/domain segmentation and counting; repair/qualify dim-object detection and division lineage; calibrate QC/confidence against labels. Existing batch UI, projects, brush correction, provenance and deployment features are implemented; larger deployment and reader coverage still require intended-scale checks. |
+
+Evidence and limits: [repository report](docs/CTC_DIAGNOSIS_2026-10-10.md). The [organization status index](https://github.com/Virelion-Biotech/Virelion-HeartTwin/blob/main/docs/STACK_VALIDATION_STATUS.md) separates software, numerical, data-readiness and empirical qualification. Code/schema execution or a completed download is not a substitute for endpoint-specific validation.
+<!-- VALIDATION_PRODUCT_STATUS:END -->
+
 ## Quickstart (recommended)
 
 ```bash
