@@ -5,7 +5,7 @@ import hashlib
 import json
 import os
 import platform
-import subprocess
+import subprocess  # nosec B404 - only used for a fixed 'git rev-parse HEAD' call
 import sys
 from importlib import metadata
 from datetime import datetime, timezone
@@ -47,7 +47,7 @@ def _git_commit() -> str | None:
     if env_sha:
         return env_sha
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 - fixed argv, no user input
             ["git", "rev-parse", "HEAD"],
             cwd=Path(__file__).resolve().parent,
             check=True,

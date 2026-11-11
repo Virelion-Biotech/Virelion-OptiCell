@@ -6,7 +6,7 @@ All notable OptiCell changes are documented here.
 
 ### Changed
 
-- All implementation modules now live inside the `opticell` package (`opticell.validation`, `opticell.qc_pipeline`, `opticell.tracking`, ...). The 36 generic top-level modules (`validation`, `reporting`, `runtime`, `provenance`, ...) are no longer installed, which removes import collisions with other Virelion repositories' `validation/` directories in shared environments. Replace `from qc_pipeline import X` with `from opticell.qc_pipeline import X`; the `opticell` console command is unchanged and `python -m opticell.qc_pipeline` replaces `python qc_pipeline.py`.
+- All implementation modules now live inside the `opticell` package (`opticell.validation`, `opticell.qc_pipeline`, `opticell.tracking`, ...). The 36 generic top-level modules (`validation`, `reporting`, `runtime`, `provenance`, ...) are no longer installed, which removes import collisions with other Virelion repositories' `validation/` directories in shared environments. Replace `from qc_pipeline import X` with `from opticell.qc_pipeline import X`; the `opticell` console command is unchanged and `python -m opticell` replaces `python qc_pipeline.py`.
 
 ### Added
 
