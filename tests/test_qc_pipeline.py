@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import pytest
 
-from qc_pipeline import (
+from opticell.qc_pipeline import (
     QCThresholds,
     _validate_tiff_shape,
     adaptive_dataset_qc,

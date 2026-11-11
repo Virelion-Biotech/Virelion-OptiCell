@@ -28,7 +28,12 @@ runner = ROOT / "scripts/run_livecell_validation.py"
 code_hash = hashlib.sha256(
     b"".join(
         (ROOT / p).read_bytes()
-        for p in ["validation.py", "qc_pipeline.py", "ensemble.py", "scripts/run_livecell_validation.py"]
+        for p in [
+            "opticell/validation.py",
+            "opticell/qc_pipeline.py",
+            "opticell/ensemble.py",
+            "scripts/run_livecell_validation.py",
+        ]
     )
 ).hexdigest()
 packages = {p: version(p) for p in ["numpy", "scipy", "pycocotools"]}
@@ -140,7 +145,7 @@ for split in ["val", "test"]:
     if len(names) != len(set(names)) or len(names) != len(expected[split]) or set(names) != set(expected[split]):
         raise ValueError(f"Incomplete or duplicate full-split coverage for {split}")
     sys.path.insert(0, str(ROOT))
-    from validation import aggregate_segmentation_rows, json_ready_metrics
+    from opticell.validation import aggregate_segmentation_rows, json_ready_metrics
 
     payload = dict(chunks[0])
     payload.update(

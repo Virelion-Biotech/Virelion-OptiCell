@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from opticell.domain_gate import require_domain_qualification
-import qc_pipeline as qc
+import opticell.qc_pipeline as qc
 
 
 def test_missing_domain_and_qualification_fail_closed():

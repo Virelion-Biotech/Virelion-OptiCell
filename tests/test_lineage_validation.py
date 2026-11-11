@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from lineage import build_lineage_table, summarize_lineages
+from opticell.lineage import build_lineage_table, summarize_lineages
 
 
 def test_build_lineage_rejects_orphan_split_event():

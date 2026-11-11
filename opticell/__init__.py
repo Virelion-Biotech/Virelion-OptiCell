@@ -1,8 +1,8 @@
 """Public OptiCell package API."""
 
-from qc_pipeline import QCThresholds, analyze_folder, analyze_image, analyze_paths, extract_object_features
-from quantitative import add_spatial_features, object_channel_intensity, summarize_spatial_features
-from validation import benchmark_segmentation, paired_segmentation_metrics
+from opticell.qc_pipeline import QCThresholds, analyze_folder, analyze_image, analyze_paths, extract_object_features
+from opticell.quantitative import add_spatial_features, object_channel_intensity, summarize_spatial_features
+from opticell.validation import benchmark_segmentation, paired_segmentation_metrics
 from .acceptance import SegmentationAcceptance, segmentation_acceptance
 from .artifact_quality import acquisition_artifact_metrics, artifact_burden_score
 from .batch import BatchConfig, analyze_paths_parallel

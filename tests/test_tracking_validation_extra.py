@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from tracking import link_frames
+from opticell.tracking import link_frames
 
 
 def test_tracking_rejects_negative_instance_labels():

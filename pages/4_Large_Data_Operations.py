@@ -13,7 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from app_streamlit import overlay_labels, run_pipeline
-from qc_pipeline import CellposeSegmenter, _HAS_CELLPOSE
+from opticell.qc_pipeline import CellposeSegmenter, _HAS_CELLPOSE
 from opticell.large_data import iter_ome_planes, plan_ome_iteration, pyramid_levels
 from opticell.model_config import PRESETS, compare_configs, config_from_preset
 from opticell.observability import health_snapshot
@@ -98,7 +98,7 @@ with models_tab:
                 except (RuntimeError, ValueError, OSError) as exc:
                     outputs.append((label, config, None, str(exc)))
             columns = st.columns(2)
-            from qc_pipeline import to_grayscale_uint8
+            from opticell.qc_pipeline import to_grayscale_uint8
             gray = to_grayscale_uint8(raw)
             for column, (label, config, result, error) in zip(columns, outputs):
                 with column:

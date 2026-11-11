@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from screening_advanced import b_score, plate_uniformity, ssmd
+from opticell.screening_advanced import b_score, plate_uniformity, ssmd
 
 
 def test_ssmd_uses_strict_standardization_denominator():

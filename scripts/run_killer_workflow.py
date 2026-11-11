@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from qc_pipeline import (  # noqa: E402
+from opticell.qc_pipeline import (  # noqa: E402
     load_image,
     to_grayscale_uint8,
     segment_threshold,
@@ -35,11 +35,11 @@ from qc_pipeline import (  # noqa: E402
     _HAS_CELLPOSE,
     _CELLPOSE_IMPORT_ERROR,
 )
-from ensemble import hybrid_threshold_cellpose, fov_confidence, suggest_backend  # noqa: E402
-from tracking import TrackingConfig, link_frames, summarize_tracks  # noqa: E402
-from phenotype import Rule, score_cells, group_phenotype_summary  # noqa: E402
+from opticell.ensemble import hybrid_threshold_cellpose, fov_confidence, suggest_backend  # noqa: E402
+from opticell.tracking import TrackingConfig, link_frames, summarize_tracks  # noqa: E402
+from opticell.phenotype import Rule, score_cells, group_phenotype_summary  # noqa: E402
 from opticell.fluorescence import segment_fluorescence  # noqa: E402
-from acceptance import segmentation_acceptance  # noqa: E402
+from opticell.acceptance import segmentation_acceptance  # noqa: E402
 
 
 def resolve_backend(requested: str, *, gpu: bool, gray: np.ndarray | None = None) -> tuple[str, str]:

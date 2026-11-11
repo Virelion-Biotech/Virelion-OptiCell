@@ -6,9 +6,9 @@ from typing import Callable, Protocol
 
 import numpy as np
 
-from qc_pipeline import CellposeSegmenter, SegmentationResult, segment_threshold
+from opticell.qc_pipeline import CellposeSegmenter, SegmentationResult, segment_threshold
 from opticell.fluorescence import FluorescenceSegmenter
-from ensemble import EnsembleResult, ensemble_from_results, threshold_ensemble
+from opticell.ensemble import EnsembleResult, ensemble_from_results, threshold_ensemble
 
 
 class SegmenterBackend(Protocol):
@@ -35,7 +35,7 @@ class CellposeBackend(BaseSegmenter):
     def __init__(self, model_type: str = "cyto3", gpu: bool | str | None = "auto") -> None:
         if gpu == "auto":
             try:
-                from runtime import capabilities
+                from opticell.runtime import capabilities
                 gpu = capabilities().cuda_available
             except Exception:
                 gpu = False

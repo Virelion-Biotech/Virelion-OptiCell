@@ -21,8 +21,8 @@ from scipy.stats import rankdata
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from qc_pipeline import segment_threshold, to_grayscale_uint8, compute_focus_score, sha256_file  # noqa: E402
-from validation import binary_dice  # noqa: E402
+from opticell.qc_pipeline import segment_threshold, to_grayscale_uint8, compute_focus_score, sha256_file  # noqa: E402
+from opticell.validation import binary_dice  # noqa: E402
 
 
 def decode(content):

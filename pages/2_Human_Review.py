@@ -15,8 +15,8 @@ from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 
 from app_streamlit import overlay_labels, run_pipeline
-from provenance import build_immutable_manifest
-from qc_pipeline import CellposeSegmenter, _HAS_CELLPOSE
+from opticell.provenance import build_immutable_manifest
+from opticell.qc_pipeline import CellposeSegmenter, _HAS_CELLPOSE
 from opticell import __version__
 from opticell.mask_edit import apply_brush_edit, instance_count
 from opticell.ui_auth import current_user
@@ -69,7 +69,7 @@ if selected:
 
 gray = None
 if raw is not None and saved_labels is not None and saved_labels.shape == raw.shape[:2]:
-    from qc_pipeline import to_grayscale_uint8
+    from opticell.qc_pipeline import to_grayscale_uint8
 
     gray = to_grayscale_uint8(raw)
     c1, c2 = st.columns(2)

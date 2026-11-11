@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from qc_pipeline import (  # noqa: E402
+from opticell.qc_pipeline import (  # noqa: E402
     to_grayscale_uint8,
     segment_threshold,
     CellposeSegmenter,
@@ -34,15 +34,15 @@ from qc_pipeline import (  # noqa: E402
     _CELLPOSE_IMPORT_ERROR,
     PIPELINE_VERSION,
 )
-from ensemble import (  # noqa: E402
+from opticell.ensemble import (  # noqa: E402
     hybrid_threshold_cellpose,
     fov_confidence,
     suggest_backend,
     image_looks_low_contrast,
 )
-from acceptance import segmentation_acceptance, SegmentationAcceptance  # noqa: E402
-from artifact_quality import acquisition_artifact_metrics, artifact_burden_score  # noqa: E402
-from quantitative import object_channel_intensity  # noqa: E402
+from opticell.acceptance import segmentation_acceptance, SegmentationAcceptance  # noqa: E402
+from opticell.artifact_quality import acquisition_artifact_metrics, artifact_burden_score  # noqa: E402
+from opticell.quantitative import object_channel_intensity  # noqa: E402
 
 BACKENDS = ["auto", "threshold", "adaptive", "cellpose", "hybrid"]
 

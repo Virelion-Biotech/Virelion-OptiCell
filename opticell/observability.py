@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from runtime import capabilities_dict
+from opticell.runtime import capabilities_dict
 
 
 def structured_event(event: str, **fields: Any) -> str:

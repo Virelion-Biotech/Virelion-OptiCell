@@ -1,6 +1,6 @@
 import numpy as np
 
-from validation import benchmark_segmentation, instance_metrics, segmentation_pixel_metrics
+from opticell.validation import benchmark_segmentation, instance_metrics, segmentation_pixel_metrics
 
 
 def test_3d_pixel_and_instance_metrics():

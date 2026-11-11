@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from provenance import build_manifest, collect_input_manifest, write_manifest
-from reporting import build_report, dataframe_summary, runtime_stats, write_report
-from tracking3d import Tracking3DConfig, link_frames_3d, summarize_tracks_3d
+from opticell.provenance import build_manifest, collect_input_manifest, write_manifest
+from opticell.reporting import build_report, dataframe_summary, runtime_stats, write_report
+from opticell.tracking3d import Tracking3DConfig, link_frames_3d, summarize_tracks_3d
 
 
 def _single_object(z: int, y: int, x: int, label: int = 1) -> np.ndarray:

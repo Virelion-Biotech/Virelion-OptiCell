@@ -4,10 +4,8 @@ import numpy as np
 import pytest
 import tifffile
 
-from stream_io import iter_tiff_frames
-import stream_io
-
-
+from opticell.stream_io import iter_tiff_frames
+import opticell.stream_io as stream_io
 def test_iter_tiff_frames_preserves_logical_leading_axis(tmp_path):
     path = tmp_path / "tz.tif"
     data = np.arange(2 * 3 * 4 * 5, dtype=np.uint16).reshape(2, 3, 4, 5)

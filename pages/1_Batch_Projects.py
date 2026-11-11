@@ -16,9 +16,9 @@ import pandas as pd
 import streamlit as st
 
 from app_streamlit import run_pipeline
-from experiment import parse_metadata
-from provenance import build_immutable_manifest
-from qc_pipeline import CellposeSegmenter, PIPELINE_VERSION, _HAS_CELLPOSE
+from opticell.experiment import parse_metadata
+from opticell.provenance import build_immutable_manifest
+from opticell.qc_pipeline import CellposeSegmenter, PIPELINE_VERSION, _HAS_CELLPOSE
 from opticell import __version__
 from opticell.dataset_qc import annotate_outliers, dataset_qc_summary, plate_view, replicate_qc
 from opticell.model_config import PRESETS, config_for_checkpoint, config_from_preset

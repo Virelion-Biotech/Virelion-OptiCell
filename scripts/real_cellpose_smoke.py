@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from qc_pipeline import CellposeSegmenter
+from opticell.qc_pipeline import CellposeSegmenter
 
 
 def main() -> int:

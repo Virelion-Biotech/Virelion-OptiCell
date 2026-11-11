@@ -23,7 +23,7 @@ from scipy.stats import rankdata, spearmanr
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from qc_pipeline import compute_focus_score, to_grayscale_uint8  # noqa: E402
+from opticell.qc_pipeline import compute_focus_score, to_grayscale_uint8  # noqa: E402
 
 Z_RE = re.compile(r"(?:^|[_/\\-])z[_-]?(\d{1,2})(?:[_/\\-]|\.|$)", re.I)
 SITE_RE = re.compile(r"(.+_[a-p]\d{2}_s\d+)_w[12]", re.I)

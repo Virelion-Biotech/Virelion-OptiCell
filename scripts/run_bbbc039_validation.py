@@ -24,15 +24,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from validation import aggregate_segmentation_rows, paired_segmentation_metrics, json_ready_metrics  # noqa: E402
-from qc_pipeline import (  # noqa: E402
+from opticell.validation import aggregate_segmentation_rows, paired_segmentation_metrics, json_ready_metrics  # noqa: E402
+from opticell.qc_pipeline import (  # noqa: E402
     to_grayscale_uint8,
     segment_threshold,
     CellposeSegmenter,
     _HAS_CELLPOSE,
     _CELLPOSE_IMPORT_ERROR,
 )
-from ensemble import hybrid_threshold_cellpose, fov_confidence  # noqa: E402
+from opticell.ensemble import hybrid_threshold_cellpose, fov_confidence  # noqa: E402
 
 BBBC039_IMAGES = "https://data.broadinstitute.org/bbbc/BBBC039/images.zip"
 BBBC039_MASKS = "https://data.broadinstitute.org/bbbc/BBBC039/masks.zip"

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from validation import (
+from opticell.validation import (
     benchmark_segmentation,
     binary_dice,
     binary_iou,

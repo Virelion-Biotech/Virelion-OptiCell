@@ -2,13 +2,12 @@ import numpy as np
 import pytest
 
 import app_streamlit
-from qc_pipeline import SegmentationResult
+from opticell.qc_pipeline import SegmentationResult
 
 
 def test_missing_checkpoint_cannot_be_substituted_with_default(monkeypatch):
     from types import SimpleNamespace
-    import qc_pipeline
-
+    import opticell.qc_pipeline as qc_pipeline
     calls = []
     def constructor(**kwargs):
         calls.append(kwargs)
@@ -23,8 +22,7 @@ def test_missing_checkpoint_cannot_be_substituted_with_default(monkeypatch):
 
 def test_checkpoint_load_failure_cannot_retry_with_default(monkeypatch):
     from types import SimpleNamespace
-    import qc_pipeline
-
+    import opticell.qc_pipeline as qc_pipeline
     calls = []
     def constructor(**kwargs):
         calls.append(kwargs)
@@ -39,8 +37,7 @@ def test_checkpoint_load_failure_cannot_retry_with_default(monkeypatch):
 
 def test_gpu_request_cannot_be_reported_as_gpu_after_cpu_resolution(monkeypatch):
     from types import SimpleNamespace
-    import qc_pipeline
-
+    import opticell.qc_pipeline as qc_pipeline
     monkeypatch.setattr(qc_pipeline, "_HAS_CELLPOSE", True)
     monkeypatch.setattr(qc_pipeline, "_cellpose_models", SimpleNamespace(
         MODEL_NAMES=["cpsam"], get_user_models=lambda: [],
@@ -53,8 +50,7 @@ def test_gpu_request_cannot_be_reported_as_gpu_after_cpu_resolution(monkeypatch)
 
 def test_cellpose3_named_checkpoint_uses_model_type(monkeypatch):
     from types import SimpleNamespace
-    import qc_pipeline
-
+    import opticell.qc_pipeline as qc_pipeline
     calls = []
     def constructor(**kwargs):
         calls.append(kwargs)

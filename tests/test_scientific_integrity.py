@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from experiment_audit import audit_experiment
-from profiling import ProfileRecord, ProfiledOperationError, profile_call
-from screening import normalize_to_controls, z_prime_factor
+from opticell.experiment_audit import audit_experiment
+from opticell.profiling import ProfileRecord, ProfiledOperationError, profile_call
+from opticell.screening import normalize_to_controls, z_prime_factor
 
 
 def test_audit_downgrades_unchecked_reproducibility_to_review():

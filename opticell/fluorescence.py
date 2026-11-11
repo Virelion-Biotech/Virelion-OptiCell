@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 from scipy import ndimage as ndi
 
-from qc_pipeline import SegmentationResult, _build_segmentation_result
+from opticell.qc_pipeline import SegmentationResult, _build_segmentation_result
 
 
 def segment_fluorescence(

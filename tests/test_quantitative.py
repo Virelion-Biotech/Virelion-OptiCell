@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from image_io import ImageStack, canonicalize_axes, project_z, select_channel, select_time
-from quantitative import (
+from opticell.image_io import ImageStack, canonicalize_axes, project_z, select_channel, select_time
+from opticell.quantitative import (
     add_spatial_features,
     apply_background_correction,
     channel_summary,

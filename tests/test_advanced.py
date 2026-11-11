@@ -2,12 +2,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from compartments import assign_nuclei_to_cells, compartment_features
-from ensemble import threshold_ensemble, ensemble_from_results
-from experiment import annotate_results, parse_metadata, plate_heatmap, summarize_groups
-from phenotype import Rule, group_phenotype_summary, marker_positivity, score_cells
-from tracking import TrackingConfig, link_frames, summarize_tracks
-from validation import instance_metrics, match_instance_centroids
+from opticell.compartments import assign_nuclei_to_cells, compartment_features
+from opticell.ensemble import threshold_ensemble, ensemble_from_results
+from opticell.experiment import annotate_results, parse_metadata, plate_heatmap, summarize_groups
+from opticell.phenotype import Rule, group_phenotype_summary, marker_positivity, score_cells
+from opticell.tracking import TrackingConfig, link_frames, summarize_tracks
+from opticell.validation import instance_metrics, match_instance_centroids
 from opticell.segmentation import ThresholdSegmenter, available_backends, get_backend, register_backend
 
 

@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 
-from qc_pipeline import CellposeSegmenter, SegmentationResult, segment_threshold
+from opticell.qc_pipeline import CellposeSegmenter, SegmentationResult, segment_threshold
 
 
 @dataclass(frozen=True)
