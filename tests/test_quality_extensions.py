@@ -3,9 +3,9 @@ import pandas as pd
 import pytest
 
 from opticell.statistics import group_summary, summarize_by_replicate
-from reproducibility import analysis_fingerprint, compare_manifests, environment_fingerprint
-from screening_advanced import b_score, plate_uniformity, ssmd
-from tracking_validation import track_fragmentation, track_gap_rate, track_purity
+from opticell.reproducibility import analysis_fingerprint, compare_manifests, environment_fingerprint
+from opticell.screening_advanced import b_score, plate_uniformity, ssmd
+from opticell.tracking_validation import track_fragmentation, track_gap_rate, track_purity
 
 
 def test_advanced_screening_metrics_are_deterministic():

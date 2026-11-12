@@ -17,9 +17,9 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from qc_pipeline import CellposeSegmenter, sha256_file  # noqa: E402
-from ensemble import hybrid_threshold_cellpose, suggest_backend  # noqa: E402
-from validation import paired_segmentation_metrics, aggregate_segmentation_rows, json_ready_metrics  # noqa: E402
+from opticell.qc_pipeline import CellposeSegmenter, sha256_file  # noqa: E402
+from opticell.ensemble import hybrid_threshold_cellpose, suggest_backend  # noqa: E402
+from opticell.validation import paired_segmentation_metrics, aggregate_segmentation_rows, json_ready_metrics  # noqa: E402
 from scripts.run_bbbc039_validation import find_pairs, load_image_gray, decode_bbbc039_mask  # noqa: E402
 from scripts.run_livecell_validation import build_image_index, decode_coco_instance_masks  # noqa: E402
 
@@ -47,7 +47,8 @@ def main():
     signature = dict(model=args.model, model_sha256=sha256_file(str(model_path)), gpu=args.gpu,
                      packages={x: version(x) for x in ['cellpose', 'torch', 'numpy', 'scipy', 'pycocotools']},
                      code_sha256=hashlib.sha256(b''.join((ROOT / x).read_bytes() for x in [
-                         'qc_pipeline.py', 'ensemble.py', 'validation.py', 'scripts/run_learned_panel.py',
+                         'opticell/qc_pipeline.py', 'opticell/ensemble.py', 'opticell/validation.py',
+                         'scripts/run_learned_panel.py',
                          'scripts/run_bbbc039_validation.py', 'scripts/run_livecell_validation.py'])).hexdigest())
     records = []
     pairs = find_pairs(args.data_dir / 'bbbc039/images', args.data_dir / 'bbbc039/masks')

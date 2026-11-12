@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_features
+from opticell.volumetric import nearest_neighbor_distances_3d, summarize_volume, volume_features
 
 
 def test_volume_features_and_summary():

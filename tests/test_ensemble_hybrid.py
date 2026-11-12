@@ -1,8 +1,8 @@
 """Tests for ensemble.hybrid_threshold_cellpose threshold-collapse + low-contrast."""
 import numpy as np
 
-from ensemble import hybrid_threshold_cellpose, image_looks_low_contrast, suggest_backend
-from qc_pipeline import SegmentationResult, segment_threshold
+from opticell.ensemble import hybrid_threshold_cellpose, image_looks_low_contrast, suggest_backend
+from opticell.qc_pipeline import SegmentationResult, segment_threshold
 
 
 class _FakeCellposeSegmenter:

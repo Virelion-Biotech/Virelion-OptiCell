@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from preprocessing import detect_hot_pixels, flat_field_correct, subtract_background
+from opticell.preprocessing import detect_hot_pixels, flat_field_correct, subtract_background
 
 
 def test_flat_field_correction_preserves_integer_dtype_and_clips():

@@ -4,7 +4,7 @@ import pytest
 
 from opticell.acceptance import segmentation_acceptance
 from opticell.artifact_quality import acquisition_artifact_metrics, artifact_burden_score
-from ensemble import fov_confidence
+from opticell.ensemble import fov_confidence
 from opticell.robustness import stable_parameter_subset, summarize_sensitivity
 
 

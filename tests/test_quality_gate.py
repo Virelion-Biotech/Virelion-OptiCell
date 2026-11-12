@@ -1,6 +1,6 @@
 import pytest
 
-from quality_gate import experiment_quality_gate
+from opticell.quality_gate import experiment_quality_gate
 
 
 def test_quality_gate_uses_conservative_minimum_score():

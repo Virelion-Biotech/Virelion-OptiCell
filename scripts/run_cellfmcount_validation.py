@@ -18,7 +18,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from qc_pipeline import segment_threshold, to_grayscale_uint8, sha256_file  # noqa: E402
+from opticell.qc_pipeline import segment_threshold, to_grayscale_uint8, sha256_file  # noqa: E402
 
 
 def aggregate(rows):
@@ -80,7 +80,7 @@ def main():
                    by_test_staining={s: aggregate([r for r in rows if r['set'] == 'test' and r['staining'] == s])
                                      for s in sorted({r['staining'] for r in rows if r['set'] == 'test'})},
                    source_sha256=source_hash,
-                   code_sha256=hashlib.sha256((ROOT / 'qc_pipeline.py').read_bytes()).hexdigest(),
+                   code_sha256=hashlib.sha256((ROOT / 'opticell/qc_pipeline.py').read_bytes()).hexdigest(),
                    note=('Count-only; metadata and dot counts must agree. Out-of-bounds dots remain in author counts '
                          'and are flagged, not moved or removed. These coordinates are unsuitable for localization '
                          'scoring without source clarification. No fitting/tuning or untouched-holdout claim.'))

@@ -1,6 +1,6 @@
 """Stable package namespace for dimension-aware image I/O and preprocessing."""
-from image_io import ImageStack, canonicalize_axes, load_tiff_stack, project_z, select_channel, select_time
-from preprocessing import (
+from opticell.image_io import ImageStack, canonicalize_axes, load_tiff_stack, project_z, select_channel, select_time
+from opticell.preprocessing import (
     detect_hot_pixels,
     denoise_gaussian,
     estimate_background,

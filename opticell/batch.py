@@ -8,7 +8,7 @@ from typing import Callable, Optional, Sequence
 
 import pandas as pd
 
-from qc_pipeline import QCThresholds, adaptive_dataset_qc, analyze_image
+from opticell.qc_pipeline import QCThresholds, adaptive_dataset_qc, analyze_image
 
 
 @dataclass(frozen=True)

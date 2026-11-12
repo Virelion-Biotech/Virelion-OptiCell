@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from opticell.statistics import benjamini_hochberg, compare_two_groups, permutation_pvalue, summarize_by_replicate
-from texture import basic_texture_features, object_texture_features
+from opticell.texture import basic_texture_features, object_texture_features
 
 
 def test_replicate_aggregation_and_group_comparison():

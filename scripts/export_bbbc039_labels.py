@@ -27,13 +27,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from qc_pipeline import (  # noqa: E402
+from opticell.qc_pipeline import (  # noqa: E402
     segment_threshold,
     CellposeSegmenter,
     _HAS_CELLPOSE,
     _CELLPOSE_IMPORT_ERROR,
 )
-from ensemble import hybrid_threshold_cellpose  # noqa: E402
+from opticell.ensemble import hybrid_threshold_cellpose  # noqa: E402
 
 
 def _load_bbbc039_helpers():

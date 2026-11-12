@@ -16,7 +16,7 @@ from scipy.stats import rankdata
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from qc_pipeline import analyze_image, QCThresholds  # noqa: E402
+from opticell.qc_pipeline import analyze_image, QCThresholds  # noqa: E402
 
 
 def main():
@@ -52,7 +52,7 @@ def main():
     args.out_dir.mkdir(parents=True, exist_ok=True)
     payload = dict(dataset='AutoQC-Bench', source='https://doi.org/10.6019/S-BIAD2133',
                    complete=True, summary=summary, per_image=rows,
-                   code_sha256=hashlib.sha256((ROOT / 'qc_pipeline.py').read_bytes()).hexdigest(),
+                   code_sha256=hashlib.sha256((ROOT / 'opticell/qc_pipeline.py').read_bytes()).hexdigest(),
                    note='Fixed production flags, no tuning. Test frames can share acquisition sequences; no independent-donor claim.')
     (args.out_dir / 'summary.json').write_text(json.dumps(payload, indent=2, allow_nan=False))
     with (args.out_dir / 'per_image.csv').open('w', newline='') as stream:

@@ -12,7 +12,7 @@ from opticell.model_config import compare_configs, config_for_checkpoint, config
 from opticell.observability import health_snapshot
 from opticell.validation_registry import coverage_summary, known_validation_evidence
 from opticell.workbench_store import WorkbenchStore
-from provenance import build_immutable_manifest, verify_manifest
+from opticell.provenance import build_immutable_manifest, verify_manifest
 
 
 def test_workbench_store_projects_runs_reviews_quota_and_backup(tmp_path):

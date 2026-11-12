@@ -1,4 +1,4 @@
-from experiment_audit import audit_experiment
+from opticell.experiment_audit import audit_experiment
 
 
 def test_experiment_audit_passes_with_matching_reference():

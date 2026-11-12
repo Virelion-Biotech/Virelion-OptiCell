@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
 
-from lineage import build_lineage_table, summarize_lineages
-from lineage_events import division_consistency, lineage_event_summary
-from screening import normalize_to_controls, percent_control, plate_edge_effect, robust_zscore, z_prime_factor
-from screening_qc import assay_qc_decision, classify_z_prime
-from sensitivity import threshold_sensitivity
-from stream_io import iter_array_chunks, iter_tiff_frames
+from opticell.lineage import build_lineage_table, summarize_lineages
+from opticell.lineage_events import division_consistency, lineage_event_summary
+from opticell.screening import normalize_to_controls, percent_control, plate_edge_effect, robust_zscore, z_prime_factor
+from opticell.screening_qc import assay_qc_decision, classify_z_prime
+from opticell.sensitivity import threshold_sensitivity
+from opticell.stream_io import iter_array_chunks, iter_tiff_frames
 from opticell.lineage_quality import lineage_quality_summary
 from opticell.ome_io import load_ome_series, read_ome_info
 from opticell.power import two_group_sample_size

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from volumetric_segmentation import segment_threshold_3d
+from opticell.volumetric_segmentation import segment_threshold_3d
 
 
 def test_segment_threshold_3d_finds_two_objects():

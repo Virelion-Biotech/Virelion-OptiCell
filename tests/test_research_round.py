@@ -2,11 +2,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from benchmarking import aggregate_backend_benchmarks, benchmark_backends
-from experiment_qc import normalize_to_controls, plate_edge_effect, plate_qc_summary, robust_zscore
-from profiling import ProfileRecord, profile_call, profile_records, summarize_profile
-from tracking import TrackingConfig, link_frames
-from tracking3d import Tracking3DConfig, link_frames_3d
+from opticell.benchmarking import aggregate_backend_benchmarks, benchmark_backends
+from opticell.experiment_qc import normalize_to_controls, plate_edge_effect, plate_qc_summary, robust_zscore
+from opticell.profiling import ProfileRecord, profile_call, profile_records, summarize_profile
+from opticell.tracking import TrackingConfig, link_frames
+from opticell.tracking3d import Tracking3DConfig, link_frames_3d
 from opticell.segmentation import ThresholdSegmenter
 
 

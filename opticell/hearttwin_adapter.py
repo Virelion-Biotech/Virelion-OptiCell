@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from qc_pipeline import QCThresholds, analyze_folder, analyze_paths
+from opticell.qc_pipeline import QCThresholds, analyze_folder, analyze_paths
 
 try:  # package execution: python -m opticell.hearttwin_adapter
     from .optical_stimulation import extract_optical_stimulation
@@ -122,8 +122,7 @@ def main() -> int:
             if method != "threshold":
                 raise ValueError("Scientific Cellpose mode requires weight binding, which is not implemented")
             import hashlib
-            import qc_pipeline
-
+            import opticell.qc_pipeline as qc_pipeline
             model_sha256 = hashlib.sha256(Path(qc_pipeline.__file__).read_bytes()).hexdigest()
             require_domain_qualification(
                 domain=params.get("domain"),

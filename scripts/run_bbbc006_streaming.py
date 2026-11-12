@@ -20,7 +20,7 @@ from scipy.stats import rankdata
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from qc_pipeline import compute_focus_score, to_grayscale_uint8, sha256_file  # noqa: E402
+from opticell.qc_pipeline import compute_focus_score, to_grayscale_uint8, sha256_file  # noqa: E402
 from scripts.run_bbbc006_focus_qc import site_key  # noqa: E402
 
 
@@ -29,7 +29,7 @@ def main():
     p.add_argument('--out-dir', type=Path, required=True)
     args = p.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    code_hash = hashlib.sha256((ROOT / 'qc_pipeline.py').read_bytes()).hexdigest()
+    code_hash = hashlib.sha256((ROOT / 'opticell/qc_pipeline.py').read_bytes()).hexdigest()
     all_rows, sources = [], []
     for z in range(34):
         checkpoint = args.out_dir / f'z_{z:02d}.json'

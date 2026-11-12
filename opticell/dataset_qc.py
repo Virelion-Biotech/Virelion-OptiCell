@@ -6,8 +6,8 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
-from experiment import plate_heatmap
-from experiment_qc import robust_zscore
+from opticell.experiment import plate_heatmap
+from opticell.experiment_qc import robust_zscore
 
 
 def annotate_outliers(df: pd.DataFrame, metrics: Sequence[str], *, z_threshold: float = 3.0) -> pd.DataFrame:

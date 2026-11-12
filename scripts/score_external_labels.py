@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from validation import benchmark_segmentation, paired_segmentation_metrics  # noqa: E402
+from opticell.validation import benchmark_segmentation, paired_segmentation_metrics  # noqa: E402
 
 
 def _load_bbbc039_helpers():

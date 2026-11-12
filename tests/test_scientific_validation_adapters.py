@@ -7,7 +7,7 @@ from pycocotools import mask as coco_masks
 from scripts.run_bbbc039_validation import decode_bbbc039_mask
 from scripts.run_bbbc038_validation import decode_bbbc038_instance_masks
 from scripts.run_livecell_validation import _polygon_to_mask, _rle_to_mask
-from validation import instance_iou_metrics, instance_metrics
+from opticell.validation import instance_iou_metrics, instance_metrics
 
 
 def test_touching_differently_colored_nuclei_remain_separate(tmp_path):
@@ -74,7 +74,7 @@ def test_bbbc006_random_image_uuids_do_not_split_physical_site():
 
 
 def test_vectorized_centroids_preserve_sparse_2d_and_3d_results():
-    from validation import _centroids_from_labels
+    from opticell.validation import _centroids_from_labels
 
     for shape in [(9, 11), (3, 9, 11)]:
         rng = np.random.default_rng(921)
@@ -84,7 +84,7 @@ def test_vectorized_centroids_preserve_sparse_2d_and_3d_results():
 
 
 def test_vectorized_diagnostics_preserve_area_and_border_statistics():
-    from qc_pipeline import _segmentation_diagnostics
+    from opticell.qc_pipeline import _segmentation_diagnostics
 
     labels = np.zeros((12, 14), np.int32)
     labels[0:3, 1:4] = 7000000
@@ -111,8 +111,8 @@ def test_ctc_seg_scores_only_annotated_objects_and_requires_majority_overlap():
 
 
 def test_adaptive_bright_objects_do_not_become_background_halos():
-    from qc_pipeline import segment_threshold
-    from validation import paired_segmentation_metrics
+    from opticell.qc_pipeline import segment_threshold
+    from opticell.validation import paired_segmentation_metrics
 
     image = np.zeros((80, 100), np.uint8)
     truth = np.zeros_like(image, dtype=np.int32)
@@ -181,7 +181,7 @@ def test_ambiguous_source_files_fail_without_conflating_repeated_coco_ids(tmp_pa
 
 def test_undefined_empty_reference_ratio_serializes_as_null_without_changing_absolute_error():
     import json
-    from validation import count_error, json_ready_metrics, _finite_mean
+    from opticell.validation import count_error, json_ready_metrics, _finite_mean
 
     error = count_error(3, 0)
     assert np.isnan(error["relative_count_error"])

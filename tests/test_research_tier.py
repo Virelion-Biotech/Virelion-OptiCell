@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 
-from benchmarking import aggregate_backend_benchmarks, benchmark_backends
-from experiment_stats import bootstrap_ci, replicate_effect_summary, summarize_experiment
-from runtime import capabilities, preferred_accelerator
-from tracking_events import classify_divisions, detect_time_series_events, detect_transition_events
-from validation import paired_segmentation_metrics
+from opticell.benchmarking import aggregate_backend_benchmarks, benchmark_backends
+from opticell.experiment_stats import bootstrap_ci, replicate_effect_summary, summarize_experiment
+from opticell.runtime import capabilities, preferred_accelerator
+from opticell.tracking_events import classify_divisions, detect_time_series_events, detect_transition_events
+from opticell.validation import paired_segmentation_metrics
 
 
 class DummyResult:
