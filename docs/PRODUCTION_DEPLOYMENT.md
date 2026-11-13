@@ -1,33 +1,43 @@
 # Production deployment
 
-OptiCell 2.19 adds a deployable single-node research workbench. The supported
-reference deployment is the supplied Docker image with a persistent workspace
-volume.
+OptiCell 2.19 provides a deployable single-node research workbench. The
+reference Docker deployment is **authenticated by default** and binds to
+localhost unless an operator explicitly changes the bind address.
 
-## Start
+## Configure the initial account
 
-```bash
-docker compose up --build -d
-```
-
-Open port 8501. The container health check uses Streamlit's health endpoint.
-
-## Authentication
-
-Authentication is optional by default for local research use. To require local
-accounts, set:
+Before starting the container, set a username and a long, random bootstrap
+password. The password is used only to create the initial account if that
+account does not already exist.
 
 ```bash
-export OPTICELL_REQUIRE_AUTH=1
 export OPTICELL_ADMIN_USER=admin
-export OPTICELL_ADMIN_PASSWORD='use-a-long-random-password'
+export OPTICELL_ADMIN_PASSWORD="$(openssl rand -hex 32)"
 docker compose up --build -d
 ```
 
-The bootstrap password is used only to create the account if it does not
-already exist. Passwords are stored as PBKDF2-HMAC-SHA256 hashes with unique
-salts. This is a local-account implementation, not an enterprise SSO/OIDC
-provider.
+Save the generated password in an appropriate secrets manager. Passwords are
+stored as PBKDF2-HMAC-SHA256 hashes with unique salts. The local-account
+implementation is not an enterprise SSO/OIDC provider.
+
+## Start and access
+
+The default Compose bind address is `127.0.0.1`, so the service is only
+reachable from the host. Open `http://127.0.0.1:8501`.
+
+For access from another machine, keep `OPTICELL_REQUIRE_AUTH=1`, set
+`OPTICELL_BIND_ADDRESS=0.0.0.0`, and place the service behind a properly
+configured TLS reverse proxy or VPN. Do not expose the raw Streamlit port to
+the public internet.
+
+Authentication can be disabled only by an explicit override:
+
+```bash
+OPTICELL_REQUIRE_AUTH=0 docker compose up --build -d
+```
+
+Use that mode only for a trusted, single-user local test. Do not combine it
+with a network-reachable bind address.
 
 ## Persistence and backups
 
