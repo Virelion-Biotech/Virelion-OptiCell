@@ -62,7 +62,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify secure Compose defaults
         run: |
-          env -u OPTICELL_BIND_ADDRESS -u OPTICELL_REQUIRE_AUTH docker compose config --format json > /tmp/opticell-compose.json
+          if env -u OPTICELL_ADMIN_PASSWORD -u OPTICELL_BIND_ADDRESS -u OPTICELL_REQUIRE_AUTH docker compose config --format json >/tmp/opticell-compose-missing-password.json 2>/tmp/opticell-compose-missing-password.log; then
+            echo "Compose must reject a missing bootstrap password."
+            exit 1
+          fi
+          OPTICELL_ADMIN_PASSWORD=ci-only-bootstrap-password env -u OPTICELL_BIND_ADDRESS -u OPTICELL_REQUIRE_AUTH docker compose config --format json > /tmp/opticell-compose.json
           python - <<'PY'
           import json
           from pathlib import Path
