@@ -22,6 +22,10 @@ When reporting, include:
 
 Do not include patient data, proprietary microscopy data, credentials, access tokens, or other sensitive information in reports.
 
+## Deployment security
+
+The supplied Docker Compose deployment requires local-account authentication by default and binds to localhost. Remote access requires an explicit network bind and should be placed behind TLS and a trusted network boundary. Do not expose an unauthenticated Streamlit service to the public internet.
+
 ## Research-data safety
 
 OptiCell can process user-supplied image files and metadata. Users are responsible for validating provenance, access controls, and de-identification before processing sensitive datasets. Never commit confidential experimental data, credentials, or generated datasets containing sensitive information to the repository.
