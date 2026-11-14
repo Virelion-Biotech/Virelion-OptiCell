@@ -15,7 +15,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -59,7 +59,7 @@ jobs:
   container-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify secure Compose defaults
         run: |
           if env -u OPTICELL_ADMIN_PASSWORD -u OPTICELL_BIND_ADDRESS -u OPTICELL_REQUIRE_AUTH docker compose config --format json >/tmp/opticell-compose-missing-password.json 2>/tmp/opticell-compose-missing-password.log; then
